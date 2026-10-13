@@ -1,4 +1,6 @@
 fastapi
 uvicorn[standard]
 pyserial
-pymodbus
+# Pinned: see acom-control/backend/requirements.txt - 3.7+ removed the
+# classic ModbusSlaveContext/setValues/getValues API this project uses.
+pymodbus==3.6.9

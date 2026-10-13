@@ -1,0 +1,54 @@
+/* ACOM theme - pixel-faithful-ish recreation of the real amp LCD.
+   Values pulled from PI_CONTROL_PLAN.md's "UI Design - Themes" palette table. */
+
+[data-theme="acom"][data-mode="dark"] {
+  --bg-page: #1c1c1c;
+  --bg-panel: #2b2b2b;
+  --accent-label: #e0a030;
+  --accent-label-text: #1a1200;
+  --text-primary: #f2f2f2;
+  --text-secondary: #b7b7b7;
+  --readout-power: #7ac142;
+  --readout-freq: #ffffff;
+  --warn-bg: #f5e050;
+  --warn-text: #1a1200;
+  --led-on: #7ac142;
+  --led-off: #3a3a3a;
+  --radius: 0px;
+  --font-family: "Courier New", ui-monospace, monospace;
+  --border-color: #444;
+  --button-bg: #333;
+  --button-text: #f2f2f2;
+  --button-bg-active: #e0a030;
+  --button-text-active: #1a1200;
+}
+
+[data-theme="acom"][data-mode="light"] {
+  --bg-page: #e8e4da;
+  --bg-panel: #f2efe6;
+  --accent-label: #d99a2b;
+  --accent-label-text: #1a1200;
+  --text-primary: #222222;
+  --text-secondary: #555555;
+  --readout-power: #2e7d32;
+  --readout-freq: #1a1a1a;
+  --warn-bg: #f5e050;
+  --warn-text: #1a1200;
+  --led-on: #2e7d32;
+  --led-off: #c9c4b4;
+  --radius: 0px;
+  --font-family: "Courier New", ui-monospace, monospace;
+  --border-color: #c9c4b4;
+  --button-bg: #ddd7c6;
+  --button-text: #222222;
+  --button-bg-active: #d99a2b;
+  --button-text-active: #1a1200;
+}
+
+[data-theme="acom"] .gauge-bargraph .segment.filled {
+  background: var(--readout-power);
+}
+
+[data-theme="acom"] .gauge-bargraph .segment.danger-zone.filled {
+  background: #d9402a;
+}

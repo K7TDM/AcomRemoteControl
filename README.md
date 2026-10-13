@@ -12,9 +12,11 @@ protocol details and `PI_CONTROL_PLAN.md` for the full build plan.
 ## Status
 
 Protocol research and build planning are done (see `CLAUDE.md` /
-`PI_CONTROL_PLAN.md`). Application code isn't written yet. `install.sh` /
-`requirements.txt` set up the dependencies ahead of that so a Pi is ready
-to go as soon as the backend/frontend land.
+`PI_CONTROL_PLAN.md`). The backend/frontend application now lives in
+`acom-control/` - see `acom-control/README.md` for install/run
+instructions. It hasn't been tested against real hardware yet (no Pi/amp
+attached during development); see `PI_CONTROL_PLAN.md`'s "Status" section
+for exactly what still needs verification once hardware is available.
 
 ## Hardware
 
@@ -42,12 +44,20 @@ This installs:
 - Adds your user to the `dialout` group (required for serial port access)
 - A Python virtual environment at `~/acom-control-venv` with the packages
   in `requirements.txt`: `fastapi`, `uvicorn[standard]`, `pyserial`,
-  `pymodbus`
+  `pymodbus` (pinned to `3.6.9` - 3.7+ removed the datastore API this
+  project's Modbus server uses)
 
 After it finishes, log out and back in (or reboot) so the `dialout` group
 membership takes effect.
 
 Re-run `bash install.sh` any time `requirements.txt` changes.
+
+## Running it
+
+See `acom-control/README.md` for hardware wiring/udev setup and how to
+run the backend (development command or as a systemd service). The web
+dashboard, Setup wizard, and Antenna Setup screen are served from there
+once it's running.
 
 ## Documentation
 

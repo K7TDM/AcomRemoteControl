@@ -1,0 +1,30 @@
+# systemd unit for the ACOM Remote Control backend. See PI_CONTROL_PLAN.md
+# step 7 and acom-control's top-level README.md for install instructions.
+#
+# Install:
+#   sudo useradd --system --no-create-home --groups dialout acom-control
+#   sudo cp acom-control.service /etc/systemd/system/
+#   # edit the paths below (WorkingDirectory/ExecStart) if the repo isn't
+#   # checked out at /home/pi/AcomRemoteControl/acom-control
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now acom-control
+#   journalctl -u acom-control -f
+
+[Unit]
+Description=ACOM Remote Control backend (FastAPI + serial link + Modbus)
+After=network.target
+
+[Service]
+Type=simple
+User=acom-control
+Group=dialout
+WorkingDirectory=/home/pi/AcomRemoteControl/acom-control
+Environment=PATH=/home/pi/acom-control-venv/bin:/usr/bin:/bin
+ExecStart=/home/pi/acom-control-venv/bin/uvicorn backend.app:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
