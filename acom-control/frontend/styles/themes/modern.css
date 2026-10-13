@@ -1,0 +1,55 @@
+/* Modern theme - contemporary flat dashboard. Shares the bargraph +
+   component markup with ACOM, differs only via these variables. */
+
+[data-theme="modern"][data-mode="dark"] {
+  --bg-page: #121417;
+  --bg-panel: #1e2126;
+  --accent-label: #4fd1c5;
+  --accent-label-text: #06201d;
+  --text-primary: #e8e8ea;
+  --text-secondary: #9aa0a6;
+  --readout-power: #4fd1c5;
+  --readout-freq: #ffffff;
+  --warn-bg: #f0b429;
+  --warn-text: #241a00;
+  --led-on: #4fd1c5;
+  --led-off: #333a40;
+  --radius: 10px;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --border-color: #2a2f36;
+  --button-bg: #262b31;
+  --button-text: #e8e8ea;
+  --button-bg-active: #4fd1c5;
+  --button-text-active: #06201d;
+}
+
+[data-theme="modern"][data-mode="light"] {
+  --bg-page: #f5f6f8;
+  --bg-panel: #ffffff;
+  --accent-label: #2a9d94;
+  --accent-label-text: #ffffff;
+  --text-primary: #1a1a1a;
+  --text-secondary: #5a6069;
+  --readout-power: #1f8a7a;
+  --readout-freq: #1a1a1a;
+  --warn-bg: #f0b429;
+  --warn-text: #241a00;
+  --led-on: #2a9d94;
+  --led-off: #d8dce0;
+  --radius: 10px;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --border-color: #e1e4e8;
+  --button-bg: #eef0f2;
+  --button-text: #1a1a1a;
+  --button-bg-active: #2a9d94;
+  --button-text-active: #ffffff;
+}
+
+[data-theme="modern"] .gauge-bargraph .fill {
+  background: linear-gradient(90deg, var(--readout-power), var(--accent-label));
+  border-radius: var(--radius);
+}
+
+[data-theme="modern"] .status-chip {
+  border-radius: 999px;
+}

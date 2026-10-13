@@ -1,0 +1,44 @@
+/* Segmented (ACOM) vs smooth-gradient (Modern) bargraph fill - both driven
+   by the same markup from gauges.js's renderBargraphGauge(). The segmented
+   vs. gradient look is applied per-theme (see styles/themes/acom.css and
+   styles/themes/modern.css); this file is the shared structural CSS. */
+
+.gauge-bargraph {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gauge-bargraph .track {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  height: 1.5rem;
+  background: var(--bg-page);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+
+/* Default (ACOM-style segmented) look; Modern overrides .fill to a single
+   smooth gradient block instead of discrete .segment elements - see
+   gauges.js, which renders a single .fill div when data-style="smooth". */
+.gauge-bargraph .segment {
+  flex: 1 0 auto;
+  width: 6px;
+  background: var(--bg-panel);
+}
+
+.gauge-bargraph .segment.filled {
+  background: var(--readout-power);
+}
+
+.gauge-bargraph .segment.danger-zone {
+  opacity: 0.9;
+}
+
+.gauge-bargraph .fill {
+  height: 100%;
+  background: var(--readout-power);
+  transition: width 0.3s ease;
+}

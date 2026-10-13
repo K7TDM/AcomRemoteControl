@@ -1,0 +1,14 @@
+# Backend dependencies for the acom-control FastAPI service.
+#
+# The repo-root install.sh/requirements.txt remain the fast system-level
+# bootstrap (apt packages + this same Python package list) for a fresh Pi.
+# This file is the backend's own copy so `pip install -r backend/requirements.txt`
+# works standalone once acom-control/ is deployed on its own.
+fastapi
+uvicorn[standard]
+pyserial
+# Pinned: pymodbus 3.7+ deprecated ModbusSlaveContext/setValues/getValues in
+# favor of a new SimData/SimDevice model (removal planned for 4.0). This repo
+# targets the classic 3.6.x datastore API that modbus_server.py is written
+# against - confirmed working with 3.6.9. Re-pin deliberately if upgrading.
+pymodbus==3.6.9

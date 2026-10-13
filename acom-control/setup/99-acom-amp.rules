@@ -1,0 +1,18 @@
+# udev rule for a stable /dev/acom-amp symlink to the USB-RS232 adapter,
+# so config.json's amp.serial_device doesn't break across reboots or when
+# other USB-serial devices are plugged in. See PI_CONTROL_PLAN.md step 7.
+#
+# Install:
+#   sudo cp 99-acom-amp.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+#
+# Find the adapter's serial number (plug it in first):
+#   udevadm info --name=/dev/ttyUSB0 --attribute-walk | grep -m1 '{serial}'
+# (substitute the actual /dev/ttyUSBx the adapter shows up as - check
+# `dmesg | tail` or `lsusb` right after plugging it in if unsure)
+#
+# Replace REPLACE_WITH_ADAPTER_SERIAL below with that value, then re-run
+# the install steps above.
+
+SUBSYSTEM=="tty", ATTRS{serial}=="REPLACE_WITH_ADAPTER_SERIAL", SYMLINK+="acom-amp"

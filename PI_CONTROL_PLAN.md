@@ -71,6 +71,9 @@ Decisions already made with the user:
   (`journalctl -u acom-control`, size cap via `journald.conf`) instead of
   a hand-rolled log file — simpler than custom rotation, drops the need
   for a `logging.path` config field (keep just `logging.level`).
+  **Two separate, traceable logger names** so a frontend failure doesn't
+  get buried in backend serial/protocol noise (and vice versa) — see
+  "Backend vs. frontend logging" below.
 - **Networking**: a DHCP reservation on the router for the Pi's IP,
   rather than a static-IP config on the Pi itself — easier to manage in
   one place, and the Modbus client generally wants a fixed IP anyway.
@@ -136,6 +139,73 @@ The `0x2F` parser consults the active profile to decide whether to expose
 PAM2 temperature/voltage/current fields, and the frontend uses
 `max_power_w` for gauge scaling. This is the extension point for adding
 real 600S/2000S support later without touching the framing/checksum code.
+
+## Setup Wizard & Antenna Setup
+
+A **Setup** screen (gear icon in the header, available any time, not just
+first-run) replaces the old "set it once in config.json and restart" idea
+— **config changes are fully live, no service restart.**
+
+- **Amp model** (`600S`/`1200S`/`2000S`) and **tuner/switch**
+  (`None`/`04AT`/`06AT`/`20AT`) selects.
+  - `GET /api/config` → current `{amp_model, tuner_model}` + connection
+    status.
+  - `POST /api/config` `{amp_model, tuner_model}` → updates the in-memory
+    `AmpProfile`/tuner-presence flag immediately (no serial port
+    close/reopen needed — baud/framing are identical regardless of model
+    or tuner; only which `0x2F` fields are treated as valid and which UI
+    sections show change), and persists the choice to `config.json` so it
+    survives a reboot.
+- **Antenna Setup** section, shown only when a tuner is selected (04AT/
+  06AT/20AT all expose the same 4-antenna-slot tables per `CLAUDE.md`):
+  - A 4-row × 11-column matrix: rows = Antenna 1–4, columns = Name (text,
+    ≤12 ASCII chars), Type (Sharp/Regular/Wide/Fixed dropdown), then one
+    checkbox per band (160/80/60/40/30/20/17/15/12/10/6m).
+  - **Pulled from the amp automatically** on serial connect (and via a
+    "Refresh from amp" button): `serial_link.py` requests messages `0x16`
+    (ATU/ASEL identity — confirms a tuner is actually attached and which
+    model), `0x18` (antenna type + band assignments), and `0x1B` (antenna
+    names) via the `0x81` Cmd `0x01` "Request specific message" command,
+    since those are "generated once on request" rather than streamed.
+  - **Saved back to the amp** on "Save": builds and sends `0x85` (set
+    antenna names) and `0xA0` (set antenna type + band assignments — same
+    16-byte layout as the `0x18` read message, confirmed as the
+    computer→amp write counterpart per protocol doc §5.10), then
+    re-requests `0x18`/`0x1B` afterward to refresh `AmpState` from the
+    amp's own echo rather than trusting the write blindly.
+  - `GET /api/antenna/config` / `POST /api/antenna/config` with body
+    `{antennas: [{number, name, type, bands: [...]}]}` (4 entries).
+
+`amp_state.py` gains an `antenna_config: list[AntennaSlot]` field
+(`number`, `name`, `type`, `band_mask`) populated from `0x18`/`0x1B` on
+connect and kept current after any `0x85`/`0xA0` write.
+
+## Backend vs. frontend logging
+
+One systemd service, one `journalctl -u acom-control` stream, but two
+distinctly-named loggers so backend and frontend failures stay traceable
+to their source instead of interleaving:
+
+- **Backend**: standard Python `logging.getLogger("acom.backend")`
+  (further sub-loggers per module are fine, e.g. `acom.backend.serial`,
+  `acom.backend.protocol`) — covers serial I/O, framing/checksum errors,
+  command queue/retry events, Modbus server activity, and FastAPI request
+  errors. Configured once in `app.py` startup from `config.json`'s
+  `logging.level`.
+- **Frontend**: the browser can't write to journald directly, so
+  `app.js` installs a `window.onerror` + `window.onunhandledrejection`
+  handler, and wraps the WebSocket/fetch calls' error paths, to `POST
+  /api/frontend-log` with `{level, message, stack, url}`. The backend
+  route logs that payload through `logging.getLogger("acom.frontend")`
+  tagged with the reporting browser's IP — so a dashboard crash/WS drop
+  on someone's phone shows up server-side even though no one's watching
+  that browser's devtools console.
+- **Filtering**: both loggers share the process's stdout → journald, but
+  `journalctl -u acom-control` output includes the logger name per line
+  (`acom.backend.serial: ...` / `acom.frontend: ...`), so
+  `journalctl -u acom-control | grep '^acom.frontend'` isolates
+  client-side issues and vice versa for backend-only debugging — no need
+  for two separate log files or systemd units.
 
 ## UI Design — Themes
 
@@ -347,13 +417,15 @@ and matches the project's scale (a personal local-network control panel).
    - `parse_frame(bytes) -> Message | None`: validates start byte/length/
      checksum, returns a tagged object by address.
    - Per-address parsers at minimum for: `0x2F` (main telemetry — the
-     dashboard's primary data source), `0x16` (ATU/ASEL identity), `0x18`/
-     `0xA0` (antenna assignments), `0x1B` (antenna names, get), `0x27`
+     dashboard's primary data source), `0x16` (ATU/ASEL identity), `0x18`
+     (antenna assignments, get), `0x1B` (antenna names, get), `0x27`
      (current antenna/band/segment status), `0x21` (fault/warning
      bitfields), `0x86` ack. Also `build_command` needs an `0x85` builder
-     (set antenna names — same 52-byte layout as `0x1B`, computer → amp;
-     see `CLAUDE.md`). Other addresses from the doc can be stubbed/logged
-     initially and filled in as needed.
+     (set antenna names — same 52-byte layout as `0x1B`, computer → amp)
+     and an `0xA0` builder (set antenna assignments/band matrix — same
+     16-byte layout as `0x18`, computer → amp; see `CLAUDE.md`). Other
+     addresses from the doc can be stubbed/logged initially and filled in
+     as needed.
    - Re-verify exact field offsets/addresses directly against the PDF
      while coding this file — `CLAUDE.md` is a summary, the PDF is ground
      truth.
@@ -395,10 +467,18 @@ and matches the project's scale (a personal local-network control panel).
      `{action: "next"}` (cycle-only for normal tuned operation — direct
      select exists only as the ATU bypass command, which skips tuning;
      document this limitation in the UI).
-   - `POST /api/antenna/names` `{names: [str, str, str, str]}` → builds
-     the `0x85` set-names command (antennas 1–4 only, 12 ASCII chars
-     each — see `CLAUDE.md`).
+   - `GET /api/config` / `POST /api/config` `{amp_model, tuner_model}` →
+     live profile swap + persists to `config.json` (see "Setup Wizard &
+     Antenna Setup" above — no restart needed).
+   - `GET /api/antenna/config` / `POST /api/antenna/config`
+     `{antennas: [{number, name, type, bands: [...]}]}` → the Antenna
+     Setup matrix; `POST` builds and sends `0x85` (names) + `0xA0`
+     (type/band assignments), then re-requests `0x18`/`0x1B` to refresh
+     `AmpState` from the amp's own echo.
    - `POST /api/buzzer` volume/tone.
+   - `POST /api/frontend-log` `{level, message, stack, url}` → logged
+     server-side via `logging.getLogger("acom.frontend")` (see "Backend
+     vs. frontend logging" above); no response body needed beyond 204.
    - **OPR/TX requires confirmation**: `POST /api/mode {mode: "opr_tx"}`
      is rejected unless the request also carries a short-lived "armed"
      token obtained from a separate `POST /api/mode/arm_tx` call; the web
@@ -452,6 +532,15 @@ and matches the project's scale (a personal local-network control panel).
    - Controls: power on/off (TX gated behind the arm/confirm flow), mode
      buttons, band next/prev, antenna next, buzzer test. Each simply
      `fetch(..., {method:'POST', ...})`.
+   - **Setup screen** (gear icon): amp/tuner model selects bound to
+     `GET`/`POST /api/config`, and the Antenna Setup name/type/band
+     matrix bound to `GET`/`POST /api/antenna/config`, shown only when a
+     tuner is selected.
+   - **Error reporting**: `app.js` installs `window.onerror` /
+     `window.onunhandledrejection` handlers and wraps WebSocket/fetch
+     error paths to `POST /api/frontend-log` (see "Backend vs. frontend
+     logging" above) — fire-and-forget, never blocks the UI on a failed
+     log post.
    - Keep it a single page, no framework/build step, consistent with the
      "small personal tool" scale of this project.
 
@@ -535,3 +624,98 @@ and matches the project's scale (a personal local-network control panel).
   (see above) — straightforward additions once v1's plumbing exists.
 - Optional auth (shared token) for the web UI/API/Modbus server, if the
   "trust the LAN" v1 decision ever needs revisiting.
+
+## Status
+
+The initial `acom-control/` build now exists (config, backend, frontend,
+setup/ files per the Directory layout section above). It has **not** been
+tested against real hardware - there's no Pi or amp attached to the
+machine it was written on. Specifically still needing real-hardware
+verification before this is trusted:
+
+- The ACK/retry timing model in `serial_link.py` (the doc under-specifies
+  how outbound-command acknowledgement is supposed to work beyond the
+  amp-initiated-message case).
+- The startup handshake's forced-HEX-mode step (`0x90`, which the doc
+  itself marks "Obsolete! (Removed)") - sent as a best-effort no-op.
+- `modbus_server.py`'s pymodbus API usage - written against the 3.x async
+  API from memory/docs, not verified against the actual installed version
+  (pymodbus isn't installed on the authoring machine).
+- `0x27`'s `segment_status_raw` bit-level meaning (7 raw bytes exposed,
+  not decoded - the doc doesn't fully clarify the per-segment bit layout).
+- `protocol.FAULT_CODE_NAMES` only covers a representative subset of the
+  ~90-entry fault table in the doc's section 3.7.1; everything else still
+  surfaces as a raw hex code to the frontend.
+- The three frontend themes are a first pass (correct structure/data
+  binding, not pixel-tuned against the real LCD screenshots yet).
+
+Framing/checksum, the 0x81 command builders, and all the telemetry/antenna
+message parsers were round-tripped with synthetic frames (not real serial
+data) and compile cleanly - see the fork's implementation report for what
+was exercised.
+
+### Fix pass: code-review findings + protocol-coverage gaps
+
+A `/code-review` pass plus a manual protocol-coverage audit (every message
+address and `0x81` sub-command in the doc checked against the
+implementation) turned up real gaps, all now addressed:
+
+- **Command confirmation**: `0x01`/`0x03`/`0x04` (malformed-reply/OK/ERR)
+  are now parsed and surfaced to `AmpState.last_command_result`.
+  `serial_link.py` gained `send_command()` - writes a frame, waits for the
+  amp's OK/ERR, retries up to 5x on timeout (doc section 1's resend rule),
+  and reports success/failure to the caller. All command-sending routes in
+  `app.py` (power/mode/band/antenna/buzzer/antenna-config writes/factory
+  reset/ATU erase) go through it and return HTTP 502 on a confirmed
+  failure; status-query sends (`build_request_message` and the new ATU
+  tuning-record request) stay fire-and-forget, since their "reply" is the
+  requested message itself.
+- **`0x2E`** (ATU Measure menu telemetry, sent instead of `0x2F` while the
+  amp's own front panel shows that menu), **`0x1A`** (per-band/segment ATU
+  tuning quality) and **`0x2A`** (ATU Service menu: working hours, tune%,
+  serial) are now parsed and in `AmpState`; `0x2A`'s fields surface in a
+  read-only "ATU Status" panel in the Antenna Setup screen.
+- **ATU memory erase is now real.** The old `/api/atu/erase` route only
+  ever implemented Factory Reset (`0x81` Cmd `0x0D`) - renamed to
+  `/api/factory-reset`. A genuine `POST /api/atu/erase-memory` (Cmd `0x10`:
+  erase current/specific/all/whole-memory) and `POST
+  /api/atu/delete-segment-tuning` (Cmd `0x12`) were added, both confirm-
+  gated server-side. Per explicit user instruction, both live inside the
+  Antenna Setup screen behind a collapsed "Advanced / Danger Zone"
+  `<details>` section with a native `confirm()` double-check before
+  firing - not reachable by a stray click anywhere else.
+- **`0x81` Cmd `0x0F`** (request a specific ATU tuning record) was added as
+  `POST /api/atu/tuning-record`, used by the Danger Zone's segment-delete
+  tool to look up what's there before deleting it.
+- **`try_parse_frame`** now rejects a length byte over the doc's 72-byte
+  max instead of stalling the parser waiting for an implausible frame.
+- **TX-arm hardening**: `/api/mode/arm_tx` now returns a single-use random
+  token that `/api/mode {mode: "opr_tx"}` must present, instead of a bare
+  "any client within 15s" window - closes the gap where another client/
+  script on the LAN could ride someone else's confirm dialog.
+- **Modbus coil-pulse coalescing fixed**: coil edge-detection now polls at
+  100ms (was 500ms, shared with the telemetry mirror), so two quick
+  repeated pulses from a 3rd-party client aren't collapsed into one.
+- **Frontend**: `apiFetch()` now throws on non-2xx instead of only
+  logging; every button handler is wrapped to catch and show a visible
+  error banner instead of failing silently (this is what makes the TX-arm
+  fix actually visible to the operator - a failed arm/key no longer closes
+  the confirm dialog as if it succeeded). The hot WebSocket-message render
+  path no longer re-reads `localStorage` on every tick - theme is cached
+  and only refreshed on the `acom-theme-change` event. `app.py`'s
+  fire-and-forget WebSocket-broadcast tasks are now tracked (no more
+  GC-eligible, exception-swallowing orphan tasks), and `POST /api/config`
+  has partial-update semantics (omitting `tuner_model` no longer silently
+  clears it).
+- One code-review finding was investigated and determined to be a false
+  positive (not fixed, deliberately): a claim that `serial_link.py` should
+  ACK a received `0x86` frame - `0x86` is documented exclusively as a
+  computer→amplifier message (doc section 5), so the amp never legitimately
+  sends one to us; the finding was citing a stale/incorrect description
+  that didn't match this file's current content.
+
+Still unverified against real hardware (expected - no Pi/amp attached to
+the authoring machine): the exact `send_command()` timeout/retry timing,
+whether `0x2A` is actually requestable via the generic Cmd `0x01`
+"request specific message" mechanism (added to the startup pull on that
+assumption), and everything else already listed above this subsection.

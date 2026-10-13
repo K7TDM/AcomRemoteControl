@@ -104,13 +104,17 @@ the "10AS" model name) — see the discrepancy noted below.
 - **Antenna names (set):** address `0x85`, computer → amp, same 52-byte
   layout as `0x1B`. This is the actual "name your antennas" command — it
   was previously missing from this doc.
-- **Antenna assignments (get only):** address `0x18` (and duplicate `0xA0`),
-  amp → computer, 16 bytes. Byte 3–6 = antenna type per slot (0 Sharp /
-  1 Regular / 2 Wide / 3 Fixed), bytes 7–14 = per-antenna band-low/band-high
-  bitmasks (bit 0=160m … bit 10=6m) for antennas 0–3. **No write command
-  was found** to set custom band assignments from the computer — only
-  `0x81` Cmd `0x0D` Byte5=`5` ("Restore Antenna Assignments to Factory
-  Settings") touches this table, and only to reset it.
+- **Antenna assignments (get):** address `0x18`, amp → computer, 16 bytes.
+  Byte 3–6 = antenna type per slot (0 Sharp / 1 Regular / 2 Wide /
+  3 Fixed), bytes 7–14 = per-antenna band-low/band-high bitmasks
+  (bit 0=160m … bit 10=6m) for antennas 0–3.
+- **Antenna assignments (set):** address `0xA0`, **computer → amplifier**
+  (confirmed — `0xA0` falls under protocol doc §5, "Messages and commands
+  from the computer to the main CPU of the amplifier," not under the
+  amp-status sections). Identical 16-byte layout to `0x18` ("Similar to
+  Message 0x18" per the doc), just the opposite direction — this is the
+  actual "write the band↔antenna matrix" command. Previously mis-filed
+  here as a read-only duplicate of `0x18`; corrected.
 - **Antenna switching (cycle only):** `0x81` Cmd `0x09` Byte5=`0x30`
   "Next Antenna" — confirmed there is no "Previous Antenna" counterpart,
   only Next Band/Previous Band/Next Segment/Previous Segment/Next Antenna.
@@ -132,9 +136,9 @@ the "10AS" model name) — see the discrepancy noted below.
 protocol's generic field width (consistent with the 10AS selector
 supporting up to 10 positions in general). **Not relevant to this build:**
 the user's actual hardware (04AT/06AT tuner) only has 4 antenna ports, which
-matches the 4 slots in the name/assignment tables (`0x18`/`0xA0` get, `0x1B`
-get, `0x85` set) exactly. Only antennas 1–4 need to be supported — no need
-to chase antennas 5–10.
+matches the 4 slots in the name/assignment tables (`0x18` get / `0xA0` set,
+`0x1B` get / `0x85` set) exactly. Only antennas 1–4 need to be supported —
+no need to chase antennas 5–10.
 
 ## Status/telemetry messages (amplifier → computer)
 
@@ -147,7 +151,9 @@ frame. Key ones:
 - `0x16` **ATU parameters** (type `0x21`=04AT / `0x41`=10AS, HW/FW
   versions, serial number)
 - `0x17` ASEL parameters (obsolete, folded into `0x16`)
-- `0x18` / `0xA0` antenna assignments (type + band-high/low per antenna 0–3)
+- `0x18` antenna assignments, get (type + band-high/low per antenna 0–3) —
+  `0xA0` is the computer→amplifier write counterpart, see the Antenna
+  naming/switching section above
 - `0x21` error codes bitfields (many warning/soft-fault/hard-fault bits,
   incl. ATU comm errors, tuning failures, power-switch alarms)
 - `0x2A` "ATU Service" menu parameters (model, versions, working hours,

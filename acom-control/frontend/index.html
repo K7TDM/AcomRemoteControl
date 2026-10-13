@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ACOM Remote Control</title>
+
+  <!-- Applies the saved theme before first paint, to avoid a flash of the
+       wrong theme while styles/app.js load. See theme.js. -->
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem("acom.theme");
+        var theme = raw ? JSON.parse(raw) : { style: "acom", mode: "dark" };
+        document.documentElement.setAttribute("data-theme", theme.style || "acom");
+        document.documentElement.setAttribute("data-mode", theme.mode || "dark");
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "acom");
+        document.documentElement.setAttribute("data-mode", "dark");
+      }
+    })();
+  </script>
+
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/components.css" />
+  <link rel="stylesheet" href="styles/gauges/bargraph.css" />
+  <link rel="stylesheet" href="styles/gauges/needle-meter.css" />
+  <link rel="stylesheet" href="styles/themes/acom.css" />
+  <link rel="stylesheet" href="styles/themes/classic.css" />
+  <link rel="stylesheet" href="styles/themes/modern.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>ACOM Remote Control</h1>
+    <div class="header-controls">
+      <select id="theme-style-select" class="theme-select" aria-label="Theme">
+        <option value="acom">ACOM</option>
+        <option value="classic">Classic</option>
+        <option value="modern">Modern</option>
+      </select>
+      <button id="theme-mode-toggle" class="icon-button" type="button" aria-label="Toggle light/dark"></button>
+      <button id="btn-setup-open" class="icon-button" type="button" aria-label="Setup">⚙</button>
+    </div>
+  </header>
+
+  <main id="dashboard">
+    <div id="status-row" class="status-row"></div>
+
+    <div id="gauge-grid" class="gauge-grid"></div>
+
+    <div id="freq-readout" class="freq-readout">
+      <span class="value">--.---</span><span class="unit">MHz</span>
+    </div>
+
+    <div id="warning-banner" class="warning-banner" hidden></div>
+    <div id="action-error-banner" class="warning-banner" hidden></div>
+
+    <div class="button-bar">
+      <button id="btn-power-on" class="acom-button" type="button">Power On</button>
+      <button id="btn-power-off" class="acom-button danger" type="button">Power Off</button>
+      <button id="btn-mode-stb" class="acom-button" type="button">STB</button>
+      <button id="btn-mode-opr-rx" class="acom-button" type="button">OPR/RX</button>
+      <button id="btn-mode-opr-tx" class="acom-button danger" type="button">OPR/TX</button>
+      <button id="btn-band-prev" class="acom-button" type="button">◀ Band</button>
+      <button id="btn-band-next" class="acom-button" type="button">Band ▶</button>
+      <button id="btn-antenna-next" class="acom-button" type="button">Next Antenna</button>
+      <button id="btn-buzzer-test" class="acom-button" type="button">Buzzer Test</button>
+    </div>
+  </main>
+
+  <section id="setup-screen" hidden>
+    <div class="setup-section">
+      <h2>Amplifier &amp; Tuner</h2>
+      <label>
+        Amp model:
+        <select id="setup-amp-select" class="theme-select"></select>
+      </label>
+      <label>
+        Tuner / switch:
+        <select id="setup-tuner-select" class="theme-select"></select>
+      </label>
+    </div>
+
+    <div id="antenna-setup-section" class="setup-section" hidden>
+      <h2>Antenna Setup</h2>
+      <table class="antenna-matrix">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>160m</th><th>80m</th><th>60m</th><th>40m</th><th>30m</th>
+            <th>20m</th><th>17m</th><th>15m</th><th>12m</th><th>10m</th><th>6m</th>
+          </tr>
+        </thead>
+        <tbody id="antenna-matrix-body"></tbody>
+      </table>
+
+      <div id="atu-status-panel" class="atu-status-panel"></div>
+
+      <details id="antenna-danger-zone" class="danger-zone">
+        <summary>Advanced / Danger Zone</summary>
+        <div class="setup-section danger">
+          <h3>Erase ATU Tuning Memory</h3>
+          <p class="danger-warning">
+            This erases stored tuning data from the ATU. Used rarely -
+            double-check the selection before confirming; there's no undo.
+          </p>
+          <label>
+            Erase:
+            <select id="atu-erase-selection" class="theme-select">
+              <option value="current">Current tuning</option>
+              <option value="specific">Specific antenna's tunings</option>
+              <option value="all">All tunings</option>
+              <option value="whole_memory">Whole ATU memory</option>
+            </select>
+          </label>
+          <label id="atu-erase-antenna-label" hidden>
+            Antenna number:
+            <input id="atu-erase-antenna-number" type="number" min="1" max="4" value="1" />
+          </label>
+          <button id="btn-atu-erase" class="acom-button danger" type="button">Erase ATU Memory&hellip;</button>
+
+          <h3>Delete Segment Tuning</h3>
+          <p class="danger-warning">Erases the stored tuning for one antenna/band pair.</p>
+          <label>
+            Antenna:
+            <input id="segment-delete-antenna" type="number" min="1" max="4" value="1" />
+          </label>
+          <label>
+            Band:
+            <select id="segment-delete-band" class="theme-select"></select>
+          </label>
+          <button id="btn-segment-delete" class="acom-button danger" type="button">Delete This Segment's Tuning&hellip;</button>
+        </div>
+      </details>
+    </div>
+
+    <div class="button-bar">
+      <button id="btn-setup-refresh" class="acom-button" type="button">Refresh from Amp</button>
+      <button id="btn-setup-save" class="acom-button" type="button">Save</button>
+      <button id="btn-setup-close" class="acom-button" type="button">Close</button>
+    </div>
+  </section>
+
+  <dialog id="tx-confirm-dialog">
+    <p>Key the amplifier into OPR/TX mode?</p>
+    <div class="actions">
+      <button id="tx-confirm-cancel" class="acom-button" type="button">Cancel</button>
+      <button id="tx-confirm-ok" class="acom-button danger" type="button">Key TX</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

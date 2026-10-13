@@ -5,8 +5,9 @@
 # Debian/Ubuntu-based system with apt.
 #
 # Installs the system packages and Python packages needed to build and run
-# the acom-control backend (FastAPI + pyserial + pymodbus). Application code
-# isn't in this repo yet - this script only sets up the dependencies.
+# the acom-control backend (FastAPI + pyserial + pymodbus). See
+# acom-control/README.md for hardware setup and how to actually run it
+# after this script finishes.
 #
 # Usage: bash install.sh
 
@@ -51,7 +52,7 @@ Notes:
   Log out and back in (or reboot) for that to take effect.
 - Python virtual environment: $VENV_DIR
   Activate it with: source $VENV_DIR/bin/activate
-- Application code (acom-control/) will be added to this repo once the
-  backend/frontend are built - re-run this script if requirements.txt
-  changes.
+- Next: see acom-control/README.md for hardware setup (udev rule, wiring)
+  and how to run the backend, either directly or as a systemd service.
+- Re-run this script any time requirements.txt changes.
 EOF

@@ -1,0 +1,36 @@
+/* Arc scale, needle, pilot-lamp glow - Classic theme's gauge widget.
+   Rendered as inline SVG by gauges.js's renderNeedleGauge(). */
+
+.gauge-needle {
+  display: flex;
+  justify-content: center;
+}
+
+.gauge-needle svg {
+  width: 100%;
+  max-width: 160px;
+  height: auto;
+}
+
+.gauge-needle .needle-face {
+  fill: var(--needle-face, var(--bg-panel));
+  stroke: var(--border-color);
+  stroke-width: 2;
+}
+
+.gauge-needle .needle-tick {
+  stroke: var(--needle-scale, var(--text-secondary));
+  stroke-width: 1.5;
+}
+
+.gauge-needle .needle-pointer {
+  stroke: var(--needle-pointer, #d9402a);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transform-origin: 50% 50%;
+  transition: transform 0.3s ease;
+}
+
+.gauge-needle .needle-hub {
+  fill: var(--needle-pointer, #d9402a);
+}

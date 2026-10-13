@@ -1,0 +1,62 @@
+/* Classic theme - 1950s tube-amplifier aesthetic. Needle-meter gauges
+   instead of bargraphs; see PI_CONTROL_PLAN.md "UI Design - Themes". */
+
+[data-theme="classic"][data-mode="dark"] {
+  --bg-page: #241a12;
+  --bg-panel: #3a2a1d;
+  --accent-label: #c97f2c;
+  --accent-label-text: #1a1200;
+  --text-primary: #f0dcc0;
+  --text-secondary: #c9ad87;
+  --readout-power: #ff9a3c;
+  --readout-freq: #ff9a3c;
+  --warn-bg: #e2b23c;
+  --warn-text: #241a12;
+  --led-on: #ffb347;
+  --led-off: #5a4530;
+  --radius: 6px;
+  --font-family: "Georgia", "Times New Roman", serif;
+  --border-color: #5a4530;
+  --button-bg: #4a3826;
+  --button-text: #f0dcc0;
+  --button-bg-active: #c97f2c;
+  --button-text-active: #241a12;
+  --needle-face: #2a1d14;
+  --needle-scale: #f0dcc0;
+  --needle-pointer: #ff5a3c;
+}
+
+[data-theme="classic"][data-mode="light"] {
+  --bg-page: #e9ddc4;
+  --bg-panel: #f3e9d2;
+  --accent-label: #8a5a2b;
+  --accent-label-text: #f3e9d2;
+  --text-primary: #2a1d12;
+  --text-secondary: #5a4530;
+  --readout-power: #8a5a2b;
+  --readout-freq: #2a1d12;
+  --warn-bg: #e2b23c;
+  --warn-text: #2a1d12;
+  --led-on: #c97f2c;
+  --led-off: #cbb98f;
+  --radius: 6px;
+  --font-family: "Georgia", "Times New Roman", serif;
+  --border-color: #cbb98f;
+  --button-bg: #e3d4ad;
+  --button-text: #2a1d12;
+  --button-bg-active: #8a5a2b;
+  --button-text-active: #f3e9d2;
+  --needle-face: #f3e9d2;
+  --needle-scale: #2a1d12;
+  --needle-pointer: #a3331a;
+}
+
+[data-theme="classic"] .led-dot {
+  box-shadow: 0 0 6px 2px var(--led-on);
+  border: 2px solid var(--border-color);
+}
+
+[data-theme="classic"] .acom-button {
+  border-radius: var(--radius);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.15), inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+}

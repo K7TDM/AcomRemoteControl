@@ -1,0 +1,157 @@
+/* Status row, readouts, button bar - all var()-driven, shared by all
+   three themes. See styles/themes/*.css for the variable values and
+   styles/gauges/*.css for the two gauge widgets. */
+
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--accent-label);
+  color: var(--accent-label-text);
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.led-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--led-off);
+  display: inline-block;
+}
+
+.led-dot.on {
+  background: var(--led-on);
+}
+
+.freq-readout .value {
+  font-size: 2.5rem;
+  color: var(--readout-freq);
+  font-weight: bold;
+}
+
+.freq-readout .unit {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  margin-left: 0.5rem;
+}
+
+.warning-banner {
+  padding: 0.75rem;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-weight: bold;
+  text-align: center;
+  border-radius: var(--radius);
+  animation: warn-flash 1s infinite;
+}
+
+.warning-banner[hidden] {
+  display: none;
+}
+
+#action-error-banner {
+  animation: none; /* don't flash action feedback the way fault warnings do */
+}
+
+#action-error-banner.action-error-info {
+  background: var(--readout-power, #7ac142);
+  color: var(--bg-page);
+}
+
+@keyframes warn-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.acom-button {
+  padding: 0.6rem 1rem;
+  background: var(--button-bg);
+  color: var(--button-text);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.acom-button:hover {
+  filter: brightness(1.1);
+}
+
+.acom-button.active,
+.acom-button:active {
+  background: var(--button-bg-active);
+  color: var(--button-text-active);
+}
+
+.acom-button.danger {
+  border-color: #d9402a;
+  color: #d9402a;
+}
+
+.icon-button {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+
+select.theme-select {
+  background: var(--bg-page);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 0.3rem;
+}
+
+.gauge-label {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.gauge-value {
+  text-align: center;
+  font-size: 1rem;
+  color: var(--readout-power);
+  font-weight: bold;
+}
+
+.gauge-wrapper {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+}
+
+dialog#tx-confirm-dialog {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  padding: 1.5rem;
+}
+
+dialog#tx-confirm-dialog .actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
