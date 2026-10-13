@@ -2,11 +2,11 @@
 
 ## Context
 
-The user owns an ACOM 1200S HF amplifier and an ACOM 06AT/20AT antenna
-tuner/switch, and wants to build their own Raspberry Pi–based remote control
-instead of buying ACOM's eBox accessory. The Pi will sit on the amp's rear
-RS-232 port, speak the documented ACOM serial protocol, and host a web
-dashboard on the local network for full control + live telemetry.
+This is a Raspberry Pi–based remote control for an ACOM 1200S HF amplifier
+and an ACOM 06AT/20AT antenna tuner/switch, built as a DIY alternative to
+buying ACOM's eBox accessory. The Pi sits on the amp's rear RS-232 port,
+speaks the documented ACOM serial protocol, and hosts a web dashboard on
+the local network for full control + live telemetry.
 
 Protocol research is already captured in `CLAUDE.md` (same folder) from the
 `ACOM A600S A1200S Serial Protocol V1.3.pdf` doc: 9600 8N1 framing,
@@ -16,12 +16,14 @@ band/antenna cycling, ATU management, buzzer, etc.), and the main cyclic
 telemetry message `0x2F` (power, SWR, voltages, temps, fault flags).
 
 Known gap: the 06AT/20AT tuner may not be covered by the same protocol doc
-(it only defines ATU model `04AT` / selector `10AS`). Per the user's
-decision, this build will treat the tuner as **status passthrough only** —
-display whatever ATU/ASEL fields come through — and defer active tuner
-commands until that protocol gap is resolved.
+(it only defines ATU model `04AT` / selector `10AS`). ATU/ASEL identity and
+status are read-only passthrough; active tuner commands are sent only
+where the protocol doc explicitly confirms them (antenna naming/band
+assignment via `0x85`/`0xA0`, tuning-record request/delete via `0x0F`/
+`0x12`, ATU memory erase via Cmd `0x10`) - anything specific to an extended
+06AT/20AT command set stays deferred until that protocol gap is resolved.
 
-Decisions already made with the user:
+Design decisions:
 - **Backend:** Python + FastAPI + `pyserial`
 - **Live updates:** WebSocket push of parsed telemetry to the browser
 - **Scope v1:** Full amp control (power, mode, band/antenna, buzzer,
@@ -680,10 +682,10 @@ implementation) turned up real gaps, all now addressed:
   `/api/factory-reset`. A genuine `POST /api/atu/erase-memory` (Cmd `0x10`:
   erase current/specific/all/whole-memory) and `POST
   /api/atu/delete-segment-tuning` (Cmd `0x12`) were added, both confirm-
-  gated server-side. Per explicit user instruction, both live inside the
-  Antenna Setup screen behind a collapsed "Advanced / Danger Zone"
-  `<details>` section with a native `confirm()` double-check before
-  firing - not reachable by a stray click anywhere else.
+  gated server-side. Both are rarely-used, destructive actions, so they
+  live inside the Antenna Setup screen behind a collapsed "Advanced /
+  Danger Zone" `<details>` section with a native `confirm()` double-check
+  before firing - not reachable by a stray click anywhere else.
 - **`0x81` Cmd `0x0F`** (request a specific ATU tuning record) was added as
   `POST /api/atu/tuning-record`, used by the Danger Zone's segment-delete
   tool to look up what's there before deleting it.
@@ -707,15 +709,13 @@ implementation) turned up real gaps, all now addressed:
   GC-eligible, exception-swallowing orphan tasks), and `POST /api/config`
   has partial-update semantics (omitting `tuner_model` no longer silently
   clears it).
-- One code-review finding was investigated and determined to be a false
-  positive (not fixed, deliberately): a claim that `serial_link.py` should
-  ACK a received `0x86` frame - `0x86` is documented exclusively as a
-  computer→amplifier message (doc section 5), so the amp never legitimately
-  sends one to us; the finding was citing a stale/incorrect description
-  that didn't match this file's current content.
+- `serial_link.py` deliberately does not ACK a received `0x86` frame -
+  `0x86` is documented exclusively as a computer→amplifier message (doc
+  section 5), so the amp never legitimately sends one to the computer;
+  treating it as self-originated (never needing its own ACK) is correct.
 
-Still unverified against real hardware (expected - no Pi/amp attached to
-the authoring machine): the exact `send_command()` timeout/retry timing,
-whether `0x2A` is actually requestable via the generic Cmd `0x01`
-"request specific message" mechanism (added to the startup pull on that
+Still unverified against real hardware (no Pi/amp attached during
+development): the exact `send_command()` timeout/retry timing, whether
+`0x2A` is actually requestable via the generic Cmd `0x01` "request
+specific message" mechanism (added to the startup pull on that
 assumption), and everything else already listed above this subsection.

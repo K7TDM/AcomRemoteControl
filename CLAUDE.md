@@ -102,8 +102,7 @@ the "10AS" model name) — see the discrepancy noted below.
   3–50 = 4 antenna names × 12 ASCII chars each (Antenna 1 = bytes 3–14,
   Antenna 2 = 15–26, Antenna 3 = 27–38, Antenna 4 = 39–50).
 - **Antenna names (set):** address `0x85`, computer → amp, same 52-byte
-  layout as `0x1B`. This is the actual "name your antennas" command — it
-  was previously missing from this doc.
+  layout as `0x1B`. This is the actual "name your antennas" command.
 - **Antenna assignments (get):** address `0x18`, amp → computer, 16 bytes.
   Byte 3–6 = antenna type per slot (0 Sharp / 1 Regular / 2 Wide /
   3 Fixed), bytes 7–14 = per-antenna band-low/band-high bitmasks
@@ -113,8 +112,7 @@ the "10AS" model name) — see the discrepancy noted below.
   from the computer to the main CPU of the amplifier," not under the
   amp-status sections). Identical 16-byte layout to `0x18` ("Similar to
   Message 0x18" per the doc), just the opposite direction — this is the
-  actual "write the band↔antenna matrix" command. Previously mis-filed
-  here as a read-only duplicate of `0x18`; corrected.
+  actual "write the band↔antenna matrix" command.
 - **Antenna switching (cycle only):** `0x81` Cmd `0x09` Byte5=`0x30`
   "Next Antenna" — confirmed there is no "Previous Antenna" counterpart,
   only Next Band/Previous Band/Next Segment/Previous Segment/Next Antenna.
@@ -135,7 +133,7 @@ the "10AS" model name) — see the discrepancy noted below.
 `0x0F`/`0x10`/`0x12`) and in the `0x27` status message — that's just the
 protocol's generic field width (consistent with the 10AS selector
 supporting up to 10 positions in general). **Not relevant to this build:**
-the user's actual hardware (04AT/06AT tuner) only has 4 antenna ports, which
+the target hardware (04AT/06AT tuner) only has 4 antenna ports, which
 matches the 4 slots in the name/assignment tables (`0x18` get / `0xA0` set,
 `0x1B` get / `0x85` set) exactly. Only antennas 1–4 need to be supported —
 no need to chase antennas 5–10.
@@ -192,7 +190,7 @@ frame. Key ones:
    and `0x0E`/`0x02` "Bypass Command (Number of Antenna)" in Byte4, which
    selects an antenna directly but bypasses the ATU/tuning. (Antenna
    numbering range is a non-issue for this build — only 4 ports exist on
-   the user's 04AT/06AT hardware, matching the 4-slot name/assignment
+   the target 04AT/06AT hardware, matching the 4-slot name/assignment
    tables exactly.)
 4. Pin 6 (DSR) vs pin 8 (CTS) both documented as "Remote Power On" on the
    1200S RS-232 connector — needs empirical verification of actual
@@ -200,7 +198,9 @@ frame. Key ones:
 
 ## Status
 
-Protocol discovery in progress, no code written yet. Next step the user is
-pursuing: getting the full tuner/switch (06AT/20AT) command set, likely
-by contacting ACOM/dealer per the 1200S manual's own instruction, before
-settling on the Pi backend/frontend architecture.
+Protocol reverse-engineering is captured above; the backend/frontend built
+from it lives in `acom-control/` (see `PI_CONTROL_PLAN.md`'s Status
+section for what's implemented and what still needs real-hardware
+verification). Open item: the full 06AT/20AT tuner/switch command set is
+still unconfirmed — see open question 1 — likely needs a request to
+ACOM/dealer per the 1200S manual's own "contact your dealer" note.
