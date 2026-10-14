@@ -19,8 +19,8 @@ export function currentWidgetForTheme(themeStyle) {
   return GAUGE_WIDGET_BY_THEME[themeStyle] || "bargraph";
 }
 
-export function mountGauge(el, themeStyle, opts) {
-  const widget = currentWidgetForTheme(themeStyle);
+export function mountGauge(el, themeStyle, opts, forceWidget) {
+  const widget = forceWidget || currentWidgetForTheme(themeStyle);
   el.innerHTML = "";
   const labelEl = document.createElement("div");
   labelEl.className = "gauge-label";
@@ -109,7 +109,25 @@ function renderNeedleGauge(opts) {
   return wrapper;
 }
 
+// Classic theme only (bargraph is used by the other two themes), so this
+// SVG can carry rich skeuomorphic styling - bezel, dial-face gradient,
+// glass highlight, colored scale zones - without any [data-theme="..."]
+// guarding. Multiple needle gauges are mounted on the page at once, so
+// every <defs> id below gets a unique per-instance suffix to avoid SVG id
+// collisions between gauges.
+let needleInstanceCounter = 0;
+
+function needlePolar(cx, cy, r, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  return { x: cx + r * Math.sin(rad), y: cy - r * Math.cos(rad) };
+}
+
 function buildNeedleSvg(opts) {
+  const instanceId = needleInstanceCounter++;
+  const bezelGradId = `needle-bezel-grad-${instanceId}`;
+  const faceGradId = `needle-face-grad-${instanceId}`;
+  const glassGradId = `needle-glass-grad-${instanceId}`;
+
   const ticks = [];
   const tickCount = 8;
   for (let i = 0; i <= tickCount; i++) {
@@ -121,13 +139,47 @@ function buildNeedleSvg(opts) {
     const y2 = 50 - 44 * Math.cos(rad);
     ticks.push(`<line class="needle-tick" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`);
   }
+
+  // Green/yellow/red scale-zone arcs just inside the ticks, for the
+  // classic VU-meter look.
+  const zoneArc = (fromFrac, toFrac, colorVar) => {
+    const a1 = NEEDLE_SWEEP_START_DEG + fromFrac * (NEEDLE_SWEEP_END_DEG - NEEDLE_SWEEP_START_DEG);
+    const a2 = NEEDLE_SWEEP_START_DEG + toFrac * (NEEDLE_SWEEP_END_DEG - NEEDLE_SWEEP_START_DEG);
+    const p1 = needlePolar(50, 50, 36, a1);
+    const p2 = needlePolar(50, 50, 36, a2);
+    return `<path class="needle-zone" d="M ${p1.x} ${p1.y} A 36 36 0 0 1 ${p2.x} ${p2.y}" style="stroke:${colorVar}" />`;
+  };
+  const zones = [
+    zoneArc(0, 0.6, "var(--needle-zone-good, #5a8f3c)"),
+    zoneArc(0.6, 0.85, "var(--needle-zone-warn, #d9a53c)"),
+    zoneArc(0.85, 1, "var(--needle-zone-danger, #a3331a)"),
+  ].join("\n");
+
   return `
     <svg viewBox="0 0 100 60">
-      <path class="needle-face" d="M 8 55 A 42 42 0 0 1 92 55 L 50 55 Z" />
+      <defs>
+        <radialGradient id="${bezelGradId}" cx="50%" cy="30%" r="75%">
+          <stop offset="0%" stop-color="var(--needle-bezel-highlight, #d8d8d8)" />
+          <stop offset="55%" stop-color="var(--needle-bezel-mid, #8a8a7a)" />
+          <stop offset="100%" stop-color="var(--needle-bezel-shadow, #2a2a22)" />
+        </radialGradient>
+        <radialGradient id="${faceGradId}" cx="50%" cy="25%" r="80%">
+          <stop offset="0%" stop-color="var(--needle-face-highlight, var(--needle-face))" />
+          <stop offset="100%" stop-color="var(--needle-face)" />
+        </radialGradient>
+        <radialGradient id="${glassGradId}" cx="40%" cy="15%" r="55%">
+          <stop offset="0%" stop-color="rgba(255,255,255,0.35)" />
+          <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+        </radialGradient>
+      </defs>
+      <path class="needle-bezel" d="M 3 55 A 47 47 0 0 1 97 55 L 50 55 Z" style="fill:url(#${bezelGradId})" />
+      <path class="needle-face" d="M 8 55 A 42 42 0 0 1 92 55 L 50 55 Z" style="fill:url(#${faceGradId})" />
+      ${zones}
       ${ticks.join("\n")}
       <line class="needle-pointer" data-needle-pointer x1="50" y1="55" x2="50" y2="18"
             transform="rotate(${needleAngle(opts)} 50 55)" />
       <circle class="needle-hub" cx="50" cy="55" r="3" />
+      <ellipse class="needle-glass" cx="38" cy="28" rx="20" ry="12" style="fill:url(#${glassGradId})" />
     </svg>`;
 }
 

@@ -7,13 +7,69 @@ import { mountGauge, updateGauge, currentWidgetForTheme } from "./gauges.js";
 const BAND_NAMES = ["160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"];
 const ANTENNA_TYPES = ["Sharp", "Regular", "Wide", "Fixed"];
 
+// Forward power is rendered separately as a full-width "hero" bar (see
+// #power-out-hero in index.html) rather than inside the regular grid.
+const HERO_GAUGE_DEF = { id: "forward_power_w", label: "Forward Power", unit: "W", min: 0, max: () => appState.maxPowerW || 1500 };
+
 const GAUGE_DEFS = [
-  { id: "forward_power_w", label: "Forward Power", unit: "W", min: 0, max: () => appState.maxPowerW || 1500 },
   { id: "reflected_power_w", label: "Reflected Power", unit: "W", min: 0, max: () => Math.max(50, (appState.maxPowerW || 1500) * 0.2) },
+  // Calculated from forward/reflected power rather than read from the amp's
+  // own `swr` telemetry field - see computeSwr().
+  { id: "swr_calc", label: "SWR", unit: ":1", min: 1, max: () => 5 },
   { id: "temp_pam1_c", label: "PA Temperature", unit: "°C", min: 0, max: () => 100 },
   { id: "input_power_w", label: "Input Power", unit: "W", min: 0, max: () => 100 },
   { id: "id1_ma", label: "PA DC Current", unit: "mA", min: 0, max: () => 2000 },
 ];
+
+const GAUGE_DEF_BY_ID = Object.fromEntries([HERO_GAUGE_DEF, ...GAUGE_DEFS].map((d) => [d.id, d]));
+
+// Gauges where "idle" (near zero) is a meaningful state: peak auto-resets
+// there so it reflects "highest reading of the transmission in progress"
+// and re-arms for the next one, like a peak-reading wattmeter/SWR meter.
+// Temperature has no such idle floor, so its peak only ever grows and
+// needs the manual reset (click the peak badge) instead.
+const IDLE_THRESHOLD_BY_ID = { forward_power_w: 1, reflected_power_w: 1, swr_calc: 1.05, input_power_w: 1, id1_ma: 10 };
+
+const peaks = {};
+
+function computeSwr(forwardW, reflectedW) {
+  if (!forwardW || forwardW <= 0 || reflectedW == null) return 1.0;
+  const rho = Math.sqrt(Math.min(0.98, Math.max(0, reflectedW / forwardW)));
+  return (1 + rho) / (1 - rho);
+}
+
+function updatePeak(id, value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return peaks[id] ?? null;
+  const idleThreshold = IDLE_THRESHOLD_BY_ID[id];
+  if (idleThreshold !== undefined && value <= idleThreshold) {
+    peaks[id] = value;
+  } else {
+    peaks[id] = Math.max(peaks[id] ?? value, value);
+  }
+  return peaks[id];
+}
+
+function formatPeak(id, value) {
+  const unit = GAUGE_DEF_BY_ID[id]?.unit;
+  if (value === null || value === undefined || Number.isNaN(value)) return "Pk: --";
+  const rounded = Math.round(value * 100) / 100;
+  return `Pk: ${rounded}${unit ? " " + unit : ""}`;
+}
+
+function ensurePeakBadge(el, id) {
+  let badge = el.querySelector(".gauge-peak");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.className = "gauge-peak";
+    badge.title = "Click to reset peak";
+    badge.addEventListener("click", () => {
+      peaks[id] = null;
+      badge.textContent = formatPeak(id, null);
+    });
+    el.appendChild(badge);
+  }
+  return badge;
+}
 
 const appState = {
   maxPowerW: 1500,
@@ -79,18 +135,34 @@ async function apiFetch(path, options) {
 // actually do anything).
 // =============================================================================
 
-let actionErrorTimeout = null;
+let actionErrorNextId = 0;
+const actionErrorEntries = [];
 
+/** Multiple calls stack rather than overwrite one another - each entry
+ * gets its own row and its own 6s timeout, so a burst of errors is all
+ * visible at once instead of the newest silently replacing the last. */
 function showActionError(message, kind = "error") {
+  const id = actionErrorNextId++;
+  actionErrorEntries.push({ id, message, kind });
+  setTimeout(() => {
+    const idx = actionErrorEntries.findIndex((e) => e.id === id);
+    if (idx !== -1) actionErrorEntries.splice(idx, 1);
+    renderActionErrors();
+  }, 6000);
+  renderActionErrors();
+}
+
+function renderActionErrors() {
   const el = document.getElementById("action-error-banner");
   if (!el) return;
-  el.textContent = message;
-  el.classList.toggle("action-error-info", kind === "info");
-  el.hidden = false;
-  if (actionErrorTimeout) clearTimeout(actionErrorTimeout);
-  actionErrorTimeout = setTimeout(() => {
-    el.hidden = true;
-  }, 6000);
+  el.innerHTML = "";
+  actionErrorEntries.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "action-error-item" + (entry.kind === "info" ? " action-error-info" : "");
+    row.textContent = entry.message;
+    el.appendChild(row);
+  });
+  el.hidden = actionErrorEntries.length === 0;
 }
 
 /** Wraps a click handler so a thrown/rejected apiFetch surfaces to the
@@ -173,33 +245,46 @@ function chip(label, on, text) {
 }
 
 function renderGauges(state) {
+  const heroEl = document.getElementById("power-out-hero");
   const grid = document.getElementById("gauge-grid");
-  if (!grid) return;
+  if (!grid && !heroEl) return;
   const theme = appState.theme.style;
-  const t = state.telemetry || {};
+  const t = { ...(state.telemetry || {}) };
+  t.swr_calc = computeSwr(t.forward_power_w, t.reflected_power_w);
 
+  // The hero bar is always a bargraph, regardless of theme - a full-width
+  // needle sweep doesn't make sense here.
+  mountOrUpdateGauge(heroEl, HERO_GAUGE_DEF, t, theme, "bargraph");
+
+  if (!grid) return;
   GAUGE_DEFS.forEach((def) => {
     let el = grid.querySelector(`[data-gauge-id="${def.id}"]`);
-    const value = t[def.id] ?? null;
-    const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max };
-
     if (!el) {
       el = document.createElement("div");
       el.className = "gauge-wrapper";
       el.dataset.gaugeId = def.id;
-      el.dataset.mountedWidget = currentWidgetForTheme(theme);
       grid.appendChild(el);
-      mountGauge(el, theme, opts);
-      return;
     }
-
-    if (el.dataset.mountedWidget !== currentWidgetForTheme(theme)) {
-      el.dataset.mountedWidget = currentWidgetForTheme(theme);
-      mountGauge(el, theme, opts);
-    } else {
-      updateGauge(el, value);
-    }
+    mountOrUpdateGauge(el, def, t, theme, null);
   });
+}
+
+function mountOrUpdateGauge(el, def, telemetry, theme, forceWidget) {
+  if (!el) return;
+  const value = telemetry[def.id] ?? null;
+  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max };
+  const widget = forceWidget || currentWidgetForTheme(theme);
+
+  if (el.dataset.mountedWidget !== widget) {
+    el.dataset.mountedWidget = widget;
+    mountGauge(el, theme, opts, forceWidget);
+  } else {
+    updateGauge(el, value);
+  }
+
+  const peak = updatePeak(def.id, value);
+  const badge = ensurePeakBadge(el, def.id);
+  badge.textContent = formatPeak(def.id, peak);
 }
 
 function remountAllGauges() {
@@ -305,11 +390,13 @@ function closeSetupScreen() {
 }
 
 async function loadSetup() {
-  const [configResp, antennaResp] = await Promise.all([
+  const [configResp, antennaResp, portsResp] = await Promise.all([
     apiFetch("/api/config").then((r) => r.json()),
     apiFetch("/api/antenna/config").then((r) => r.json()),
+    apiFetch("/api/serial-ports").then((r) => r.json()),
   ]);
   populateConfigForm(configResp);
+  populateSerialPortOptions(portsResp, configResp.serial_device);
   populateAntennaMatrix(antennaResp.antennas);
   populateSegmentDeleteBandOptions();
   renderAtuStatusPanel(appState.lastStatus);
@@ -349,6 +436,19 @@ function populateConfigForm(cfg) {
       `<option value="">None</option>` + cfg.available_tuner_models.map((m) => `<option value="${m}">${m}</option>`).join("");
     tunerSelect.value = cfg.tuner_model || "";
   }
+}
+
+function populateSerialPortOptions(portsResp, currentDevice) {
+  const select = document.getElementById("setup-serial-select");
+  if (!select) return;
+  const ports = portsResp.ports || [];
+  const known = ports.some((p) => p.device === currentDevice);
+  const options = known || !currentDevice ? ports : [...ports, { device: currentDevice, description: "currently configured - not detected" }];
+  select.innerHTML = options.length
+    ? options.map((p) => `<option value="${p.device}">${p.device}${p.description ? " — " + p.description : ""}</option>`).join("")
+    : `<option value="" disabled>No serial ports detected</option>`;
+  if (currentDevice) select.value = currentDevice;
+  select.dataset.originalValue = currentDevice || "";
 }
 
 function populateAntennaMatrix(antennas) {
@@ -418,8 +518,24 @@ function readAntennaMatrix() {
 async function saveSetup() {
   const ampModel = document.getElementById("setup-amp-select").value;
   const tunerModel = document.getElementById("setup-tuner-select").value || null;
+  const serialSelect = document.getElementById("setup-serial-select");
+  const serialDevice = serialSelect ? serialSelect.value : undefined;
+  const serialChanged = !!serialSelect && serialDevice !== (serialSelect.dataset.originalValue || "");
 
-  await apiFetch("/api/config", postJson({ amp_model: ampModel, tuner_model: tunerModel }));
+  if (serialChanged) {
+    if (!window.confirm("Changing the serial port may toggle the amplifier's power state. Continue?")) {
+      return;
+    }
+  }
+
+  await apiFetch(
+    "/api/config",
+    postJson({
+      amp_model: ampModel,
+      tuner_model: tunerModel,
+      ...(serialChanged ? { serial_device: serialDevice, confirm: true } : {}),
+    })
+  );
 
   if (tunerModel) {
     const antennas = readAntennaMatrix();

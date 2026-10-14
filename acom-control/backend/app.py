@@ -24,7 +24,7 @@ from .amp_profiles import AMP_PROFILES, TUNER_MODELS, get_amp_profile
 from .amp_state import AmpState
 from .config import AppConfig, load_config, validate_config
 from .modbus_server import ModbusServer
-from .serial_link import SerialLink
+from .serial_link import SerialLink, list_serial_ports
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -163,7 +163,14 @@ async def on_startup() -> None:
     _configure_logging()
     backend_logger.info("Starting ACOM Remote Control backend (amp=%s tuner=%s)", config.amp.model, config.tuner.model)
     serial_link = SerialLink(device=config.amp.serial_device, on_frame=_on_frame, on_comms_change=_on_comms_change)
-    await serial_link.start()
+    try:
+        await serial_link.start()
+    except Exception:
+        backend_logger.exception(
+            "Failed to open configured serial port %r at startup - backend is up but "
+            "comms are down; pick a working port from the Setup screen.",
+            config.amp.serial_device,
+        )
     if config.modbus.enabled:
         modbus_server = ModbusServer(
             host=config.modbus.host, port=config.modbus.port, amp_state=amp_state, serial_link=serial_link
@@ -329,7 +336,17 @@ async def change_antenna(req: AntennaActionRequest) -> dict:
 
 
 # =============================================================================
-# Setup Wizard: amp/tuner model (live, no restart)
+# Setup Wizard: serial port enumeration + live reconnect
+# =============================================================================
+
+
+@app.get("/api/serial-ports")
+async def get_serial_ports() -> dict:
+    return {"ports": list_serial_ports(), "current": config.amp.serial_device}
+
+
+# =============================================================================
+# Setup Wizard: amp/tuner model + serial port (live, no restart)
 # =============================================================================
 
 
@@ -339,12 +356,20 @@ class ConfigRequest(BaseModel):
     # null) - apply it" - see set_config().
     amp_model: Optional[str] = None
     tuner_model: Optional[str] = None
+    serial_device: Optional[str] = None
+    # Must be explicitly true to change serial_device - switching ports
+    # closes/reopens the OS-level handle, which risks toggling the amp's
+    # power via DTR (see CLAUDE.md open question 4) - this is enforced
+    # here, not just in the frontend's confirm() dialog, so no caller can
+    # trigger it silently.
+    confirm: bool = False
 
 
 def _config_response() -> dict:
     return {
         "amp_model": config.amp.model,
         "tuner_model": config.tuner.model,
+        "serial_device": config.amp.serial_device,
         "comms_ok": amp_state.comms_ok,
         "available_amp_models": sorted(AMP_PROFILES),
         "available_tuner_models": list(TUNER_MODELS),
@@ -366,17 +391,36 @@ async def set_config(req: ConfigRequest) -> dict:
     provided = req.model_dump(exclude_unset=True)
     new_amp_model = provided.get("amp_model", config.amp.model)
     new_tuner_model = provided["tuner_model"] if "tuner_model" in provided else config.tuner.model
+    new_serial_device = provided.get("serial_device", config.amp.serial_device)
 
     try:
         validate_config(new_amp_model, new_tuner_model)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+    device_changed = new_serial_device != config.amp.serial_device
+    if device_changed and not req.confirm:
+        raise HTTPException(400, "must set confirm=true to change the serial port (may toggle amp power)")
+
+    if device_changed:
+        link = _require_serial_link()
+        try:
+            await link.reconfigure(new_serial_device)
+        except Exception as exc:
+            # Reopen failed (bad/missing port) - don't persist the bad path;
+            # leave config pointing at the last-known-good device.
+            raise HTTPException(502, f"Failed to open {new_serial_device!r}: {exc}") from exc
+
     config.amp.model = new_amp_model
     config.tuner.model = new_tuner_model
+    if device_changed:
+        config.amp.serial_device = new_serial_device
     amp_state.profile = get_amp_profile(new_amp_model)
     amp_state.tuner_model = new_tuner_model
     config.save()
-    backend_logger.info("Config updated live: amp=%s tuner=%s", new_amp_model, new_tuner_model)
+    backend_logger.info(
+        "Config updated live: amp=%s tuner=%s serial_device=%s", new_amp_model, new_tuner_model, config.amp.serial_device
+    )
     return _config_response()
 
 

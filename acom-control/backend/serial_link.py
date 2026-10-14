@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Callable, Optional
 
 import serial
+import serial.tools.list_ports
 
 from . import protocol
 
@@ -47,6 +49,21 @@ COMMAND_MAX_ATTEMPTS = 5
 # than requiring the amp to be in a specific menu/mode first; harmless
 # no-op either way if it doesn't.
 STARTUP_REQUEST_MESSAGES = (0x16, 0x18, 0x1B, 0x2A)
+
+# Stable udev symlink from setup/99-acom-amp.rules - always surfaced in
+# list_serial_ports() alongside raw enumerated devices, even though pyserial
+# itself won't discover it as a distinct comport (see README.md on why the
+# symlink exists: raw /dev/ttyUSBx paths renumber across reboots).
+STABLE_SYMLINK_DEVICE = "/dev/acom-amp"
+
+
+def list_serial_ports() -> list[dict]:
+    """Enumerates raw USB-serial devices via pyserial, plus the stable udev
+    symlink if present, for the Setup screen's serial-port selector."""
+    ports = [{"device": p.device, "description": p.description or ""} for p in serial.tools.list_ports.comports()]
+    if os.path.exists(STABLE_SYMLINK_DEVICE) and not any(p["device"] == STABLE_SYMLINK_DEVICE for p in ports):
+        ports.append({"device": STABLE_SYMLINK_DEVICE, "description": "stable udev symlink"})
+    return ports
 
 
 class SerialLink:
@@ -90,6 +107,35 @@ class SerialLink:
                 self._serial.close()
             except Exception:
                 pass
+
+    async def reconfigure(self, new_device: str) -> None:
+        """Live port switch (Setup screen serial-port selector) - stops the
+        reader/writer/watchdog tasks, closes the current port, points at
+        new_device, reopens, and redoes the startup handshake. Raises on
+        failure (bad/nonexistent port) rather than leaving the link
+        half-torn-down; the caller (app.py) decides what to tell the user
+        and must not persist new_device if this raises."""
+        for task in (self._reader_task, self._writer_task, self._watchdog_task):
+            if task is not None:
+                task.cancel()
+        self._reader_task = self._writer_task = self._watchdog_task = None
+        if self._serial is not None:
+            try:
+                self._serial.close()
+            except Exception:
+                pass
+            self._serial = None
+
+        self.device = new_device
+        self._open_port()  # let failures propagate - caller must not persist new_device
+
+        # Reset watchdog state so comms doesn't briefly read as healthy from
+        # stale rx data captured on the old port.
+        self._last_rx_monotonic = 0.0
+        self._reader_task = asyncio.create_task(self._read_loop(), name="serial-reader")
+        self._writer_task = asyncio.create_task(self._write_loop(), name="serial-writer")
+        self._watchdog_task = asyncio.create_task(self._comms_watchdog(), name="serial-watchdog")
+        await self._startup_handshake()
 
     async def enqueue(self, frame: bytes) -> None:
         await self._out_queue.put(frame)
