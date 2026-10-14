@@ -337,7 +337,7 @@ function wireControls() {
   document.getElementById("btn-setup-open")?.addEventListener("click", withErrorBanner(openSetupScreen));
   document.getElementById("btn-setup-close")?.addEventListener("click", closeSetupScreen);
   document.getElementById("btn-setup-save")?.addEventListener("click", withErrorBanner(saveSetup));
-  document.getElementById("btn-setup-refresh")?.addEventListener("click", withErrorBanner(loadSetup));
+  document.getElementById("btn-setup-refresh")?.addEventListener("click", withErrorBanner(refreshFromAmp));
   document.getElementById("setup-tuner-select")?.addEventListener("change", updateAntennaSetupVisibility);
 
   document.getElementById("tx-confirm-ok")?.addEventListener("click", confirmTxArmAndFire);
@@ -387,6 +387,23 @@ function openSetupScreen() {
 function closeSetupScreen() {
   document.getElementById("setup-screen").hidden = true;
   document.getElementById("dashboard").hidden = false;
+}
+
+async function refreshFromAmp() {
+  // "Refresh from Amp" previously just called loadSetup(), which only
+  // re-reads whatever the backend's AmpState already has cached - if the
+  // amp never answered the one-shot 0x18/0x1B/0x2A requests sent during
+  // the initial startup handshake (observed on real hardware - see
+  // CLAUDE.md open question 6), that cache stays empty forever and this
+  // button did nothing. POST /api/resync re-sends those requests now, so
+  // a later retry can succeed even if the first attempt (fired the
+  // instant the serial port opened) was too early for the amp/ATU to
+  // answer. resync() only enqueues the request frames and returns
+  // immediately - it doesn't wait for the amp's actual reply - so give
+  // the round trip + backend parsing a moment before re-reading.
+  await apiFetch("/api/resync", { method: "POST" });
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  await loadSetup();
 }
 
 async function loadSetup() {

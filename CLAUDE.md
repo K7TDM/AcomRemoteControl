@@ -221,13 +221,26 @@ frame. Key ones:
    recover) — unclear yet whether that's a timing issue, a firmware
    quirk, or an interaction with the DTR/RTS behavior above.
 6. On real hardware, the generic "request specific message" mechanism
-   (`0x81` Cmd `0x01`, Byte4/5 = message address) reliably gets a reply
-   for `0x16` (ATU/ASEL identity) but **never got a reply at all** for
-   `0x18` (antenna assignments), `0x1B` (antenna names), or `0x2A` (ATU
-   service info) across many attempts in one session — no error reply
-   either, just silence. Antenna Setup's "pull from amp" / "refresh from
-   amp" currently can't populate real antenna names/types/bands because
-   of this; no alternate trigger for these messages has been found yet.
+   (`0x81` Cmd `0x01`, Byte4/5 = message address — confirmed from the
+   protocol doc §5.1 to be a 16-bit Byte4(HW)/Byte5(LW) value, not a
+   single-byte field; the backend's encoding already matches this) got a
+   reply for `0x16` (ATU/ASEL identity) but no reply for `0x18` (antenna
+   assignments), `0x1B` (antenna names), or `0x2A` (ATU service info) —
+   "across many attempts" turned out to mean many clicks of Antenna
+   Setup's "Refresh from Amp" button in that one session, which had a
+   real bug: it only called `loadSetup()` (re-reads the backend's already-
+   cached `AmpState`), never actually re-asking the amp. So every click
+   was silently a no-op on the wire, not a real retry — the one genuine
+   attempt was the initial startup handshake, fired the instant the
+   serial port opened, quite possibly before the ATU had finished
+   associating with the amp. Fixed: "Refresh from Amp" now calls
+   `POST /api/resync` (re-sends the `0x16`/`0x18`/`0x1B`/`0x2A` requests
+   on the already-open port) before re-reading, so a later click can
+   succeed even if the first attempt was too early. Still unconfirmed
+   until re-tested on real hardware: whether a later retry actually gets
+   a reply, or whether `0x18`/`0x1B`/`0x2A` have some other precondition
+   (e.g. requiring the ATU to be fully assigned) that a same-session retry
+   doesn't satisfy either.
 
 ## Status
 
