@@ -8,14 +8,33 @@
 
 .gauge-needle svg {
   width: 100%;
-  max-width: 160px;
+  max-width: 170px;
   height: auto;
 }
 
+/* Brushed-metal bezel ring behind the dial face. The gradient fill is set
+   inline per-SVG-instance in gauges.js (unique ids per mounted gauge avoid
+   collisions when several needle gauges are on the page); this rule just
+   supplies the rim stroke and a lift-off-the-panel shadow. */
+.gauge-needle .needle-bezel {
+  stroke: var(--border-color);
+  stroke-width: 1;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
+}
+
 .gauge-needle .needle-face {
-  fill: var(--needle-face, var(--bg-panel));
   stroke: var(--border-color);
   stroke-width: 2;
+}
+
+.gauge-needle .needle-glass {
+  pointer-events: none;
+}
+
+.gauge-needle .needle-zone {
+  fill: none;
+  stroke-width: 3;
+  opacity: 0.85;
 }
 
 .gauge-needle .needle-tick {
@@ -29,8 +48,10 @@
   stroke-linecap: round;
   transform-origin: 50% 50%;
   transition: transform 0.3s ease;
+  filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, 0.5));
 }
 
 .gauge-needle .needle-hub {
   fill: var(--needle-pointer, #d9402a);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
 }

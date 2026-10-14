@@ -46,6 +46,8 @@
   <main id="dashboard">
     <div id="status-row" class="status-row"></div>
 
+    <div id="power-out-hero" class="gauge-hero"></div>
+
     <div id="gauge-grid" class="gauge-grid"></div>
 
     <div id="freq-readout" class="freq-readout">
@@ -79,6 +81,13 @@
         Tuner / switch:
         <select id="setup-tuner-select" class="theme-select"></select>
       </label>
+      <label>
+        Serial port:
+        <select id="setup-serial-select" class="theme-select"></select>
+      </label>
+      <p id="setup-serial-warning" class="danger-warning" hidden>
+        Changing the serial port may toggle the amplifier's power state.
+      </p>
     </div>
 
     <div id="antenna-setup-section" class="setup-section" hidden>

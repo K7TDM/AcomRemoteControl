@@ -63,11 +63,20 @@
 
 #action-error-banner {
   animation: none; /* don't flash action feedback the way fault warnings do */
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  text-align: left;
 }
 
-#action-error-banner.action-error-info {
+.action-error-item {
+  padding: 0.25rem 0.5rem;
+}
+
+.action-error-item.action-error-info {
   background: var(--readout-power, #7ac142);
   color: var(--bg-page);
+  border-radius: var(--radius);
 }
 
 @keyframes warn-flash {
@@ -139,6 +148,19 @@ select.theme-select {
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   padding: 0.5rem;
+}
+
+.gauge-peak {
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+  cursor: pointer;
+}
+
+.gauge-peak:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
 }
 
 dialog#tx-confirm-dialog {

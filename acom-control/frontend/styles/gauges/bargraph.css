@@ -42,3 +42,13 @@
   background: var(--readout-power);
   transition: width 0.3s ease;
 }
+
+/* Hero (full-width power-out) bar reads as the primary readout, so its
+   track is noticeably taller than the grid gauges below it. */
+.gauge-hero .gauge-bargraph .track {
+  height: 2.75rem;
+}
+
+.gauge-hero .gauge-value {
+  font-size: 1.5rem;
+}

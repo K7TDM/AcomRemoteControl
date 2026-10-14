@@ -95,14 +95,18 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     validate_config(amp.model, tuner.model)
 
     if not os.path.exists(amp.serial_device):
-        # Fail loudly rather than silently falling back, per
-        # PI_CONTROL_PLAN.md step 0 - a missing serial device almost always
-        # means the USB-RS232 adapter isn't plugged in yet, or the udev
-        # rule in setup/99-acom-amp.rules hasn't been installed.
-        raise FileNotFoundError(
-            f"amp.serial_device={amp.serial_device!r} does not exist. "
-            "Check the USB-RS232 adapter is plugged in and the udev rule in "
-            "setup/99-acom-amp.rules is installed (see README.md)."
+        # Don't fail startup over this (unlike the hard FileNotFoundError
+        # this used to raise) - the device may just be unplugged, or the
+        # user is about to pick a different one from the Setup screen's
+        # serial-port selector. The backend starts with comms down instead;
+        # see app.py's on_startup for how SerialLink.start() failing is
+        # handled.
+        logger.warning(
+            "amp.serial_device=%r does not exist at startup (USB-RS232 "
+            "adapter unplugged, or the udev rule in setup/99-acom-amp.rules "
+            "isn't installed) - starting anyway with comms down. Pick a "
+            "working port from the Setup screen, or see README.md.",
+            amp.serial_device,
         )
 
     return AppConfig(amp=amp, tuner=tuner, web=web, modbus=modbus, logging=logging_cfg, path=path)
