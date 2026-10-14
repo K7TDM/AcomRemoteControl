@@ -189,6 +189,18 @@ async def get_status() -> dict:
     return amp_state.to_dict()
 
 
+@app.post("/api/resync")
+async def resync() -> dict:
+    """Re-sends the enable-telemetry/pull-config handshake over the
+    already-open serial port - no port close/reopen, so this never touches
+    DTR/RTS (see CLAUDE.md open question 4 and serial_link.SerialLink._open_port).
+    Useful if the handshake fired before the amp's CPU was ready, e.g. right
+    after a DTR/RTS-triggered power-on, and telemetry never got enabled."""
+    link = _require_serial_link()
+    await link.resync()
+    return {"ok": True}
+
+
 @app.websocket("/ws/status")
 async def ws_status(ws: WebSocket) -> None:
     await ws_manager.connect(ws)
@@ -215,6 +227,20 @@ def _require_confirmed(result: protocol.CommandAck) -> dict:
     return {"ok": True, "param": result.param}
 
 
+async def _send_pulse_command(link: SerialLink, frame: bytes) -> dict:
+    """For momentary/pulse-style 0x81 commands (power, mode, band/antenna
+    cycle) - confirmed on real 1200S hardware to NOT reply with 0x03/0x04,
+    so send_command()'s resend-on-timeout retry just re-executes the same
+    physical action each attempt (observed: 5 retries of "Next Band" cycled
+    the band 5 times; the same storm on an OPR/TX mode change is a real
+    safety issue). Single attempt only, and a missing confirmation is not
+    treated as failure - the resulting telemetry (0x27/0x2F) is this
+    class of command's actual confirmation, same as the amp's own front
+    panel/remote has no separate ack for a button press."""
+    result = await link.send_command(frame, max_attempts=1)
+    return {"ok": True, "confirmed": result.ok, "param": result.param}
+
+
 class PowerRequest(BaseModel):
     on: bool
 
@@ -223,8 +249,7 @@ class PowerRequest(BaseModel):
 async def set_power(req: PowerRequest) -> dict:
     link = _require_serial_link()
     mode = protocol.MODE_OPR_RX if req.on else protocol.MODE_OFF
-    result = await link.send_command(protocol.build_mode_change(mode))
-    return _require_confirmed(result)
+    return await _send_pulse_command(link, protocol.build_mode_change(mode))
 
 
 MODE_NAME_TO_VALUE = {
@@ -270,8 +295,7 @@ async def set_mode(req: ModeRequest) -> dict:
         ):
             raise HTTPException(403, "OPR/TX requires a valid arm_token from POST /api/mode/arm_tx")
         _tx_arm_token = None  # single-use
-    result = await link.send_command(protocol.build_mode_change(mode_value))
-    return _require_confirmed(result)
+    return await _send_pulse_command(link, protocol.build_mode_change(mode_value))
 
 
 class BandRequest(BaseModel):
@@ -284,8 +308,7 @@ async def change_band(req: BandRequest) -> dict:
     if req.direction not in ("next", "prev"):
         raise HTTPException(400, "direction must be 'next' or 'prev'")
     action = protocol.BAND_NEXT if req.direction == "next" else protocol.BAND_PREV
-    result = await link.send_command(protocol.build_band_change(action))
-    return _require_confirmed(result)
+    return await _send_pulse_command(link, protocol.build_band_change(action))
 
 
 class AntennaActionRequest(BaseModel):
@@ -302,8 +325,7 @@ async def change_antenna(req: AntennaActionRequest) -> dict:
             "select-antenna-N command for normal tuned operation "
             "(see CLAUDE.md open question 3)",
         )
-    result = await link.send_command(protocol.build_antenna_next())
-    return _require_confirmed(result)
+    return await _send_pulse_command(link, protocol.build_antenna_next())
 
 
 # =============================================================================
