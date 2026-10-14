@@ -630,10 +630,10 @@ and matches the project's scale (a personal local-network control panel).
 ## Status
 
 The initial `acom-control/` build now exists (config, backend, frontend,
-setup/ files per the Directory layout section above). It has **not** been
-tested against real hardware - there's no Pi or amp attached to the
-machine it was written on. Specifically still needing real-hardware
-verification before this is trusted:
+setup/ files per the Directory layout section above). It has now been run
+against real hardware once (see "First real-hardware session" below) -
+some real bugs got fixed, some real protocol gaps got found and are still
+open. Still needing further real-hardware verification:
 
 - The ACK/retry timing model in `serial_link.py` (the doc under-specifies
   how outbound-command acknowledgement is supposed to work beyond the
@@ -719,3 +719,47 @@ development): the exact `send_command()` timeout/retry timing, whether
 `0x2A` is actually requestable via the generic Cmd `0x01` "request
 specific message" mechanism (added to the startup pull on that
 assumption), and everything else already listed above this subsection.
+
+### First real-hardware session
+
+A Pi was wired to a real 1200S (with a 04AT tuner attached) and
+`acom-control/` deployed and run against it for the first time. Several
+real bugs and protocol gaps surfaced; fixed ones are deployed, the rest
+are tracked here and in `CLAUDE.md`'s open questions 4-6.
+
+**Fixed and deployed:**
+- **Command-retry storm was unsafe.** `send_command()`'s resend-on-timeout
+  assumed the amp would no-op a duplicate frame; it doesn't - each resend
+  of "Next Band" or an OPR/TX mode change executed as a brand-new physical
+  action (confirmed in logs: 5 retries of "Next Band" stepped the band 5
+  times). `app.py`'s power/mode/band/antenna routes now go through a new
+  `_send_pulse_command()` helper (single attempt, `max_attempts=1`, no
+  502 on an unconfirmed reply) instead of `send_command()`'s retry path -
+  this class of command has no reliable OK/ERR on this amp, and the
+  resulting telemetry change is the real confirmation.
+- **Reconnect never re-enabled telemetry.** `_read_loop()`'s
+  disconnect/reopen path (USB unplug/replug) reopens the port but was
+  never re-running the startup handshake, so telemetry stayed silently
+  disabled after any reconnect even though the port itself recovered.
+  Fixed: a successful reopen now re-runs `_startup_handshake()`.
+- **Added `POST /api/resync`** - re-sends the enable-telemetry/pull-config
+  handshake over the already-open port (no close/reopen, so it never
+  touches DTR/RTS). Useful as a one-click recovery when the handshake
+  races the amp's own boot timing (see open question 4) and telemetry
+  doesn't come up on its own after a reconnect.
+
+**Real protocol/hardware gaps found, not yet resolved** (see `CLAUDE.md`
+open questions 4-6 for full detail):
+- DTR/RTS "Remote Power On" behavior: pulsing both lines ~1.5s toggles
+  power; holding them asserted leaves the amp stuck; and merely opening
+  the serial port at the OS level (Linux's own DTR-raise-on-open, nothing
+  `acom-control` does deliberately) risks toggling power on every backend
+  start/restart/crash-recovery. No code-level fix exists for the OS-level
+  part - needs pins 6/8 physically disconnected in the cable if that risk
+  is unacceptable.
+- A software-driven power-off (`0x81` Cmd `0x02` Byte5=`0x0A`) once left
+  the amp hung mid "Turn OFF Procedure", requiring a USB unplug/replug to
+  recover.
+- `0x18`/`0x1B`/`0x2A` never once replied to the generic "request specific
+  message" mechanism that `0x16` reliably answers - Antenna Setup's
+  pull/refresh currently can't populate real data because of this.

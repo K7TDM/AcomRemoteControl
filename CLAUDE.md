@@ -193,8 +193,41 @@ frame. Key ones:
    the target 04AT/06AT hardware, matching the 4-slot name/assignment
    tables exactly.)
 4. Pin 6 (DSR) vs pin 8 (CTS) both documented as "Remote Power On" on the
-   1200S RS-232 connector — needs empirical verification of actual
-   behavior before wiring the Pi.
+   1200S RS-232 connector. **Partially resolved against real hardware**:
+   the 1200S manual (8.2(c)) confirms DSR/DTR + CTS/RTS together give
+   "Remote POWER ON" only (no RS232-side power-off exists — that's a
+   separate software/internal procedure, see item 5 below). On the real
+   amp, a DTR+RTS pulse of ~1.5s (both lines asserted together, then
+   released) reliably **toggles** power state (on→off or off→on,
+   whichever it wasn't) — holding both continuously asserted instead
+   leaves the amp stuck mid power-sequence. Critically: Linux raises DTR
+   as a side effect of simply opening *any* serial port, before any
+   application code runs — so **just opening `/dev/acom-amp` for normal
+   communication risks toggling the amp's power** regardless of what the
+   Python code does with `.dtr`/`.rts` afterward. `acom-control`'s
+   `serial_link.py` deliberately never sets `.dtr`/`.rts` at all, to avoid
+   compounding this, but the OS-level open-time raise is still a risk on
+   every backend start/restart/crash-recovery. The only confirmed-reliable
+   fix is physical: don't wire pins 6/8 in the Pi↔amp cable at all (they're
+   only needed for this optional feature, not the TX/RX/GND data link) —
+   not yet done. Still unverified: minimum pulse width, and whether DSR
+   and CTS matter independently or only matter together.
+5. The amp also supports a documented software-driven power-off
+   (`FLAG_PwrOff_Request`/`FLAG_Soft_PwrOff` in `0x2F` telemetry flags,
+   and mode category `0xAX` "Turn OFF Procedure"), separate from the
+   RS232 power-on pins. On real hardware, commanding `0x81` Cmd `0x02`
+   Byte5=`0x0A` (turn off) once caused the amp to hang mid-"Turn OFF
+   Procedure" (required unplugging/replugging the USB adapter to
+   recover) — unclear yet whether that's a timing issue, a firmware
+   quirk, or an interaction with the DTR/RTS behavior above.
+6. On real hardware, the generic "request specific message" mechanism
+   (`0x81` Cmd `0x01`, Byte4/5 = message address) reliably gets a reply
+   for `0x16` (ATU/ASEL identity) but **never got a reply at all** for
+   `0x18` (antenna assignments), `0x1B` (antenna names), or `0x2A` (ATU
+   service info) across many attempts in one session — no error reply
+   either, just silence. Antenna Setup's "pull from amp" / "refresh from
+   amp" currently can't populate real antenna names/types/bands because
+   of this; no alternate trigger for these messages has been found yet.
 
 ## Status
 

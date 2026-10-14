@@ -31,6 +31,9 @@ MAX_REOPEN_RETRIES = 5
 READ_CHUNK_SIZE = 256
 READ_POLL_INTERVAL_S = 0.02
 
+# DTR/RTS "Remote Power On" pulse: confirmed on real hardware that a 1.5s
+# pulse on both lines, then release, toggles the amp's power state (on<->
+# off) - deliberately NOT wired into this class, see _open_port().
 # send_command() confirmation-wait tuning - see module docstring.
 COMMAND_CONFIRM_TIMEOUT_S = 0.3
 COMMAND_MAX_ATTEMPTS = 5
@@ -91,6 +94,14 @@ class SerialLink:
     async def enqueue(self, frame: bytes) -> None:
         await self._out_queue.put(frame)
 
+    async def resync(self) -> None:
+        """Re-runs the startup handshake (enable telemetry, pull ATU/
+        antenna config) over the already-open port - no close/reopen, so
+        this never touches DTR/RTS. Useful when the handshake fired before
+        the amp's CPU was ready (e.g. right after a DTR/RTS power-on pulse)
+        and telemetry never actually got enabled."""
+        await self._startup_handshake()
+
     async def send_command(
         self,
         frame: bytes,
@@ -150,6 +161,16 @@ class SerialLink:
             stopbits=serial.STOPBITS_ONE,
             timeout=0,  # non-blocking reads; polled from the asyncio loop below
         )
+        # DO NOT touch self._serial.dtr/.rts here. DB9 pins 6 (DSR) / 8
+        # (CTS) are wired to the amp's "Remote Power On" input (CLAUDE.md
+        # open question 4), and real-hardware testing confirmed a DTR/RTS
+        # pulse TOGGLES the amp's power state rather than only turning it
+        # on - so pulsing these on every port-open (every backend start,
+        # restart, or crash recovery) flips the amp on/off unpredictably
+        # depending on whatever state it already happened to be in. Power
+        # toggling via these lines must only ever happen from an explicit,
+        # deliberate action - never as a side effect of opening the port
+        # for normal communication.
 
     async def _startup_handshake(self) -> None:
         logger.info("Running startup handshake (force HEX mode, enable telemetry, pull ATU/antenna config)")
@@ -196,6 +217,9 @@ class SerialLink:
                     if self._serial is not None:
                         self._serial.close()
                     self._open_port()
+                    reopen_attempts = 0
+                    logger.info("Reopened %s - re-running startup handshake", self.device)
+                    await self._startup_handshake()
                 except Exception as reopen_exc:
                     logger.warning("Failed to reopen %s: %s", self.device, reopen_exc)
 
