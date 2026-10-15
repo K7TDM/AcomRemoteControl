@@ -128,6 +128,7 @@ class AmpState:
             "last_update_ts": self.last_update_ts,
             "amp_model": self.profile.model,
             "max_power_w": self.profile.max_power_w,
+            "has_pam2": self.profile.has_pam2,
             "tuner_model": self.tuner_model,
             "telemetry": _telemetry_to_dict(self.telemetry),
             "atu_identity": _atu_identity_to_dict(self.atu_identity),
