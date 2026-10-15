@@ -250,3 +250,37 @@ section for what's implemented and what still needs real-hardware
 verification). Open item: the full 06AT/20AT tuner/switch command set is
 still unconfirmed — see open question 1 — likely needs a request to
 ACOM/dealer per the 1200S manual's own "contact your dealer" note.
+
+## Working across sessions: frontend/backend split
+
+Day-to-day work on `acom-control/` is usually split across two Claude Code
+sessions open in this repo at the same time, each taking one of two roles:
+
+- **Frontend expert** — owns `acom-control/frontend/` (the dashboard's
+  HTML/CSS/JS, the ACOM/Classic/Modern themes, the gauge widgets). Doesn't
+  edit `acom-control/backend/` or this file's protocol content without
+  checking with the backend expert first.
+- **Backend expert** — owns `acom-control/backend/` (the FastAPI app,
+  `serial_link.py`, `protocol.py`, `amp_state.py`, `modbus_server.py`) and
+  is the one to ask about API shapes, telemetry field names/units, and
+  protocol details (this file, `CLAUDE.md`, and `PI_CONTROL_PLAN.md`).
+
+Two Claude Code sessions open in the same repo on the same machine
+auto-discover each other via `ListAgents`/`SendMessage` — no setup needed,
+that part just works. What doesn't persist on its own is the role: a brand
+new session has no memory of being "the frontend expert." To get a role
+back after closing a session:
+
+- Give the session a persistent name at launch (`claude -n <name>`) or
+  rename an existing one (`/rename <name>`). Re-launching with the same
+  name resumes that session's own history — including whatever role you
+  told it earlier — instead of starting fresh. (Names used so far are
+  whatever's memorable at the time — e.g. "FrontEndFrank" — not pinned to
+  a fixed scheme.)
+- If a session really is starting fresh (new name, or someone else picking
+  up a role), just point it at this section plus whichever half of
+  `acom-control/` it owns — that's enough context to resume the role cold.
+
+When one role needs something the other owns — an API shape, a field name,
+a protocol detail — ask over `SendMessage` rather than guessing or editing
+across the ownership line directly.
