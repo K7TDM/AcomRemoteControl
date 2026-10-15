@@ -199,24 +199,31 @@ class SerialLink:
 
     def _open_port(self) -> None:
         logger.info("Opening serial port %s @ %d 8N1", self.device, self.baudrate)
-        self._serial = serial.Serial(
-            port=self.device,
-            baudrate=self.baudrate,
-            bytesize=serial.EIGHTBITS,
-            parity=serial.PARITY_NONE,
-            stopbits=serial.STOPBITS_ONE,
-            timeout=0,  # non-blocking reads; polled from the asyncio loop below
-        )
-        # DO NOT touch self._serial.dtr/.rts here. DB9 pins 6 (DSR) / 8
-        # (CTS) are wired to the amp's "Remote Power On" input (CLAUDE.md
-        # open question 4), and real-hardware testing confirmed a DTR/RTS
-        # pulse TOGGLES the amp's power state rather than only turning it
-        # on - so pulsing these on every port-open (every backend start,
-        # restart, or crash recovery) flips the amp on/off unpredictably
-        # depending on whatever state it already happened to be in. Power
-        # toggling via these lines must only ever happen from an explicit,
-        # deliberate action - never as a side effect of opening the port
-        # for normal communication.
+        # Constructed in two steps (not serial.Serial(port=..., ...)) so
+        # .dtr/.rts can be set to False *before* open() runs. pyserial
+        # defaults _dtr_state/_rts_state to True and open() unconditionally
+        # applies them via TIOCMBIS (assert) - confirmed in pyserial's
+        # serialposix.py - so simply never touching .dtr/.rts in our own
+        # code does NOT leave those lines alone like the comment here used
+        # to assume; pyserial actively asserts both HIGH on every open
+        # regardless. DB9 pins 6 (DSR) / 8 (CTS) are wired to the amp's
+        # "Remote Power On" input (CLAUDE.md open question 4), and a real
+        # port-reopen incident (Setup screen's serial-port switch) hung the
+        # amp mid power-sequence - the suspected trigger is this HIGH
+        # reassertion landing on an already-running amp. Presetting False
+        # here makes open() issue TIOCMBIC (deassert) instead, so a reopen
+        # only ever drops these lines (on close/hangup) and leaves them
+        # low, rather than dropping then re-raising them.
+        self._serial = serial.Serial()
+        self._serial.port = self.device
+        self._serial.baudrate = self.baudrate
+        self._serial.bytesize = serial.EIGHTBITS
+        self._serial.parity = serial.PARITY_NONE
+        self._serial.stopbits = serial.STOPBITS_ONE
+        self._serial.timeout = 0  # non-blocking reads; polled from the asyncio loop below
+        self._serial.dtr = False
+        self._serial.rts = False
+        self._serial.open()
 
     async def _startup_handshake(self) -> None:
         logger.info("Running startup handshake (force HEX mode, enable telemetry, pull ATU/antenna config)")
