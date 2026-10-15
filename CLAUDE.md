@@ -275,15 +275,33 @@ frame. Key ones:
    command entirely. Guarded against the blind-toggle risk by refusing
    (`409`) unless `amp_state.comms_ok` is currently true — without fresh
    comms we can't tell a pulse-to-off apart from an accidental pulse-to-
-   on. Power On (`on: true`) is unchanged, still the `MODE_OPR_RX` serial
-   command, since that's never shown a problem. `_open_port()`'s DTR/RTS
-   neutering (item 4) only suppresses the open()-time ioctl now, not the
-   methods permanently - restored right after `open()` so a deliberate
-   pulse later still reaches the hardware. NEEDS REAL-HARDWARE
-   VERIFICATION: only exercised against a local pty in dev (which doesn't
-   support the DTR/RTS ioctls at all, so the actual toggle itself is
-   unverified end-to-end through the running service - only the standalone
-   script bypassing `serial_link.py` has been confirmed on the real amp).
+   on. `_open_port()`'s DTR/RTS neutering (item 4) only suppresses the
+   open()-time ioctl now, not the methods permanently - restored right
+   after `open()` so a deliberate pulse later still reaches the hardware.
+   **Confirmed working end-to-end on real hardware** (through the actual
+   button/service, not just the standalone script).
+
+   **Power On needed the same treatment, for the opposite reason:**
+   real-hardware testing found `MODE_OPR_RX` does nothing from a
+   confirmed-off state - it's a serial command, which needs the amp's own
+   CPU/UART already powered and listening to parse it (same reason the
+   `0x0A` off command could never have turned it back on either). Only
+   the pulse can wake a fully-off amp. But naively pulsing whenever
+   `comms_ok` is false would be wrong the other direction: comms down
+   means hung/cable-pulled/faulted just as often as it means off, and
+   pulsing a merely-hung-but-still-powered amp would turn it OFF. So
+   `AmpState` now tracks `power_state` (`"unknown"`/`"on"`/`"off"`)
+   deliberately rather than inferring it from `comms_ok`: `"off"` is set
+   *only* by our own comms-confirmed pulse (`mark_power_off_confirmed()`),
+   never guessed from comms merely going quiet; `"on"` is set by any live
+   telemetry; losing comms from `"off"` stays `"off"` rather than
+   regressing to `"unknown"`. `set_power()`'s `on: true` branch now pulses
+   if `power_state == "off"`, keeps the `MODE_OPR_RX` command if `"on"`
+   (useful for STB→OPR/RX), and refuses (`409`) if `"unknown"` rather than
+   guessing. NEEDS REAL-HARDWARE VERIFICATION: the Power On pulse path
+   itself (`power_state == "off"` branch) is implemented and transition
+   logic verified in-process, but not yet exercised through the running
+   service on the real amp.
 6. On real hardware, the generic "request specific message" mechanism
    (`0x81` Cmd `0x01`, Byte4/5 = message address — confirmed from the
    protocol doc §5.1 to be a 16-bit Byte4(HW)/Byte5(LW) value, not a
