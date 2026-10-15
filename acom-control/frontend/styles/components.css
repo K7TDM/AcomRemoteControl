@@ -23,6 +23,11 @@
   font-weight: bold;
 }
 
+.status-chip-led {
+  display: inline-flex;
+  align-items: center;
+}
+
 .led-dot {
   width: 0.6rem;
   height: 0.6rem;
@@ -67,6 +72,14 @@
   flex-direction: column;
   gap: 0.4rem;
   text-align: left;
+}
+
+/* #action-error-banner's id selector otherwise outranks the shared
+   .warning-banner[hidden] rule's specificity, so el.hidden = true (see
+   app.js's renderActionErrors()) would be silently ignored and this would
+   always render as an empty padded yellow bar even with no errors queued. */
+#action-error-banner[hidden] {
+  display: none;
 }
 
 .action-error-item {
@@ -139,8 +152,20 @@ select.theme-select {
 .gauge-value {
   text-align: center;
   font-size: 1rem;
-  color: var(--readout-power);
   font-weight: bold;
+  /* Default (good) color; a gauge whose reading has moved into the warn/
+     danger range overrides this via its data-zone attribute, set by
+     gauges.js from the same thresholds that color the needle meter's scale
+     zones and the bargraph's red "do not enter" segments - see gauges.js. */
+  color: var(--zone-good, var(--readout-power));
+}
+
+.gauge-value[data-zone="warn"] {
+  color: var(--zone-warn, var(--readout-power));
+}
+
+.gauge-value[data-zone="danger"] {
+  color: var(--zone-danger, #d9402a);
 }
 
 .gauge-wrapper {
@@ -148,6 +173,75 @@ select.theme-select {
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   padding: 0.5rem;
+}
+
+/* Bargraph-widget layout: label and digit share a header row, with the
+   track (and its ticks) spanning full width below - matches the real Basic
+   Screen's "FORWARD POWER   530 W" header-bar-over-bargraph layout. Keyed
+   off data-mounted-widget (set by app.js from gauges.js's resolveWidget())
+   rather than the active theme, since both ACOM and Modern use this widget. */
+.gauge-wrapper[data-mounted-widget="bargraph"],
+.gauge-hero[data-mounted-widget="bargraph"] {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 0.5rem;
+  align-items: baseline;
+}
+
+.gauge-wrapper[data-mounted-widget="bargraph"] .gauge-label,
+.gauge-hero[data-mounted-widget="bargraph"] .gauge-label {
+  grid-column: 1;
+  grid-row: 1;
+  margin-bottom: 0;
+}
+
+.gauge-wrapper[data-mounted-widget="bargraph"] .gauge-value,
+.gauge-hero[data-mounted-widget="bargraph"] .gauge-value {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: right;
+}
+
+.gauge-wrapper[data-mounted-widget="bargraph"] .gauge-bargraph,
+.gauge-hero[data-mounted-widget="bargraph"] .gauge-bargraph {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.gauge-wrapper[data-mounted-widget="bargraph"] .gauge-peak,
+.gauge-hero[data-mounted-widget="bargraph"] .gauge-peak {
+  grid-column: 1 / -1;
+  grid-row: 3;
+}
+
+/* Plain-readout layout: no track, so just label-left/value-right on one
+   line (e.g. Input Power, PA DC Current - see gauges.js's renderPlainGauge). */
+.gauge-wrapper[data-mounted-widget="plain"] {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  column-gap: 0.5rem;
+}
+
+.gauge-wrapper[data-mounted-widget="plain"] .gauge-label {
+  margin-bottom: 0;
+}
+
+.gauge-wrapper[data-mounted-widget="plain"] .gauge-plain {
+  display: none;
+}
+
+.gauge-wrapper[data-mounted-widget="plain"] .gauge-peak {
+  flex-basis: 100%;
+}
+
+.gauge-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
 }
 
 .gauge-peak {

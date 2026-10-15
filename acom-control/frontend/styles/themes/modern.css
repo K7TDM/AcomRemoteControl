@@ -21,6 +21,9 @@
   --button-text: #e8e8ea;
   --button-bg-active: #4fd1c5;
   --button-text-active: #06201d;
+  --zone-good: #4fd1c5;
+  --zone-warn: #f0b429;
+  --zone-danger: #ef4444;
 }
 
 [data-theme="modern"][data-mode="light"] {
@@ -43,6 +46,9 @@
   --button-text: #1a1a1a;
   --button-bg-active: #2a9d94;
   --button-text-active: #ffffff;
+  --zone-good: #1f8a7a;
+  --zone-warn: #b5690f;
+  --zone-danger: #c62828;
 }
 
 [data-theme="modern"] .gauge-bargraph .fill {
@@ -50,6 +56,39 @@
   border-radius: var(--radius);
 }
 
+[data-theme="modern"] .gauge-bargraph .fill.zone-warn {
+  background: var(--zone-warn);
+}
+
+[data-theme="modern"] .gauge-bargraph .fill.zone-danger {
+  background: var(--zone-danger);
+}
+
 [data-theme="modern"] .status-chip {
   border-radius: 999px;
+}
+
+/* A quiet signature instead of a uniform card shadow on every tile: each
+   gauge carries a left edge tinted by its own current reading, so a glance
+   down the dashboard shows which readings are elevated without reading any
+   digit - information encoded in the layout, not just decoration. */
+[data-theme="modern"] .gauge-wrapper,
+[data-theme="modern"] .gauge-hero {
+  border-left: 3px solid var(--zone-good);
+  transition: border-color 0.2s ease;
+}
+
+[data-theme="modern"] .gauge-wrapper:has(.gauge-value[data-zone="warn"]),
+[data-theme="modern"] .gauge-hero:has(.gauge-value[data-zone="warn"]) {
+  border-left-color: var(--zone-warn);
+}
+
+[data-theme="modern"] .gauge-wrapper:has(.gauge-value[data-zone="danger"]),
+[data-theme="modern"] .gauge-hero:has(.gauge-value[data-zone="danger"]) {
+  border-left-color: var(--zone-danger);
+}
+
+[data-theme="modern"] .app-header {
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
 }
