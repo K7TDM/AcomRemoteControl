@@ -335,11 +335,37 @@ frame. Key ones:
    associating with the amp. Fixed: "Refresh from Amp" now calls
    `POST /api/resync` (re-sends the `0x16`/`0x18`/`0x1B`/`0x2A` requests
    on the already-open port) before re-reading, so a later click can
-   succeed even if the first attempt was too early. Still unconfirmed
-   until re-tested on real hardware: whether a later retry actually gets
-   a reply, or whether `0x18`/`0x1B`/`0x2A` have some other precondition
-   (e.g. requiring the ATU to be fully assigned) that a same-session retry
-   doesn't satisfy either.
+   succeed even if the first attempt was too early.
+
+   **Reconfirmed real, not a timing fluke** (same real-hardware session
+   that characterized the DTR/RTS pulse, items 4/5): `0x18`/`0x1B`/`0x2A`
+   still never reply even after the many comms-recovery handshakes that
+   fired throughout that session (the auto-handshake-retry fix, item 5,
+   re-sent the full handshake repeatedly). `atu_identity` (`0x16`) stays
+   populated correctly (type/HW/FW versions) but its own `serial_number`
+   field is also empty - so this isn't purely "message doesn't arrive at
+   all," `0x16`'s reply itself may be missing data too.
+
+   **New candidate tried:** `0x81` Cmd `0x0E` Byte5=`0x2E`/`0x2F`
+   ("Activate Cyclic Message 0x2E/0x2F to the Display," doc §5.1's ATU
+   Management table) was already in this file's protocol facts and had
+   constants in `protocol.py` (`ATU_ACTIVATE_CYCLIC_2E`/`_2F`) but no code
+   ever built or sent it - distinct from the blanket `0x92` "enable
+   automatic telemetry" that's confirmed to keep `0x2F` (main cyclic
+   telemetry) flowing on its own. Now sent as part of `_startup_handshake()`
+   (`build_atu_activate_cyclic_display()`). Speculative, not confirmed -
+   the doc doesn't explicitly tie `0x18`/`0x1B`/`0x2A` to this activation,
+   only `0x2E`'s own note mentions a menu-display flag with similar
+   "to the Display" phrasing as `0x1B`'s section title. NEEDS REAL-
+   HARDWARE VERIFICATION - untested live as of this write-up.
+
+   Still unconfirmed: whether `0x18`/`0x1B`/`0x2A` have some other
+   precondition (e.g. requiring the ATU to be fully assigned, or a menu
+   state only reachable from the amp's own front panel) that nothing
+   triable remotely satisfies - open question 1/2 (06AT/20AT vs. the
+   2018 doc's 04AT/10AS, and 1200S vs. A1200S protocol differences) may
+   ultimately be the real answer, in which case this needs ACOM/dealer
+   clarification rather than further guessing from this doc alone.
 
 ## Status
 
