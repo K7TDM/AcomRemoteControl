@@ -123,6 +123,18 @@
   color: #d9402a;
 }
 
+/* OPR/STB toggle color, driven by live telemetry.mode_name (see
+   renderOprToggle() in app.js) rather than click-tracked state - per
+   Tyler: green while in Operate (OPR/RX or OPR/TX, no distinction between
+   them), grey while in Standby. "stb" and "unknown" are left at the
+   default button look. Hardcoded rather than themed, same as
+   .acom-button.danger above: this reads the same regardless of theme. */
+.acom-button[data-opr-state="operate"] {
+  background: #2ea043;
+  border-color: #2ea043;
+  color: #ffffff;
+}
+
 .icon-button {
   background: transparent;
   border: 1px solid var(--border-color);

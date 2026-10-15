@@ -7,6 +7,12 @@ import { mountGauge, updateGauge, resolveWidget } from "./gauges.js";
 const BAND_NAMES = ["160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"];
 const ANTENNA_TYPES = ["Sharp", "Regular", "Wide", "Fixed"];
 
+// Exact strings protocol.py's mode_name() emits for these three categories
+// (see MODE_CATEGORY_NAMES) - the OPR/STB toggle button keys off these.
+const MODE_NAME_STB = "STB Mode";
+const MODE_NAME_OPR_RX = "OPR/RX Mode";
+const MODE_NAME_OPR_TX = "OPR/TX Mode";
+
 // Forward power is rendered separately as a full-width "hero" bar (see
 // #power-out-hero in index.html) rather than inside the regular grid.
 const HERO_GAUGE_DEF = { id: "forward_power_w", label: "Forward Power", unit: "W", min: 0, max: () => appState.maxPowerW || 1500 };
@@ -20,20 +26,37 @@ const GAUGE_DEFS = [
   { id: "temp_pam1_c", label: "PA Temperature", unit: "°C", min: 0, max: () => 100 },
   { id: "reflected_power_w", label: "Reflected Power", unit: "W", min: 0, max: () => Math.max(50, (appState.maxPowerW || 1500) * 0.2) },
   { id: "input_power_w", label: "Input Power", unit: "W", min: 0, max: () => 100, plain: true },
-  { id: "id1_ma", label: "PA DC Current", unit: "mA", min: 0, max: () => 2000, plain: true },
+  // Shown in A, not raw mA, to match the manual's own spec and the amp's own
+  // front panel ("PA DC CURRENT must be between 32 and 36 A" at 1000W) - see
+  // id1_a derived in renderGauges(). A max of 40A gives headroom above the
+  // documented 32-36A full-power range.
+  { id: "id1_a", label: "PA DC Current", unit: "A", min: 0, max: () => 40, plain: true },
   { id: "swr_calc", label: "SWR", unit: ":1", min: 1, max: () => 5 },
 ];
 
 const GAUGE_DEF_BY_ID = Object.fromEntries([HERO_GAUGE_DEF, ...GAUGE_DEFS].map((d) => [d.id, d]));
 
-// Gauges where "idle" (near zero) is a meaningful state: peak auto-resets
-// there so it reflects "highest reading of the transmission in progress"
-// and re-arms for the next one, like a peak-reading wattmeter/SWR meter.
-// Temperature has no such idle floor, so its peak only ever grows and
-// needs the manual reset (click the peak badge) instead.
-const IDLE_THRESHOLD_BY_ID = { forward_power_w: 1, reflected_power_w: 1, swr_calc: 1.05, input_power_w: 1, id1_ma: 10 };
+// Gauges whose peak resets the instant the amp *enters* OPR/TX (rising edge
+// of mode_name becoming "OPR/TX Mode" - see updateTxEdgeState()), rather
+// than at idle. Per Tyler: "peak hold for everything, hold until reset...
+// it should only reset when it first goes into transmit" - so the peak of
+// a just-finished transmission stays on screen through the idle period
+// instead of being erased the moment power drops back to ~0. Temperature
+// isn't in this set, so it keeps its original behavior: peak only ever
+// grows, manual reset only (click the badge).
+const PEAK_RESET_ON_TX_IDS = new Set(["forward_power_w", "reflected_power_w", "swr_calc", "input_power_w", "id1_a"]);
+
+// Average power during the in-progress (or just-finished) transmission -
+// same hold-until-next-tx lifecycle as the peak above: accumulates while
+// appState.inTx is true, freezes once TX ends, resets on the next TX's
+// rising edge. Scoped to forward_power_w per the request ("it would be nice
+// to see that I averaged 400 watts but peak was 560") - add more ids here
+// if other gauges ever want the same treatment.
+const TX_AVERAGE_IDS = new Set(["forward_power_w"]);
 
 const peaks = {};
+const txAverageAccumulators = {}; // id -> { sum, count }
+const txAverages = {}; // id -> last computed average (frozen once TX ends)
 
 function computeSwr(forwardW, reflectedW) {
   if (!forwardW || forwardW <= 0 || reflectedW == null) return 1.0;
@@ -43,8 +66,7 @@ function computeSwr(forwardW, reflectedW) {
 
 function updatePeak(id, value) {
   if (value === null || value === undefined || Number.isNaN(value)) return peaks[id] ?? null;
-  const idleThreshold = IDLE_THRESHOLD_BY_ID[id];
-  if (idleThreshold !== undefined && value <= idleThreshold) {
+  if (PEAK_RESET_ON_TX_IDS.has(id) && appState.justEnteredTx) {
     peaks[id] = value;
   } else {
     peaks[id] = Math.max(peaks[id] ?? value, value);
@@ -52,11 +74,25 @@ function updatePeak(id, value) {
   return peaks[id];
 }
 
-function formatPeak(id, value) {
+function updateTxAverage(id, value) {
+  if (!TX_AVERAGE_IDS.has(id)) return null;
+  if (appState.justEnteredTx) {
+    txAverageAccumulators[id] = { sum: 0, count: 0 };
+  }
+  if (appState.inTx && value !== null && value !== undefined && !Number.isNaN(value)) {
+    const acc = txAverageAccumulators[id] || (txAverageAccumulators[id] = { sum: 0, count: 0 });
+    acc.sum += value;
+    acc.count += 1;
+    txAverages[id] = acc.sum / acc.count;
+  }
+  return txAverages[id] ?? null;
+}
+
+function formatPeakBadge(id, peakValue, avgValue) {
   const unit = GAUGE_DEF_BY_ID[id]?.unit;
-  if (value === null || value === undefined || Number.isNaN(value)) return "Pk: --";
-  const rounded = Math.round(value * 100) / 100;
-  return `Pk: ${rounded}${unit ? " " + unit : ""}`;
+  const fmt = (v) => (v === null || v === undefined || Number.isNaN(v) ? "--" : `${Math.round(v * 100) / 100}${unit ? " " + unit : ""}`);
+  const text = `Pk: ${fmt(peakValue)}`;
+  return TX_AVERAGE_IDS.has(id) ? `${text}   Avg: ${fmt(avgValue)}` : text;
 }
 
 function ensurePeakBadge(el, id) {
@@ -64,10 +100,14 @@ function ensurePeakBadge(el, id) {
   if (!badge) {
     badge = document.createElement("div");
     badge.className = "gauge-peak";
-    badge.title = "Click to reset peak";
+    badge.title = "Click to reset";
     badge.addEventListener("click", () => {
       peaks[id] = null;
-      badge.textContent = formatPeak(id, null);
+      if (TX_AVERAGE_IDS.has(id)) {
+        txAverageAccumulators[id] = { sum: 0, count: 0 };
+        txAverages[id] = null;
+      }
+      badge.textContent = formatPeakBadge(id, null, null);
     });
     el.appendChild(badge);
   }
@@ -81,6 +121,11 @@ const appState = {
   // (several times a second over the WebSocket) - only updated via the
   // "acom-theme-change" event, which fires on the rare actual change.
   theme: loadTheme(),
+  // TX edge-detection state shared by the peak-hold reset and TX average
+  // above - see updateTxEdgeState().
+  prevModeName: null,
+  inTx: false,
+  justEnteredTx: false,
 };
 
 let ws = null;
@@ -214,11 +259,41 @@ function connectWebSocket() {
 function render(state) {
   appState.lastStatus = state;
   appState.maxPowerW = state.max_power_w || appState.maxPowerW;
+  updateTxEdgeState(state);
 
   renderStatusRow(state);
   renderGauges(state);
   renderFreqReadout(state);
   renderWarningBanner(state);
+  renderOprToggle(state);
+}
+
+// Single shared "did a transmission just start" computation, used by both
+// the peak-hold reset (updatePeak()) and the TX average (updateTxAverage())
+// above - both reset on the same rising edge of mode_name becoming
+// "OPR/TX Mode", so this runs once per telemetry update rather than each
+// of them independently comparing against the previous mode.
+function updateTxEdgeState(state) {
+  const modeName = state.telemetry ? state.telemetry.mode_name : null;
+  appState.inTx = modeName === MODE_NAME_OPR_TX;
+  appState.justEnteredTx = appState.inTx && appState.prevModeName !== MODE_NAME_OPR_TX;
+  appState.prevModeName = modeName;
+}
+
+// Colors the merged OPR/STB button from the amp's own reported mode rather
+// than click-tracked UI state - see data-opr-state in components.css for
+// the color mapping, and the button's click handler in wireControls() for
+// the toggle direction this same mode name drives. Per Tyler: just two
+// looks - green covers "Operate" broadly (OPR/RX or OPR/TX), grey is
+// Standby. No separate tx/rx distinction.
+function renderOprToggle(state) {
+  const btn = document.getElementById("btn-opr-toggle");
+  if (!btn) return;
+  const modeName = state.telemetry ? state.telemetry.mode_name : null;
+  let oprState = "unknown";
+  if (modeName === MODE_NAME_STB) oprState = "stb";
+  else if (modeName === MODE_NAME_OPR_RX || modeName === MODE_NAME_OPR_TX) oprState = "operate";
+  btn.dataset.oprState = oprState;
 }
 
 function renderStatusRow(state) {
@@ -266,6 +341,7 @@ function renderGauges(state) {
   const theme = appState.theme.style;
   const t = { ...(state.telemetry || {}) };
   t.swr_calc = computeSwr(t.forward_power_w, t.reflected_power_w);
+  t.id1_a = t.id1_ma != null ? t.id1_ma / 1000 : null;
 
   // The hero bar is always a bargraph, regardless of theme - a full-width
   // needle sweep doesn't make sense here.
@@ -298,8 +374,9 @@ function mountOrUpdateGauge(el, def, telemetry, theme, forceWidget) {
   }
 
   const peak = updatePeak(def.id, value);
+  const avg = updateTxAverage(def.id, value);
   const badge = ensurePeakBadge(el, def.id);
-  badge.textContent = formatPeak(def.id, peak);
+  badge.textContent = formatPeakBadge(def.id, peak, avg);
 }
 
 function remountAllGauges() {
@@ -341,8 +418,17 @@ function renderWarningBanner(state) {
 function wireControls() {
   document.getElementById("btn-power-on")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: true }))));
   document.getElementById("btn-power-off")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: false }))));
-  document.getElementById("btn-mode-stb")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/mode", postJson({ mode: "stb" }))));
-  document.getElementById("btn-mode-opr-rx")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/mode", postJson({ mode: "opr_rx" }))));
+  document.getElementById("btn-opr-toggle")?.addEventListener("click", withErrorBanner(() => {
+    // Mirrors the real amp's own physical OPR/STB button: toggles between
+    // the two states using the amp's own last-reported mode, not a
+    // click-tracked guess. Anything other than a confirmed STB reading
+    // (including OPR/RX, OPR/TX, or no comms yet) goes to the safe
+    // direction (STB) - OPR/TX itself is never fired from here, it stays
+    // its own separate, confirm-gated button (see openTxConfirmDialog).
+    const modeName = appState.lastStatus?.telemetry?.mode_name;
+    const nextMode = modeName === MODE_NAME_STB ? "opr_rx" : "stb";
+    return apiFetch("/api/mode", postJson({ mode: nextMode }));
+  }));
   document.getElementById("btn-mode-opr-tx")?.addEventListener("click", openTxConfirmDialog);
   document.getElementById("btn-band-next")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/band", postJson({ direction: "next" }))));
   document.getElementById("btn-band-prev")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/band", postJson({ direction: "prev" }))));
