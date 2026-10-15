@@ -1,8 +1,13 @@
-/* ACOM theme - pixel-faithful-ish recreation of the real amp LCD.
-   Values pulled from PI_CONTROL_PLAN.md's "UI Design - Themes" palette table. */
+/* ACOM theme - pixel-faithful recreation of the real amp LCD (the "Basic
+   Screen" - see Figures 3-2, 4-3, 4-4 in the 1200S manual): amber label
+   bars with bold black text, a crisp sans digital-display typeface (the
+   real screen is a 24-bit color TFT, not a segmented LCD, so it renders
+   clean sans-serif throughout rather than a typewriter/terminal face),
+   green/amber/red digit readouts, and a continuous unlit soft-key strip
+   mirroring the amp's six physical front-panel buttons. */
 
 [data-theme="acom"][data-mode="dark"] {
-  --bg-page: #1c1c1c;
+  --bg-page: #141414;
   --bg-panel: #2b2b2b;
   --accent-label: #e0a030;
   --accent-label-text: #1a1200;
@@ -15,12 +20,15 @@
   --led-on: #7ac142;
   --led-off: #3a3a3a;
   --radius: 0px;
-  --font-family: "Courier New", ui-monospace, monospace;
+  --font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --border-color: #444;
   --button-bg: #333;
   --button-text: #f2f2f2;
   --button-bg-active: #e0a030;
   --button-text-active: #1a1200;
+  --zone-good: #8ddb4a;
+  --zone-warn: #f0a830;
+  --zone-danger: #ff4a3a;
 }
 
 [data-theme="acom"][data-mode="light"] {
@@ -37,18 +45,136 @@
   --led-on: #2e7d32;
   --led-off: #c9c4b4;
   --radius: 0px;
-  --font-family: "Courier New", ui-monospace, monospace;
+  --font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --border-color: #c9c4b4;
   --button-bg: #ddd7c6;
   --button-text: #222222;
   --button-bg-active: #d99a2b;
   --button-text-active: #1a1200;
+  --zone-good: #2e7d32;
+  --zone-warn: #a05a12;
+  --zone-danger: #c62828;
 }
 
-[data-theme="acom"] .gauge-bargraph .segment.filled {
-  background: var(--readout-power);
+[data-theme="acom"] .app-header {
+  border-bottom: 3px solid var(--accent-label);
 }
 
-[data-theme="acom"] .gauge-bargraph .segment.danger-zone.filled {
-  background: #d9402a;
+[data-theme="acom"] .app-header h1 {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Header-bar look (amber bar, label left / digit right, same row) only
+   applies to the bargraph widget - matches the real screen, where the
+   plain readouts (Input Power, PA DC Current) have no amber bar at all.
+   The container's own padding is zeroed and pushed onto each child
+   instead of relying on negative margins, so this works whether the
+   container is .gauge-wrapper or the differently-padded .gauge-hero. */
+[data-theme="acom"] .gauge-wrapper[data-mounted-widget="bargraph"],
+[data-theme="acom"] .gauge-hero[data-mounted-widget="bargraph"] {
+  padding: 0;
+  /* No gap between the label and digit cells - on the real screen they're
+     one continuous amber bar, not two separate chips (components.css's
+     default column-gap is for Modern, which keeps them visually distinct). */
+  column-gap: 0;
+}
+
+[data-theme="acom"] .gauge-wrapper[data-mounted-widget="bargraph"] .gauge-label,
+[data-theme="acom"] .gauge-hero[data-mounted-widget="bargraph"] .gauge-label,
+[data-theme="acom"] .gauge-wrapper[data-mounted-widget="bargraph"] .gauge-value,
+[data-theme="acom"] .gauge-hero[data-mounted-widget="bargraph"] .gauge-value {
+  background: var(--accent-label);
+  padding: 0.35rem 0.5rem;
+  margin: 0;
+  font-weight: 700;
+}
+
+/* Only the label text is the fixed dark-on-amber color; the digit's color
+   stays governed by its data-zone (green/amber/red), set in components.css -
+   on the real screen the digit sits right on the same amber bar as the
+   label but still changes color as its reading moves into warn/danger
+   (see Figure 4-4 in the 1200S manual: an orange "38°C", a red "200 W"). */
+[data-theme="acom"] .gauge-wrapper[data-mounted-widget="bargraph"] .gauge-label,
+[data-theme="acom"] .gauge-hero[data-mounted-widget="bargraph"] .gauge-label {
+  color: var(--accent-label-text);
+}
+
+[data-theme="acom"] .gauge-wrapper[data-mounted-widget="bargraph"] .gauge-bargraph,
+[data-theme="acom"] .gauge-hero[data-mounted-widget="bargraph"] .gauge-bargraph {
+  margin: 0.4rem 0.5rem 0.5rem;
+}
+
+[data-theme="acom"] .gauge-wrapper[data-mounted-widget="bargraph"] .gauge-peak,
+[data-theme="acom"] .gauge-hero[data-mounted-widget="bargraph"] .gauge-peak {
+  margin: 0 0.5rem 0.4rem;
+}
+
+[data-theme="acom"] .freq-readout {
+  background: #000;
+}
+
+[data-theme="acom"] .freq-readout .value {
+  font-weight: 700;
+}
+
+/* Status strip: edge-to-edge amber cells (no gaps/border, like the real
+   panel's four touching segments), each with its own black LED cell below -
+   see app.js's chip(), which builds the two-part .status-chip-label /
+   .status-chip-led markup this keys off of. */
+[data-theme="acom"] .status-row {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: #000;
+}
+
+[data-theme="acom"] .status-chip {
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border-right: 1px solid var(--bg-page);
+  text-align: center;
+}
+
+[data-theme="acom"] .status-chip:last-child {
+  border-right: 0;
+}
+
+[data-theme="acom"] .status-chip-label {
+  display: block;
+  padding: 0.35rem 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.7rem;
+}
+
+[data-theme="acom"] .status-chip-led {
+  justify-content: center;
+  padding: 0.3rem 0;
+  background: #000;
+}
+
+[data-theme="acom"] .status-chip-led .led-dot {
+  border-radius: 2px; /* square indicator, matching the real panel's LEDs */
+}
+
+/* Button bar: a continuous unlit soft-key strip (no gaps between keys),
+   mirroring the amp's own six physical front-panel buttons. */
+[data-theme="acom"] .button-bar {
+  gap: 0;
+  padding: 0;
+}
+
+[data-theme="acom"] .button-bar .acom-button {
+  flex: 1 1 0;
+  border-right: 1px solid var(--border-color);
+  border-radius: 0;
+}
+
+[data-theme="acom"] .button-bar .acom-button:last-child {
+  border-right: 0;
 }

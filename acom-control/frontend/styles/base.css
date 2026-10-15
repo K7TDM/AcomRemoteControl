@@ -53,8 +53,15 @@ main#dashboard {
 
 .gauge-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
+}
+
+/* SWR has no counterpart on the real Basic Screen (it's computed, not read
+   from the amp - see app.js's computeSwr()), so it gets its own full-width
+   row instead of sharing a 2-column slot like the amp's own readings. */
+.gauge-grid [data-gauge-id="swr_calc"] {
+  grid-column: 1 / -1;
 }
 
 .freq-readout {
@@ -167,8 +174,5 @@ table.antenna-matrix input[type="text"] {
 @media (max-width: 600px) {
   main#dashboard, #setup-screen {
     padding: 0.5rem;
-  }
-  .gauge-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
 }

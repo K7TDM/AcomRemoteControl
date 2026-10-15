@@ -1,7 +1,9 @@
-/* Segmented (ACOM) vs smooth-gradient (Modern) bargraph fill - both driven
-   by the same markup from gauges.js's renderBargraphGauge(). The segmented
-   vs. gradient look is applied per-theme (see styles/themes/acom.css and
-   styles/themes/modern.css); this file is the shared structural CSS. */
+/* Segmented (ACOM) vs smooth-gradient (Modern) bargraph fill. gauges.js's
+   renderBargraphGauge() picks the style per theme (BARGRAPH_STYLE_BY_THEME)
+   and either builds discrete .segment elements or a single .fill div inside
+   .track accordingly - this file is the shared structural CSS; the color
+   treatment itself (segmented look vs. the smooth gradient) lives per-theme
+   in styles/themes/acom.css and styles/themes/modern.css. */
 
 .gauge-bargraph {
   display: flex;
@@ -30,17 +32,32 @@
 }
 
 .gauge-bargraph .segment.filled {
-  background: var(--readout-power);
+  background: var(--zone-good, var(--readout-power));
 }
 
+/* The "do not enter" zone at the top of the scale stays visibly red-tinted
+   even unfilled, like the real screen's permanently-red top segments -
+   otherwise it's only visible once a reading is already in it. */
 .gauge-bargraph .segment.danger-zone {
-  opacity: 0.9;
+  background: color-mix(in srgb, var(--zone-danger, #d9402a) 35%, var(--bg-panel));
+}
+
+.gauge-bargraph .segment.danger-zone.filled {
+  background: var(--zone-danger, #d9402a);
 }
 
 .gauge-bargraph .fill {
   height: 100%;
-  background: var(--readout-power);
-  transition: width 0.3s ease;
+  background: var(--zone-good, var(--readout-power));
+  transition: width 0.3s ease, background 0.2s ease;
+}
+
+.gauge-bargraph .fill.zone-warn {
+  background: var(--zone-warn, var(--readout-power));
+}
+
+.gauge-bargraph .fill.zone-danger {
+  background: var(--zone-danger, #d9402a);
 }
 
 /* Hero (full-width power-out) bar reads as the primary readout, so its

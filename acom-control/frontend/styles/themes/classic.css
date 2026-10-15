@@ -33,6 +33,10 @@
   --needle-zone-danger: #a3331a;
   --lamp-glass-off: #4a3a28;
   --lamp-glass-hotspot: #fff3d6;
+  --zone-good: var(--needle-zone-good);
+  --zone-warn: var(--needle-zone-warn);
+  --zone-danger: var(--needle-zone-danger);
+  --font-family-display: "Copperplate", "Rockwell", Georgia, serif;
 }
 
 [data-theme="classic"][data-mode="light"] {
@@ -67,6 +71,10 @@
   --needle-zone-danger: #a3331a;
   --lamp-glass-off: #cbb98f;
   --lamp-glass-hotspot: #fffaf0;
+  --zone-good: var(--needle-zone-good);
+  --zone-warn: var(--needle-zone-warn);
+  --zone-danger: var(--needle-zone-danger);
+  --font-family-display: "Copperplate", "Rockwell", Georgia, serif;
 }
 
 /* Tube/pilot-lamp look: a bright off-center hotspot simulating a lit glass
@@ -86,4 +94,43 @@
 [data-theme="classic"] .acom-button {
   border-radius: var(--radius);
   box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.15), inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* Walnut-cabinet texture: a faint diagonal grain plus a top sheen, on every
+   panel surface - cheap to fake with gradients, no image assets needed. */
+[data-theme="classic"] .app-header,
+[data-theme="classic"] .gauge-wrapper,
+[data-theme="classic"] .gauge-hero,
+[data-theme="classic"] .status-row,
+[data-theme="classic"] .button-bar,
+[data-theme="classic"] .freq-readout,
+[data-theme="classic"] .setup-section {
+  background-image:
+    repeating-linear-gradient(115deg, rgba(0, 0, 0, 0.08) 0px, rgba(0, 0, 0, 0.08) 1px, transparent 1px, transparent 5px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 40%);
+}
+
+/* Engraved-plate labels: a thin light underline mimics a routed-and-filled
+   nameplate letter rather than flat print. */
+[data-theme="classic"] .gauge-label,
+[data-theme="classic"] .status-chip-label,
+[data-theme="classic"] .app-header h1 {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.18);
+  letter-spacing: 0.03em;
+}
+
+[data-theme="classic"] .app-header h1 {
+  font-family: var(--font-family-display);
+}
+
+[data-theme="classic"] .app-header {
+  border-bottom: 3px solid var(--accent-label);
+}
+
+/* The frequency readout is the one "digital-ish" number on an otherwise
+   all-analog panel - give it a nixie-tube glow instead of a flat color. */
+[data-theme="classic"] .freq-readout .value {
+  font-family: var(--font-family-display);
+  letter-spacing: 0.03em;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--readout-freq) 65%, transparent);
 }

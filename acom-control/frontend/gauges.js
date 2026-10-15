@@ -8,8 +8,31 @@ const GAUGE_WIDGET_BY_THEME = {
   modern: "bargraph",
 };
 
+// Segmented (ACOM) vs. smooth-gradient (Modern) fill for the shared bargraph
+// widget - see PI_CONTROL_PLAN.md's palette table ("gauge style" row).
+const BARGRAPH_STYLE_BY_THEME = {
+  acom: "segmented",
+  classic: "segmented",
+  modern: "smooth",
+};
+
 const BARGRAPH_SEGMENT_COUNT = 20;
-const DANGER_ZONE_FRACTION = 0.9; // last 10% of the scale is the "do not enter" zone
+
+// Shared good/warn/danger breakpoints - drive the needle meter's scale-zone
+// arcs, the bargraph's "do not enter" red zone, and the digit color on every
+// widget (incl. plain readouts), so a value's color always means the same
+// thing regardless of which widget is rendering it. Matches the thresholds
+// visible on the real amp's LCD (see e.g. Figure 4-4 in the 1200S manual,
+// where PA Temperature's amber digit and Reflected Power's red digit line up
+// with how far each bargraph is filled).
+const ZONE_WARN_FRACTION = 0.6;
+const ZONE_DANGER_FRACTION = 0.85;
+
+function zoneForFraction(frac) {
+  if (frac >= ZONE_DANGER_FRACTION) return "danger";
+  if (frac >= ZONE_WARN_FRACTION) return "warn";
+  return "good";
+}
 
 // Tracks which widget is currently mounted in each gauge slot so updateGauge()
 // knows how to update it without a full re-render on every data tick.
@@ -19,8 +42,21 @@ export function currentWidgetForTheme(themeStyle) {
   return GAUGE_WIDGET_BY_THEME[themeStyle] || "bargraph";
 }
 
+// Single source of truth for "which widget actually gets mounted", shared
+// with app.js so its own mounted-widget bookkeeping (used for both deciding
+// when to remount and as a CSS hook - see components.css) agrees with what
+// mountGauge() below actually renders. "Plain" readouts (e.g. Input Power,
+// PA DC Current on the real Basic Screen) skip the bargraph/track entirely
+// and just show a bigger digit - except in Classic, which re-interprets
+// every reading as its own VU-style dial regardless, so a plain request
+// there is ignored.
+export function resolveWidget(themeStyle, opts, forceWidget) {
+  const baseWidget = forceWidget || currentWidgetForTheme(themeStyle);
+  return opts.plain && baseWidget !== "needle" ? "plain" : baseWidget;
+}
+
 export function mountGauge(el, themeStyle, opts, forceWidget) {
-  const widget = forceWidget || currentWidgetForTheme(themeStyle);
+  const widget = resolveWidget(themeStyle, opts, forceWidget);
   el.innerHTML = "";
   const labelEl = document.createElement("div");
   labelEl.className = "gauge-label";
@@ -30,14 +66,17 @@ export function mountGauge(el, themeStyle, opts, forceWidget) {
   let bodyEl;
   if (widget === "needle") {
     bodyEl = renderNeedleGauge(opts);
+  } else if (widget === "plain") {
+    bodyEl = renderPlainGauge();
   } else {
-    bodyEl = renderBargraphGauge(opts);
+    bodyEl = renderBargraphGauge(opts, themeStyle);
   }
   el.appendChild(bodyEl);
 
   const valueEl = document.createElement("div");
   valueEl.className = "gauge-value";
   valueEl.textContent = formatValue(opts.value, opts.unit);
+  valueEl.dataset.zone = zoneForFraction(fraction(opts));
   el.appendChild(valueEl);
 
   mountedWidgets.set(el, { widget, opts, bodyEl, valueEl });
@@ -48,9 +87,10 @@ export function updateGauge(el, value) {
   if (!mounted) return;
   mounted.opts.value = value;
   mounted.valueEl.textContent = formatValue(value, mounted.opts.unit);
+  mounted.valueEl.dataset.zone = zoneForFraction(fraction(mounted.opts));
   if (mounted.widget === "needle") {
     updateNeedleGauge(mounted.bodyEl, mounted.opts);
-  } else {
+  } else if (mounted.widget === "bargraph") {
     updateBargraphGauge(mounted.bodyEl, mounted.opts);
   }
 }
@@ -69,32 +109,68 @@ function fraction(opts) {
 
 // --- Bargraph (ACOM: segmented, Modern: smooth gradient) -------------------
 
-function renderBargraphGauge(opts) {
+function renderBargraphGauge(opts, themeStyle) {
   const wrapper = document.createElement("div");
   wrapper.className = "gauge-bargraph";
+  wrapper.dataset.style = BARGRAPH_STYLE_BY_THEME[themeStyle] || "segmented";
   const track = document.createElement("div");
   track.className = "track";
   wrapper.appendChild(track);
-  buildBargraphSegments(track, opts);
+  buildBargraphFill(track, opts, wrapper.dataset.style);
+  wrapper.appendChild(buildTicks(opts));
   return wrapper;
 }
 
-function buildBargraphSegments(track, opts) {
+function buildBargraphFill(track, opts, style) {
   track.innerHTML = "";
   const frac = fraction(opts);
+  if (style === "smooth") {
+    const fill = document.createElement("div");
+    fill.className = "fill zone-" + zoneForFraction(frac);
+    fill.style.width = `${frac * 100}%`;
+    track.appendChild(fill);
+    return;
+  }
   const filledCount = Math.round(frac * BARGRAPH_SEGMENT_COUNT);
   for (let i = 0; i < BARGRAPH_SEGMENT_COUNT; i++) {
     const seg = document.createElement("div");
     seg.className = "segment";
     if (i < filledCount) seg.classList.add("filled");
-    if (i / BARGRAPH_SEGMENT_COUNT >= DANGER_ZONE_FRACTION) seg.classList.add("danger-zone");
+    if (i / BARGRAPH_SEGMENT_COUNT >= ZONE_DANGER_FRACTION) seg.classList.add("danger-zone");
     track.appendChild(seg);
   }
 }
 
+// Three evenly-spaced numeric ticks (min / midpoint / max) under the track -
+// the real Basic Screen prints scale numbers (e.g. "0 ... 600 ... 1200")
+// below each bargraph; min/max come from the gauge's own range rather than
+// hardcoded amp-model numbers, since this app's gauges rescale per amp model.
+function buildTicks(opts) {
+  const { min = 0, max = 100 } = opts;
+  const row = document.createElement("div");
+  row.className = "gauge-ticks";
+  [min, min + (max - min) / 2, max].forEach((v) => {
+    const span = document.createElement("span");
+    span.textContent = Math.round(v);
+    row.appendChild(span);
+  });
+  return row;
+}
+
 function updateBargraphGauge(bodyEl, opts) {
   const track = bodyEl.querySelector(".track");
-  if (track) buildBargraphSegments(track, opts);
+  if (track) buildBargraphFill(track, opts, bodyEl.dataset.style);
+  const ticksEl = bodyEl.querySelector(".gauge-ticks");
+  if (ticksEl) ticksEl.replaceWith(buildTicks(opts));
+}
+
+// --- Plain readout (no track - e.g. Input Power / PA DC Current on the real
+// Basic Screen, which show as bare digits with no bargraph) ----------------
+
+function renderPlainGauge() {
+  const el = document.createElement("div");
+  el.className = "gauge-plain";
+  return el;
 }
 
 // --- Needle meter (Classic) --------------------------------------------------

@@ -2,7 +2,7 @@
 // step 6 "Frontend dashboard" and "Backend vs. frontend logging".
 
 import { initThemeSwitcher, loadTheme } from "./theme.js";
-import { mountGauge, updateGauge, currentWidgetForTheme } from "./gauges.js";
+import { mountGauge, updateGauge, resolveWidget } from "./gauges.js";
 
 const BAND_NAMES = ["160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"];
 const ANTENNA_TYPES = ["Sharp", "Regular", "Wide", "Fixed"];
@@ -11,14 +11,17 @@ const ANTENNA_TYPES = ["Sharp", "Regular", "Wide", "Fixed"];
 // #power-out-hero in index.html) rather than inside the regular grid.
 const HERO_GAUGE_DEF = { id: "forward_power_w", label: "Forward Power", unit: "W", min: 0, max: () => appState.maxPowerW || 1500 };
 
+// Ordered and flagged to match the real Basic Screen's own layout (PA Temp +
+// Reflected Power as metered bargraphs; Input Power + PA DC Current as bare
+// digit readouts with no bargraph - see Figure 3-2 in the 1200S manual).
+// swr_calc has no real-screen counterpart (it's computed, not read from the
+// amp - see computeSwr()) so it gets its own full-width row in the grid.
 const GAUGE_DEFS = [
-  { id: "reflected_power_w", label: "Reflected Power", unit: "W", min: 0, max: () => Math.max(50, (appState.maxPowerW || 1500) * 0.2) },
-  // Calculated from forward/reflected power rather than read from the amp's
-  // own `swr` telemetry field - see computeSwr().
-  { id: "swr_calc", label: "SWR", unit: ":1", min: 1, max: () => 5 },
   { id: "temp_pam1_c", label: "PA Temperature", unit: "°C", min: 0, max: () => 100 },
-  { id: "input_power_w", label: "Input Power", unit: "W", min: 0, max: () => 100 },
-  { id: "id1_ma", label: "PA DC Current", unit: "mA", min: 0, max: () => 2000 },
+  { id: "reflected_power_w", label: "Reflected Power", unit: "W", min: 0, max: () => Math.max(50, (appState.maxPowerW || 1500) * 0.2) },
+  { id: "input_power_w", label: "Input Power", unit: "W", min: 0, max: () => 100, plain: true },
+  { id: "id1_ma", label: "PA DC Current", unit: "mA", min: 0, max: () => 2000, plain: true },
+  { id: "swr_calc", label: "SWR", unit: ":1", min: 1, max: () => 5 },
 ];
 
 const GAUGE_DEF_BY_ID = Object.fromEntries([HERO_GAUGE_DEF, ...GAUGE_DEFS].map((d) => [d.id, d]));
@@ -232,15 +235,27 @@ function renderStatusRow(state) {
   chips.forEach((c) => row.appendChild(c));
 }
 
+// Two sub-elements (label bar + LED cell) rather than one flat chip, so the
+// ACOM theme can stack them into the real status strip's layout - a row of
+// amber label segments with a small indicator LED on a black strip directly
+// beneath each one (see Figure 3-2 in the 1200S manual). Classic/Modern keep
+// the simpler inline pill look via CSS (see components.css).
 function chip(label, on, text) {
   const el = document.createElement("span");
   el.className = "status-chip";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "status-chip-label";
+  labelEl.textContent = text ? `${label}: ${text}` : label;
+  el.appendChild(labelEl);
+
+  const ledCell = document.createElement("span");
+  ledCell.className = "status-chip-led";
   const led = document.createElement("span");
   led.className = "led-dot" + (on ? " on" : "");
-  el.appendChild(led);
-  const span = document.createElement("span");
-  span.textContent = text ? `${label}: ${text}` : label;
-  el.appendChild(span);
+  ledCell.appendChild(led);
+  el.appendChild(ledCell);
+
   return el;
 }
 
@@ -272,8 +287,8 @@ function renderGauges(state) {
 function mountOrUpdateGauge(el, def, telemetry, theme, forceWidget) {
   if (!el) return;
   const value = telemetry[def.id] ?? null;
-  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max };
-  const widget = forceWidget || currentWidgetForTheme(theme);
+  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain };
+  const widget = resolveWidget(theme, opts, forceWidget);
 
   if (el.dataset.mountedWidget !== widget) {
     el.dataset.mountedWidget = widget;
