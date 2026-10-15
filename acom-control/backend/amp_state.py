@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Literal, Optional
 
 from . import protocol
+
+PowerState = Literal["unknown", "on", "off"]
 from .amp_profiles import AmpProfile
 
 
@@ -18,6 +20,16 @@ class AmpState:
 
     comms_ok: bool = False
     last_update_ts: float = 0.0
+    # Tracks power state deliberately, separate from comms_ok - "comms
+    # down" means merely-hung/cable-pulled/fault just as often as it means
+    # "off", and app.py's set_power() needs to tell those apart before
+    # ever firing the DTR/RTS pulse (CLAUDE.md open question 4/5): pulsing
+    # a hung-but-still-powered amp would turn it OFF, not on. Only set to
+    # "off" by a deliberate, comms-confirmed pulse_power_toggle() call
+    # (see mark_power_off_confirmed()) - never inferred from comms merely
+    # going quiet, since that's also what a hang/cable-pull/fault looks
+    # like from here.
+    power_state: PowerState = "unknown"
 
     telemetry: Optional[protocol.AmpTelemetry] = None
     atu_identity: Optional[protocol.AtuIdentity] = None
@@ -35,9 +47,27 @@ class AmpState:
     def mark_comms_ok(self) -> None:
         self.comms_ok = True
         self.last_update_ts = time.time()
+        # Live telemetry is definitive proof the amp's CPU is up and
+        # listening - the only other way power_state becomes "on" is
+        # staying there from before (never regress "off"/"unknown" back
+        # to "on" except via this real evidence).
+        self.power_state = "on"
 
     def mark_comms_lost(self) -> None:
         self.comms_ok = False
+        # Comms going quiet is expected and uninformative if we already
+        # believe it's off (we just turned it off ourselves) - don't
+        # clobber that back to "unknown". From any other state, losing
+        # comms could mean off, hung, or a cable/fault issue - genuinely
+        # unknown until something tells us otherwise.
+        if self.power_state != "off":
+            self.power_state = "unknown"
+
+    def mark_power_off_confirmed(self) -> None:
+        """Called after a deliberate, comms-confirmed pulse_power_toggle()
+        for an off request (see app.py's set_power()) - the only way
+        power_state is allowed to become "off"."""
+        self.power_state = "off"
 
     def update_telemetry(self, telemetry: protocol.AmpTelemetry) -> None:
         self.telemetry = telemetry
@@ -94,6 +124,7 @@ class AmpState:
     def to_dict(self) -> dict:
         return {
             "comms_ok": self.comms_ok,
+            "power_state": self.power_state,
             "last_update_ts": self.last_update_ts,
             "amp_model": self.profile.model,
             "max_power_w": self.profile.max_power_w,
