@@ -35,10 +35,11 @@ repo-root README for details. If you haven't run it yet, do that first.
    and restart.
 4. **DTR/RTS power-toggle risk:** opening the serial port - which happens
    on every backend start, restart, or crash-recovery, including the
-   systemd service starting - raises DTR, and on real 1200S hardware a
-   DTR pulse has been observed to toggle the amp's power state (see
-   `../CLAUDE.md` open question 4). There's no software fix; if this is
-   unacceptable, don't wire DB9 pins 6/8 in the Pi-to-amp cable at all.
+   systemd service starting (which `install.sh` now starts automatically,
+   see below) - raises DTR, and on real 1200S hardware a DTR pulse has
+   been observed to toggle the amp's power state (see `../CLAUDE.md` open
+   question 4). There's no software fix; if this risk is unacceptable,
+   don't wire DB9 pins 6/8 in the Pi-to-amp cable at all.
 
 ## Configure
 
@@ -57,15 +58,16 @@ Then open `http://<pi-ip-or-hostname>:8000/` in a browser.
 
 ## Run as a service (production)
 
-`install.sh` already creates the `acom-control` system user and installs
+`install.sh` already creates the `acom-control` system user, installs
 `/etc/systemd/system/acom-control.service` (with `WorkingDirectory`/
-`ExecStart` filled in for wherever it found this repo checked out) - it
-deliberately doesn't start or enable it, because of the DTR power-toggle
-risk noted above. Once you've read that and are ready:
+`ExecStart` filled in for wherever it found this repo checked out), and
+enables + starts it - accepting the DTR power-toggle risk noted above
+rather than stopping short of actually running the service. To watch it
+or restart it later:
 
 ```bash
-sudo systemctl enable --now acom-control
 journalctl -u acom-control -f
+sudo systemctl restart acom-control
 ```
 
 (If the repo gets moved after `install.sh` ran, re-run it to regenerate
