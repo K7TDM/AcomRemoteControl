@@ -212,6 +212,23 @@ def build_atu_bypass(antenna_number: int) -> bytes:
     return build_amp_command(CMD_ATU_MANAGEMENT, param_hw=antenna_number, param_lw=ATU_BYPASS)
 
 
+def build_atu_activate_cyclic_display(message_address: int) -> bytes:
+    """0x0E/0x2E or 0x0E/0x2F "Activate Cyclic Message 0x2E/0x2F to the
+    Display" (doc section 5.1's ATU Management table) - a documented but,
+    until now, never-sent command, distinct from the blanket 0x92 "enable
+    automatic telemetry" (build_enable_auto_telemetry()) that's confirmed
+    to keep 0x2F (main cyclic telemetry) flowing on its own. Being tried
+    as a candidate unlock for CLAUDE.md open question 6 (0x18/0x1B/0x2A
+    staying silent even after many resync attempts) - message_address
+    must be ATU_ACTIVATE_CYCLIC_2E (0x2E) or _2F (0x2F) specifically; no
+    other Byte5 value is documented for this command, and several other
+    values mean something else entirely for Cmd 0x0E (e.g. 0x01 triggers
+    a real ATU Full Tune) - never pass anything else here.
+    """
+    assert message_address in (ATU_ACTIVATE_CYCLIC_2E, ATU_ACTIVATE_CYCLIC_2F)
+    return build_amp_command(CMD_ATU_MANAGEMENT, param_lw=message_address)
+
+
 def build_buzzer(signal: int, volume: int) -> bytes:
     return build_amp_command(CMD_BUZZER, param_hw=signal, param_lw=volume)
 
