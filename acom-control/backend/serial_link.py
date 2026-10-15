@@ -36,7 +36,11 @@ READ_POLL_INTERVAL_S = 0.02
 
 # DTR/RTS "Remote Power On" pulse: confirmed on real hardware that a 1.5s
 # pulse on both lines, then release, toggles the amp's power state (on<->
-# off) - deliberately NOT wired into this class, see _open_port().
+# off) - see pulse_power_toggle(). _open_port() deliberately never drives
+# these lines itself (see its own comment) - only a deliberate, explicit
+# call to pulse_power_toggle() should ever do so.
+POWER_PULSE_SECONDS = 1.5
+
 # send_command() confirmation-wait tuning - see module docstring.
 COMMAND_CONFIRM_TIMEOUT_S = 0.3
 COMMAND_MAX_ATTEMPTS = 5
@@ -150,6 +154,34 @@ class SerialLink:
         and telemetry never actually got enabled."""
         await self._startup_handshake()
 
+    async def pulse_power_toggle(self) -> None:
+        """Asserts DTR+RTS together for ~1.5s then releases - confirmed on
+        real 1200S hardware (CLAUDE.md open question 4/5) to cleanly
+        toggle the amp's power state in either direction, 4/4 clean on the
+        day it was characterized (2x recovering an already-hung amp, 2x as
+        a direct power-off from normal operation) - unlike the `0x81`/
+        `0x02`/`0x0A` software "turn off" command, which hangs the amp's
+        own internal shutdown sequence every time it's been tried.
+
+        This is a BLIND TOGGLE, not a deterministic on/off: pulsing while
+        the amp is already off would turn it back on. Callers MUST only
+        invoke this when the current power state is actually known (see
+        app.py's set_power(), which refuses unless comms_ok) - this method
+        itself has no way to check that.
+
+        Reuses the already-open connection rather than a separate fd, so
+        _read_loop()/_write_loop() keep running on the same port
+        throughout - DTR/RTS are independent of the TX/RX data lines, so
+        toggling them here doesn't interfere with reads/writes in flight.
+        """
+        assert self._serial is not None
+        logger.info("Pulsing DTR+RTS for %.1fs to toggle amp power", POWER_PULSE_SECONDS)
+        self._serial.dtr = True
+        self._serial.rts = True
+        await asyncio.sleep(POWER_PULSE_SECONDS)
+        self._serial.dtr = False
+        self._serial.rts = False
+
     async def send_command(
         self,
         frame: bytes,
@@ -220,15 +252,21 @@ class SerialLink:
         self._serial.parity = serial.PARITY_NONE
         self._serial.stopbits = serial.STOPBITS_ONE
         self._serial.timeout = 0  # non-blocking reads; polled from the asyncio loop below
-        # Neuter pyserial's own open()-time DTR/RTS ioctls directly rather
-        # than via the dsrdtr/rtscts constructor flags - rtscts=True would
-        # also flip on termios hardware RTS/CTS flow control (CRTSCTS),
-        # which the amp doesn't use for UART flow control and could stall
-        # writes waiting for a CTS transition that never comes the way
-        # flow control expects.
+        # Neuter *only* pyserial's own open()-time DTR/RTS ioctls, directly
+        # rather than via the dsrdtr/rtscts constructor flags (rtscts=True
+        # would also flip on termios hardware RTS/CTS flow control, which
+        # the amp doesn't use for UART flow control and could stall writes
+        # waiting for a CTS transition that never comes the way flow
+        # control expects). Restored right after open() - a deliberate
+        # pulse (pulse_power_toggle()) still needs the real methods so a
+        # later .dtr/.rts assignment actually reaches the hardware.
+        real_update_dtr = self._serial._update_dtr_state
+        real_update_rts = self._serial._update_rts_state
         self._serial._update_dtr_state = lambda: None
         self._serial._update_rts_state = lambda: None
         self._serial.open()
+        self._serial._update_dtr_state = real_update_dtr
+        self._serial._update_rts_state = real_update_rts
         # pyserial doesn't touch HUPCL, so whatever the port's termios
         # already had persists - clear it explicitly so close() doesn't
         # have the kernel drop DTR as a hangup side effect either.
