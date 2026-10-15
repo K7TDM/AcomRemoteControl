@@ -193,33 +193,64 @@ frame. Key ones:
    the target 04AT/06AT hardware, matching the 4-slot name/assignment
    tables exactly.)
 4. Pin 6 (DSR) vs pin 8 (CTS) both documented as "Remote Power On" on the
-   1200S RS-232 connector. **Partially resolved against real hardware**:
-   the 1200S manual (8.2(c)) confirms DSR/DTR + CTS/RTS together give
-   "Remote POWER ON" only (no RS232-side power-off exists — that's a
-   separate software/internal procedure, see item 5 below). On the real
-   amp, a DTR+RTS pulse of ~1.5s (both lines asserted together, then
-   released) reliably **toggles** power state (on→off or off→on,
-   whichever it wasn't) — holding both continuously asserted instead
-   leaves the amp stuck mid power-sequence. Critically: Linux raises DTR
-   as a side effect of simply opening *any* serial port, before any
-   application code runs — so **just opening `/dev/acom-amp` for normal
-   communication risks toggling the amp's power** regardless of what the
-   Python code does with `.dtr`/`.rts` afterward. `acom-control`'s
-   `serial_link.py` deliberately never sets `.dtr`/`.rts` at all, to avoid
-   compounding this, but the OS-level open-time raise is still a risk on
-   every backend start/restart/crash-recovery. The only confirmed-reliable
-   fix is physical: don't wire pins 6/8 in the Pi↔amp cable at all (they're
-   only needed for this optional feature, not the TX/RX/GND data link) —
-   not yet done. Still unverified: minimum pulse width, and whether DSR
-   and CTS matter independently or only matter together.
+   1200S RS-232 connector. The 1200S manual (8.2(c)) confirms DSR/DTR +
+   CTS/RTS together give "Remote POWER ON" only (no RS232-side power-off
+   exists — that's a separate software/internal procedure, see item 5
+   below). On the real amp, a DTR+RTS pulse of ~1.5s (both lines asserted
+   together, then released) reliably **toggles** power state (on→off or
+   off→on, whichever it wasn't) — holding both continuously asserted
+   instead leaves the amp stuck mid power-sequence.
+
+   **DTR/RTS-level theory for the power-off hang (item 5) ruled out by a
+   same-session test matrix** (2026-10-14, see item 5's update): three
+   different things were tried on every port open/close — pyserial's
+   default (assert both HIGH), explicitly deasserting both LOW, and
+   finally neutering pyserial's open()-time DTR/RTS ioctls entirely plus
+   clearing HUPCL so close() can't drop them either (leaving the lines
+   genuinely untouched, at whatever level the USB-serial chip idles at).
+   The power-off hang reproduced identically in **all three** states.
+   Separately, plugging the USB-serial cable back in while the amp was
+   off still powered it ON even with DTR/RTS held low or left untouched —
+   so no logic-level choice on these lines prevents a transition either
+   way. The only thing that actually recovered the amp was the Pi itself
+   losing power (rebooting while hung), which cuts the USB-serial
+   adapter's power entirely — electrically different from any level a
+   *powered* adapter can present (0V-driven vs. no-power-source-present
+   aren't the same to whatever's sensing pins 6/8, e.g. a pull resistor
+   expecting a genuinely open/unpowered line). This matches the original
+   fallback conclusion: **the only confirmed-reliable fix is physical —
+   don't wire pins 6/8 in the Pi↔amp cable at all.** Tyler has accepted
+   giving up remote power-on/off via these pins rather than keep chasing
+   a software mitigation; `serial_link.py`'s `_open_port()` now avoids
+   driving these lines in either direction as the final state (harmless,
+   not a fix for item 5, just no longer actively making a transition
+   happen on routine port opens/closes). Still unverified: minimum pulse
+   width, and whether DSR and CTS matter independently or only together.
+   Not yet explored: whether a Pi-side USB port power-cycle (e.g.
+   `uhubctl`, if the hub supports per-port switching) could stand in for
+   a true unplug/replug as a controlled recovery action — raised as an
+   option, not pursued.
 5. The amp also supports a documented software-driven power-off
    (`FLAG_PwrOff_Request`/`FLAG_Soft_PwrOff` in `0x2F` telemetry flags,
    and mode category `0xAX` "Turn OFF Procedure"), separate from the
    RS232 power-on pins. On real hardware, commanding `0x81` Cmd `0x02`
-   Byte5=`0x0A` (turn off) once caused the amp to hang mid-"Turn OFF
-   Procedure" (required unplugging/replugging the USB adapter to
-   recover) — unclear yet whether that's a timing issue, a firmware
-   quirk, or an interaction with the DTR/RTS behavior above.
+   Byte5=`0x0A` (turn off) hangs the amp mid-"Turn OFF Procedure" every
+   time it's been tried (requires a full power cycle of the USB-serial
+   adapter — not just a port close/reopen — to recover; see item 4's
+   test matrix). Confirmed **not** a backend bug: `_send_pulse_command()`
+   in `app.py` sends this command with `max_attempts=1` (no retry/resend;
+   journal shows exactly one `02 00 0a` frame per attempt), and the
+   DTR/RTS-level theory is ruled out per item 4 — the hang reproduces
+   identically regardless of what the Pi does with those lines on open or
+   close. That leaves either a timing issue or (more likely, given it
+   hangs unconditionally) a genuine firmware quirk in the amp's own
+   internal shutdown sequence when triggered via RS232 specifically.
+   Nothing on the Pi side has been found that can unstick it once hung —
+   consistent with the amp's own CPU being stuck in a blocking loop
+   rather than waiting on anything from the computer. Practical
+   consequence: treat the software power-off command as unreliable on
+   real hardware until/unless ACOM can explain the hang; the frontend's
+   "Power Off" button has no warning about this yet.
 6. On real hardware, the generic "request specific message" mechanism
    (`0x81` Cmd `0x01`, Byte4/5 = message address — confirmed from the
    protocol doc §5.1 to be a 16-bit Byte4(HW)/Byte5(LW) value, not a
