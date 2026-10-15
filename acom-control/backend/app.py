@@ -255,8 +255,23 @@ class PowerRequest(BaseModel):
 @app.post("/api/power")
 async def set_power(req: PowerRequest) -> dict:
     link = _require_serial_link()
-    mode = protocol.MODE_OPR_RX if req.on else protocol.MODE_OFF
-    return await _send_pulse_command(link, protocol.build_mode_change(mode))
+    if req.on:
+        return await _send_pulse_command(link, protocol.build_mode_change(protocol.MODE_OPR_RX))
+
+    # Power OFF uses the DTR+RTS pulse (SerialLink.pulse_power_toggle()),
+    # not the 0x81/0x02/0x0A software command - that command hangs the
+    # amp's own shutdown sequence 100% of the time it's been tried on
+    # real hardware, while the pulse has been clean 4/4 (see CLAUDE.md
+    # open question 4/5). The pulse is a blind TOGGLE, not a deterministic
+    # off, so this only fires when comms_ok confirms the amp is actually
+    # on right now - without that, we can't tell a pulse-to-off apart
+    # from an accidental pulse-to-on.
+    if not amp_state.comms_ok:
+        raise HTTPException(
+            409, "cannot safely power off: comms with the amplifier are down, so its current power state is unknown"
+        )
+    await link.pulse_power_toggle()
+    return {"ok": True}
 
 
 MODE_NAME_TO_VALUE = {

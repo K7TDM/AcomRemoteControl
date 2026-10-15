@@ -267,10 +267,23 @@ frame. Key ones:
    the firmware bug rather than cleaning up after it. Still a **blind
    toggle**, not a deterministic "off" — pulsing while the amp is already
    off would turn it back on, so any implementation needs to not fire
-   this when the current state is uncertain. Power On's existing
-   `MODE_OPR_RX` serial command has never shown a problem, so it may not
-   need to change even if Power Off switches to the pulse. Design
-   decision pending with Tyler.
+   this when the current state is uncertain.
+
+   **Implemented:** `SerialLink.pulse_power_toggle()` (asserts DTR+RTS,
+   sleeps `POWER_PULSE_SECONDS` = 1.5s, releases) is now what `POST
+   /api/power` with `on: false` actually does, replacing the `0x0A`
+   command entirely. Guarded against the blind-toggle risk by refusing
+   (`409`) unless `amp_state.comms_ok` is currently true — without fresh
+   comms we can't tell a pulse-to-off apart from an accidental pulse-to-
+   on. Power On (`on: true`) is unchanged, still the `MODE_OPR_RX` serial
+   command, since that's never shown a problem. `_open_port()`'s DTR/RTS
+   neutering (item 4) only suppresses the open()-time ioctl now, not the
+   methods permanently - restored right after `open()` so a deliberate
+   pulse later still reaches the hardware. NEEDS REAL-HARDWARE
+   VERIFICATION: only exercised against a local pty in dev (which doesn't
+   support the DTR/RTS ioctls at all, so the actual toggle itself is
+   unverified end-to-end through the running service - only the standalone
+   script bypassing `serial_link.py` has been confirmed on the real amp).
 6. On real hardware, the generic "request specific message" mechanism
    (`0x81` Cmd `0x01`, Byte4/5 = message address — confirmed from the
    protocol doc §5.1 to be a 16-bit Byte4(HW)/Byte5(LW) value, not a
