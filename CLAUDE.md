@@ -253,6 +253,24 @@ frame. Key ones:
    open/close, this would be a deliberate, user-triggered pulse) — design
    not yet decided. Also worth a frontend warning on the "Power Off"
    button that it's known to hang the amp on real hardware every time.
+
+   **Stronger result, same session:** the pulse was then tried as the
+   *primary* power-off action from a normal running/responsive state (no
+   `0x0A` command involved at all, not recovering from any hung state) —
+   clean shutdown, confirmed on the amp's own display. Running tally: the
+   pulse has worked cleanly **4/4** times (2x recovering an already-hung
+   amp, 2x direct power-off from normal operation, including one case
+   that was two pulses back-to-back toggling off→on→off, still clean each
+   time), vs. the `0x0A` software command hanging **100%** of attempts.
+   This reframes the pulse from "recovery mechanism" to a plausible
+   *replacement* for the Power Off button's command entirely — sidesteps
+   the firmware bug rather than cleaning up after it. Still a **blind
+   toggle**, not a deterministic "off" — pulsing while the amp is already
+   off would turn it back on, so any implementation needs to not fire
+   this when the current state is uncertain. Power On's existing
+   `MODE_OPR_RX` serial command has never shown a problem, so it may not
+   need to change even if Power Off switches to the pulse. Design
+   decision pending with Tyler.
 6. On real hardware, the generic "request specific message" mechanism
    (`0x81` Cmd `0x01`, Byte4/5 = message address — confirmed from the
    protocol doc §5.1 to be a 16-bit Byte4(HW)/Byte5(LW) value, not a
