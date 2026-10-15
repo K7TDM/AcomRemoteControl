@@ -51,7 +51,12 @@ echo "==> Installing udev rule for a stable /dev/acom-amp symlink"
 ADAPTER_SERIAL=""
 for dev in /dev/ttyUSB* /dev/ttyACM*; do
   [[ -e "$dev" ]] || continue
-  serial="$(udevadm info --name="$dev" --attribute-walk 2>/dev/null | grep -m1 '{serial}' | sed -E 's/.*=="([^"]+)".*/\1/')"
+  # Capture attribute-walk's full output before grepping it - piping it
+  # straight into `grep -m1` lets grep exit (closing the pipe) while
+  # udevadm is still writing, which kills udevadm with SIGPIPE; under
+  # `set -o pipefail` that non-zero status aborts the whole script.
+  walk="$(udevadm info --name="$dev" --attribute-walk 2>/dev/null)"
+  serial="$(printf '%s\n' "$walk" | grep -m1 '{serial}' | sed -E 's/.*=="([^"]+)".*/\1/')"
   if [[ -n "$serial" ]]; then
     ADAPTER_SERIAL="$serial"
     echo "    Found USB-serial adapter at $dev (serial=$ADAPTER_SERIAL)"
