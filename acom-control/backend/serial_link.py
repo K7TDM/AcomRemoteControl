@@ -284,6 +284,18 @@ class SerialLink:
         await asyncio.sleep(INTER_MESSAGE_PACING_S)
         await self.enqueue(protocol.build_enable_auto_telemetry())
         await asyncio.sleep(INTER_MESSAGE_PACING_S)
+        # Documented (doc section 5.1's ATU Management table / CLAUDE.md's
+        # protocol facts) but never actually sent until now - distinct
+        # from build_enable_auto_telemetry()'s blanket "enable automatic
+        # telemetry", which only confirmed-covers 0x2F. Candidate unlock
+        # for CLAUDE.md open question 6 (0x18/0x1B/0x2A staying silent) -
+        # see build_atu_activate_cyclic_display()'s docstring. Harmless if
+        # it turns out unrelated: these two values only ever mean "turn on
+        # this specific cyclic display message," nothing else.
+        await self.enqueue(protocol.build_atu_activate_cyclic_display(protocol.ATU_ACTIVATE_CYCLIC_2E))
+        await asyncio.sleep(INTER_MESSAGE_PACING_S)
+        await self.enqueue(protocol.build_atu_activate_cyclic_display(protocol.ATU_ACTIVATE_CYCLIC_2F))
+        await asyncio.sleep(INTER_MESSAGE_PACING_S)
         for message_address in STARTUP_REQUEST_MESSAGES:
             await self.enqueue(protocol.build_request_message(message_address))
             await asyncio.sleep(INTER_MESSAGE_PACING_S)
