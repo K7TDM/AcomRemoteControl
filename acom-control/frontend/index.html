@@ -60,8 +60,11 @@
     <div class="button-bar">
       <button id="btn-power-on" class="acom-button" type="button">Power On</button>
       <button id="btn-power-off" class="acom-button danger" type="button">Power Off</button>
-      <button id="btn-mode-stb" class="acom-button" type="button">STB</button>
-      <button id="btn-mode-opr-rx" class="acom-button" type="button">OPR/RX</button>
+      <!-- Single toggle mirroring the real amp's own physical OPR/STB
+           button: color/state come from live telemetry.mode_name (see
+           renderOprToggle() in app.js), not click-tracked UI state. OPR/TX
+           stays its own separate, confirm-gated button below. -->
+      <button id="btn-opr-toggle" class="acom-button" type="button" data-opr-state="unknown">OPR/STB</button>
       <button id="btn-mode-opr-tx" class="acom-button danger" type="button">OPR/TX</button>
       <button id="btn-band-prev" class="acom-button" type="button">◀ Band</button>
       <button id="btn-band-next" class="acom-button" type="button">Band ▶</button>
