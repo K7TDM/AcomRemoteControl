@@ -256,6 +256,32 @@ class PowerRequest(BaseModel):
 async def set_power(req: PowerRequest) -> dict:
     link = _require_serial_link()
     if req.on:
+        if amp_state.power_state == "off":
+            # MODE_OPR_RX is a serial command - it needs the amp's own
+            # CPU/UART already powered and listening to parse it, same as
+            # the old 0x0A off command could never have turned it back on
+            # either. Only the DTR/RTS pulse can wake a fully-off amp
+            # (confirmed on real hardware: the serial command alone did
+            # nothing from a confirmed-off state). Only pulse here when
+            # power_state is confidently "off" (set exclusively by our own
+            # prior pulse_power_toggle(), never inferred from comms merely
+            # being down) - pulsing a merely-hung-but-still-powered amp
+            # would turn it OFF, the opposite of what's wanted.
+            await link.pulse_power_toggle()
+            # Don't claim "on" yet - we have no confirmation the pulse
+            # actually landed until telemetry resumes (mark_comms_ok()
+            # will set power_state="on" then). Back to "unknown" rather
+            # than leaving it at "off", so a second rapid click during the
+            # recovery window doesn't rely on a now-stale "off" belief
+            # and double-pulse.
+            amp_state.power_state = "unknown"
+            return {"ok": True, "pulsed": True}
+        if amp_state.power_state == "unknown":
+            raise HTTPException(
+                409,
+                "amplifier power state is unknown (not confirmed off) - "
+                "cannot safely choose between the mode command and a power pulse",
+            )
         return await _send_pulse_command(link, protocol.build_mode_change(protocol.MODE_OPR_RX))
 
     # Power OFF uses the DTR+RTS pulse (SerialLink.pulse_power_toggle()),
@@ -271,7 +297,8 @@ async def set_power(req: PowerRequest) -> dict:
             409, "cannot safely power off: comms with the amplifier are down, so its current power state is unknown"
         )
     await link.pulse_power_toggle()
-    return {"ok": True}
+    amp_state.mark_power_off_confirmed()
+    return {"ok": True, "pulsed": True}
 
 
 MODE_NAME_TO_VALUE = {
