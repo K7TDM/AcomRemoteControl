@@ -86,6 +86,7 @@ class SerialLink:
         self._writer_task: Optional[asyncio.Task] = None
         self._watchdog_task: Optional[asyncio.Task] = None
         self._last_rx_monotonic: float = 0.0
+        self._last_handshake_monotonic: float = 0.0
         # send_command() state - only one confirmed command may be in
         # flight at a time, matching the protocol's own single-outstanding-
         # message retry model (see protocol.build_ack's docstring).
@@ -240,6 +241,7 @@ class SerialLink:
 
     async def _startup_handshake(self) -> None:
         logger.info("Running startup handshake (force HEX mode, enable telemetry, pull ATU/antenna config)")
+        self._last_handshake_monotonic = asyncio.get_running_loop().time()
         await self.enqueue(protocol.build_force_hex_mode())
         await asyncio.sleep(INTER_MESSAGE_PACING_S)
         await self.enqueue(protocol.build_enable_auto_telemetry())
@@ -292,7 +294,20 @@ class SerialLink:
     async def _comms_watchdog(self) -> None:
         """Flags comms as lost if nothing's been received for a while -
         telemetry (0x2E/0x2F) should stream continuously once enabled, so a
-        long silence means the link (or the amp) is down."""
+        long silence means the link (or the amp) is down.
+
+        While unhealthy, also gently re-sends the startup handshake every
+        few seconds (debounced, not every tick). The amp forgets "auto
+        telemetry enabled" across its own power cycle (e.g. the DTR/RTS
+        power-cycle recovery for the item-5 off-hang in CLAUDE.md), and in
+        that case the fd never errors/closes, so _read_loop()'s own
+        reopen-triggered handshake never fires - and since the amp sends
+        nothing on its own until re-prompted, waiting for a frame to
+        arrive before re-enabling telemetry is a chicken-and-egg problem
+        (confirmed on real hardware: comms stayed down until a manual
+        POST /api/resync). Periodically re-sending while down means
+        whichever attempt lands after the amp's CPU finishes booting is
+        the one that gets through, instead of requiring a manual poke."""
         comms_ok = False
         while True:
             await asyncio.sleep(1.0)
@@ -302,6 +317,9 @@ class SerialLink:
                 comms_ok = healthy
                 if self._on_comms_change is not None:
                     self._on_comms_change(comms_ok)
+            if not healthy and (now - self._last_handshake_monotonic) > 5.0:
+                logger.info("Comms down - re-sending startup handshake in case the amp power-cycled")
+                await self._startup_handshake()
 
     def _drain_buffer(self) -> None:
         buf = bytes(self._rx_buf)
