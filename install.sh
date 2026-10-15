@@ -78,7 +78,7 @@ fi
 SERVICE_SRC="$REPO_DIR/acom-control/setup/acom-control.service"
 SERVICE_DST="/etc/systemd/system/acom-control.service"
 
-echo "==> Setting up the acom-control systemd service (not starting it yet)"
+echo "==> Setting up and starting the acom-control systemd service"
 if ! id acom-control &>/dev/null; then
   sudo useradd --system --no-create-home --groups dialout acom-control
 fi
@@ -88,6 +88,11 @@ sed \
   -e "s#^ExecStart=.*#ExecStart=$VENV_DIR/bin/uvicorn backend.app:app --host 0.0.0.0 --port 8000#" \
   "$SERVICE_SRC" | sudo tee "$SERVICE_DST" >/dev/null
 sudo systemctl daemon-reload
+# Opening the serial port raises DTR, which has been observed to toggle
+# the amp's power state on real 1200S hardware (CLAUDE.md open question
+# 4/5) - accepted as a known risk rather than gated here, so this starts
+# the service unattended rather than stopping short.
+sudo systemctl enable --now acom-control
 
 cat <<EOF
 
@@ -109,15 +114,12 @@ EOF
 fi
 
 cat <<EOF
-- The acom-control systemd service was installed at $SERVICE_DST but is
-  NOT started or enabled yet.
-- IMPORTANT before you start it: opening the serial port (which happens
-  every time this service starts, restarts, or crash-recovers) raises
-  DTR, and on real 1200S hardware a DTR pulse has been observed to TOGGLE
-  the amp's power state - so starting/restarting this service while the
-  amp is powered on and in use is not risk-free. See CLAUDE.md open
-  question 4 before relying on it unattended.
-- When ready: sudo systemctl enable --now acom-control
+- The acom-control systemd service is installed at $SERVICE_DST and
+  running (enabled to start on boot too). FYI: opening the serial port
+  raises DTR, which has been observed to toggle the amp's power state on
+  real 1200S hardware (see CLAUDE.md open question 4/5) - so this start,
+  and any future restart/crash-recovery, may have just flipped the amp's
+  power state if it was already on.
   journalctl -u acom-control -f
 - Re-run this script any time requirements.txt changes.
 EOF
