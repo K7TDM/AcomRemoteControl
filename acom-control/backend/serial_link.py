@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import termios
 from typing import Callable, Optional
 
 import serial
@@ -199,21 +200,18 @@ class SerialLink:
 
     def _open_port(self) -> None:
         logger.info("Opening serial port %s @ %d 8N1", self.device, self.baudrate)
-        # Constructed in two steps (not serial.Serial(port=..., ...)) so
-        # .dtr/.rts can be set to False *before* open() runs. pyserial
-        # defaults _dtr_state/_rts_state to True and open() unconditionally
-        # applies them via TIOCMBIS (assert) - confirmed in pyserial's
-        # serialposix.py - so simply never touching .dtr/.rts in our own
-        # code does NOT leave those lines alone like the comment here used
-        # to assume; pyserial actively asserts both HIGH on every open
-        # regardless. DB9 pins 6 (DSR) / 8 (CTS) are wired to the amp's
-        # "Remote Power On" input (CLAUDE.md open question 4), and a real
-        # port-reopen incident (Setup screen's serial-port switch) hung the
-        # amp mid power-sequence - the suspected trigger is this HIGH
-        # reassertion landing on an already-running amp. Presetting False
-        # here makes open() issue TIOCMBIC (deassert) instead, so a reopen
-        # only ever drops these lines (on close/hangup) and leaves them
-        # low, rather than dropping then re-raising them.
+        # DB9 pins 6 (DSR) / 8 (CTS) are wired to the amp's "Remote Power
+        # On" input (CLAUDE.md open question 4). Driving DTR/RTS HIGH on
+        # open (pyserial's default) hung the amp on a real port reopen;
+        # driving them explicitly LOW instead (commit 2ec2387) was tried
+        # next and *also* hung it on power-down, and separately, plugging
+        # the cable back in while off still powered the amp on even with
+        # that fix in place - real-hardware testing showed any explicit
+        # level change on these lines, not just a HIGH pulse, can read as
+        # a toggle. So this now avoids driving DTR/RTS at all, in either
+        # direction, on open OR close - leaving them in whatever idle
+        # state the USB-serial chip already sits in before we touch the
+        # fd, per Tyler's direction after that test.
         self._serial = serial.Serial()
         self._serial.port = self.device
         self._serial.baudrate = self.baudrate
@@ -221,9 +219,24 @@ class SerialLink:
         self._serial.parity = serial.PARITY_NONE
         self._serial.stopbits = serial.STOPBITS_ONE
         self._serial.timeout = 0  # non-blocking reads; polled from the asyncio loop below
-        self._serial.dtr = False
-        self._serial.rts = False
+        # Neuter pyserial's own open()-time DTR/RTS ioctls directly rather
+        # than via the dsrdtr/rtscts constructor flags - rtscts=True would
+        # also flip on termios hardware RTS/CTS flow control (CRTSCTS),
+        # which the amp doesn't use for UART flow control and could stall
+        # writes waiting for a CTS transition that never comes the way
+        # flow control expects.
+        self._serial._update_dtr_state = lambda: None
+        self._serial._update_rts_state = lambda: None
         self._serial.open()
+        # pyserial doesn't touch HUPCL, so whatever the port's termios
+        # already had persists - clear it explicitly so close() doesn't
+        # have the kernel drop DTR as a hangup side effect either.
+        try:
+            attrs = termios.tcgetattr(self._serial.fd)
+            attrs[2] &= ~termios.HUPCL  # cflag is index 2
+            termios.tcsetattr(self._serial.fd, termios.TCSANOW, attrs)
+        except (termios.error, AttributeError):
+            logger.warning("Could not clear HUPCL on %s - close() may still drop DTR/RTS", self.device)
 
     async def _startup_handshake(self) -> None:
         logger.info("Running startup handshake (force HEX mode, enable telemetry, pull ATU/antenna config)")
