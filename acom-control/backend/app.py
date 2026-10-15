@@ -142,13 +142,37 @@ def _on_frame(frame: protocol.Frame) -> None:
         backend_logger.exception("Failed to parse frame at address 0x%02X", frame.address)
 
 
+ASSUME_OFF_AFTER_S = 10.0
+
+
 def _on_comms_change(ok: bool) -> None:
     if ok:
         amp_state.mark_comms_ok()
     else:
+        was_on = amp_state.power_state == "on"
         amp_state.mark_comms_lost()
         backend_logger.warning("Lost comms with amplifier (no frames received recently)")
+        if was_on:
+            # Comms were just confirmed "on" and then went ambiguous
+            # (hung/cable/fault/actually off?) - mark_comms_lost() already
+            # degrades this to "unknown" rather than guessing, which is
+            # correct, but leaves no way to recover via the UI (both the
+            # Power On pulse and the mode-command branches are gated off
+            # "unknown"). _comms_watchdog() is already re-sending the
+            # handshake every ~5s - give it one more chance (per Tyler's
+            # direction) before concluding the amp is actually off.
+            _spawn(_assume_off_after_timeout())
     _spawn(ws_manager.broadcast(amp_state.to_dict()))
+
+
+async def _assume_off_after_timeout() -> None:
+    await asyncio.sleep(ASSUME_OFF_AFTER_S)
+    if amp_state.power_state == "unknown":
+        backend_logger.info(
+            "No reply within %.0fs of losing comms - assuming amplifier is off", ASSUME_OFF_AFTER_S
+        )
+        amp_state.mark_power_off_confirmed()
+        _spawn(ws_manager.broadcast(amp_state.to_dict()))
 
 
 def _require_serial_link() -> SerialLink:
@@ -171,6 +195,11 @@ async def on_startup() -> None:
             "comms are down; pick a working port from the Setup screen.",
             config.amp.serial_device,
         )
+    # Covers the case _on_comms_change(False) can't: the amp may already
+    # be off *before* comms were ever established, so there's no on->off
+    # edge to hook the assume-off timeout onto - give a fresh boot the
+    # same bounded chance to prove it's actually on before concluding off.
+    _spawn(_assume_off_after_timeout())
     if config.modbus.enabled:
         modbus_server = ModbusServer(
             host=config.modbus.host, port=config.modbus.port, amp_state=amp_state, serial_link=serial_link
