@@ -298,10 +298,27 @@ frame. Key ones:
    regressing to `"unknown"`. `set_power()`'s `on: true` branch now pulses
    if `power_state == "off"`, keeps the `MODE_OPR_RX` command if `"on"`
    (useful for STB→OPR/RX), and refuses (`409`) if `"unknown"` rather than
-   guessing. NEEDS REAL-HARDWARE VERIFICATION: the Power On pulse path
-   itself (`power_state == "off"` branch) is implemented and transition
-   logic verified in-process, but not yet exercised through the running
-   service on the real amp.
+   guessing. **Confirmed working end-to-end on real hardware** (Power Off
+   pulse through the actual button; a subsequent Power On click also
+   fired a pulse as expected).
+
+   **"Unknown" dead end, found live and fixed:** real-hardware testing hit
+   exactly the gap this design implies - comms lost while `"on"`
+   (ambiguous: hung/cable/fault/off?) correctly degraded to `"unknown"`,
+   but nothing could recover from there through the UI (both the pulse
+   and mode-command branches are gated off it) - over 2 minutes of
+   continuous handshake retries with zero replies, stuck. Per Tyler's
+   direction: give it one more bounded ~10s window (`ASSUME_OFF_AFTER_S`
+   in `app.py`) after losing comms from `"on"` (or at startup, if the amp
+   was already off before comms were ever established) for a reply;
+   if nothing comes back, conclude `power_state = "off"` rather than
+   leaving the operator stuck - Power On's existing pulse branch then
+   handles it normally. Verified end-to-end against the running backend
+   (fresh boot → `"unknown"` → auto-resolves to `"off"` after ~11s of
+   silence → Power On correctly pulses). NEEDS REAL-HARDWARE
+   VERIFICATION: the timeout-inference path itself (as opposed to the
+   pulse branches it unlocks, which are confirmed) hasn't been exercised
+   against a real ambiguous-comms-loss event on the amp yet.
 6. On real hardware, the generic "request specific message" mechanism
    (`0x81` Cmd `0x01`, Byte4/5 = message address — confirmed from the
    protocol doc §5.1 to be a 16-bit Byte4(HW)/Byte5(LW) value, not a
