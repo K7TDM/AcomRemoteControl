@@ -135,6 +135,16 @@
   color: #ffffff;
 }
 
+/* ATU Bypass button color, driven by the amp's own last-reported
+   atu_label (see renderAtuBypassToggle() in app.js) rather than
+   click-tracked state - green while bypassed, grey (default button look)
+   otherwise. */
+.acom-button[data-bypass-state="on"] {
+  background: #2ea043;
+  border-color: #2ea043;
+  color: #ffffff;
+}
+
 .icon-button {
   background: transparent;
   border: 1px solid var(--border-color);
@@ -197,7 +207,22 @@ select.theme-select {
   display: grid;
   grid-template-columns: 1fr auto;
   column-gap: 0.5rem;
-  align-items: baseline;
+  /* Stretch, not baseline - the label (smaller, uppercase) and value
+     (larger, bold) cells have different natural line-heights, so
+     baseline-aligning them left each one a different box height. In
+     themes that paint a background on these cells (see acom.css), that
+     mismatch showed up as a stair-stepped box instead of one clean bar -
+     stretch plus the flex centering below (so each cell's text still
+     sits centered within its now-equal-height box) fixes that. */
+  align-items: stretch;
+}
+
+.gauge-wrapper[data-mounted-widget="bargraph"] .gauge-label,
+.gauge-hero[data-mounted-widget="bargraph"] .gauge-label,
+.gauge-wrapper[data-mounted-widget="bargraph"] .gauge-value,
+.gauge-hero[data-mounted-widget="bargraph"] .gauge-value {
+  display: flex;
+  align-items: center;
 }
 
 .gauge-wrapper[data-mounted-widget="bargraph"] .gauge-label,
@@ -205,13 +230,17 @@ select.theme-select {
   grid-column: 1;
   grid-row: 1;
   margin-bottom: 0;
+  /* display:flex above overrides the base rule's text-align:center (flex
+     items ignore it) - justify-content is the flex equivalent, keeping the
+     label centered in its cell like before. */
+  justify-content: center;
 }
 
 .gauge-wrapper[data-mounted-widget="bargraph"] .gauge-value,
 .gauge-hero[data-mounted-widget="bargraph"] .gauge-value {
   grid-column: 2;
   grid-row: 1;
-  text-align: right;
+  justify-content: flex-end;
 }
 
 .gauge-wrapper[data-mounted-widget="bargraph"] .gauge-bargraph,
@@ -258,9 +287,10 @@ select.theme-select {
 
 .gauge-peak {
   text-align: center;
-  font-size: 0.7rem;
+  font-size: 0.95rem;
+  font-weight: 600;
   color: var(--text-secondary);
-  margin-top: 0.15rem;
+  margin-top: 0.3rem;
   cursor: pointer;
 }
 
@@ -269,17 +299,3 @@ select.theme-select {
   text-decoration: underline;
 }
 
-dialog#tx-confirm-dialog {
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  color: var(--text-primary);
-  padding: 1.5rem;
-}
-
-dialog#tx-confirm-dialog .actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  margin-top: 1rem;
-}

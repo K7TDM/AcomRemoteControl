@@ -406,6 +406,26 @@ async def change_antenna(req: AntennaActionRequest) -> dict:
     return await _send_pulse_command(link, protocol.build_antenna_next())
 
 
+@app.post("/api/atu/bypass")
+async def toggle_atu_bypass() -> dict:
+    """Toggles ATU Bypass off the amp's own last-reported atu_label (0x27),
+    same pattern as the OPR/STB toggle keying off mode_name - not
+    click-tracked UI state. Bypass -> re-engage ATU via Full Tune for the
+    currently selected antenna; anything else -> Bypass that same antenna
+    (see protocol.build_atu_bypass's own note: this is the closest thing to
+    a direct antenna-select command, not a "select antenna N for normal
+    tuned operation" command - CLAUDE.md open question 3)."""
+    link = _require_serial_link()
+    status = amp_state.antenna_band_status
+    if status is None:
+        raise HTTPException(409, "no antenna/band status received from the amplifier yet")
+    if status.atu_label == protocol.ATU_LABEL_BYPASS:
+        frame = protocol.build_atu_full_tune()
+    else:
+        frame = protocol.build_atu_bypass(status.antenna_number)
+    return await _send_pulse_command(link, frame)
+
+
 # =============================================================================
 # Setup Wizard: serial port enumeration + live reconnect
 # =============================================================================

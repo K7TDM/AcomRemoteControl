@@ -93,8 +93,32 @@ main#dashboard {
 }
 
 #setup-screen[hidden],
-main#dashboard[hidden] {
+main#dashboard[hidden],
+#power-off-screen[hidden] {
   display: none;
+}
+
+#power-off-screen {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+}
+
+.power-off-logo {
+  font-size: 3rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--text-primary);
+  border-bottom: 4px solid var(--accent-label, var(--border-color));
+  padding-bottom: 0.5rem;
+}
+
+#power-off-screen .acom-button {
+  font-size: 1.1rem;
+  padding: 0.8rem 2.5rem;
 }
 
 .setup-section {

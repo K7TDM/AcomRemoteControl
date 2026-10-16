@@ -12,6 +12,7 @@
 }
 
 .gauge-bargraph .track {
+  position: relative;
   display: flex;
   flex-direction: row;
   gap: 2px;
@@ -20,6 +21,20 @@
   border: 1px solid var(--border-color);
   overflow: hidden;
   border-radius: var(--radius);
+}
+
+/* Peak high-water mark - see gauges.js's appendPeakMarker(). Positioned by
+   inline `left` (the peak's own fraction of the track), independent of the
+   segment/fill elements it's layered on top of. */
+.gauge-bargraph .peak-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--zone-danger, #d9402a);
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* Default (ACOM-style segmented) look; Modern overrides .fill to a single

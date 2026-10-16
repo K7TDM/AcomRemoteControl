@@ -13,6 +13,11 @@ const MODE_NAME_STB = "STB Mode";
 const MODE_NAME_OPR_RX = "OPR/RX Mode";
 const MODE_NAME_OPR_TX = "OPR/TX Mode";
 
+// Exact string protocol.py's ATU_LABELS[ATU_LABEL_BYPASS] emits - the ATU
+// Bypass button and status chip key off this, same pattern as the mode
+// names above.
+const ATU_LABEL_NAME_BYPASS = "ATU In Bypass";
+
 // Forward power is rendered separately as a full-width "hero" bar (see
 // #power-out-hero in index.html) rather than inside the regular grid.
 const HERO_GAUGE_DEF = { id: "forward_power_w", label: "Forward Power", unit: "W", min: 0, max: () => appState.maxPowerW || 1500 };
@@ -126,6 +131,9 @@ const appState = {
   prevModeName: null,
   inTx: false,
   justEnteredTx: false,
+  // Settings (the gear icon) can be opened from either the normal dashboard
+  // or the power-off screen - see updateScreenVisibility().
+  setupOpen: false,
 };
 
 let ws = null;
@@ -266,6 +274,26 @@ function render(state) {
   renderFreqReadout(state);
   renderWarningBanner(state);
   renderOprToggle(state);
+  renderAtuBypassToggle(state);
+  updateScreenVisibility();
+}
+
+// Three mutually-exclusive top-level screens: the normal dashboard, Setup
+// (opened via the header's gear icon), and a reduced power-off screen (just
+// the logo + Power On) shown whenever the amp is confirmed off. Setup takes
+// priority over power-off so Settings stays reachable either way - per
+// Tyler: close all the normal dashboard windows while off, but keep Setup
+// accessible from the header regardless of power state.
+function currentScreen() {
+  if (appState.setupOpen) return "setup";
+  return appState.lastStatus?.power_state === "off" ? "power-off" : "dashboard";
+}
+
+function updateScreenVisibility() {
+  const screen = currentScreen();
+  document.getElementById("dashboard").hidden = screen !== "dashboard";
+  document.getElementById("setup-screen").hidden = screen !== "setup";
+  document.getElementById("power-off-screen").hidden = screen !== "power-off";
 }
 
 // Single shared "did a transmission just start" computation, used by both
@@ -296,15 +324,39 @@ function renderOprToggle(state) {
   btn.dataset.oprState = oprState;
 }
 
+// Colors the ATU Bypass button from the amp's own last-reported atu_label
+// (0x27) rather than click-tracked UI state, same pattern as
+// renderOprToggle() above - green while bypassed, grey otherwise (see
+// data-bypass-state in components.css for the color mapping, and the
+// button's click handler in wireControls() for the direction this same
+// label drives).
+function renderAtuBypassToggle(state) {
+  const btn = document.getElementById("btn-atu-bypass");
+  if (!btn) return;
+  const labelName = state.antenna_band_status ? state.antenna_band_status.atu_label_name : null;
+  btn.dataset.bypassState = labelName === ATU_LABEL_NAME_BYPASS ? "on" : "off";
+}
+
 function renderStatusRow(state) {
   const row = document.getElementById("status-row");
   if (!row) return;
   const t = state.telemetry;
+  const bandStatus = state.antenna_band_status;
+  const atuBypassOn = bandStatus ? bandStatus.atu_label_name === ATU_LABEL_NAME_BYPASS : false;
   const chips = [
     chip("Comms", state.comms_ok),
     chip("Mode", true, t ? t.mode_name : "unknown"),
-    chip("ATU", t ? t.atu_assigned : false, state.atu_identity ? state.atu_identity.type_name : "none"),
-    chip("Default Ant", t ? t.default_antenna_selected : false),
+    // Same green/grey as the ATU Bypass button (see renderAtuBypassToggle())
+    // rather than atu_assigned - "assigned" vs. "none" wasn't a useful
+    // distinction here. Text is the configured switch/ATU model
+    // (state.tuner_model), not the amp-reported atu_identity, which stays
+    // empty on real hardware for the 06AT (see CLAUDE.md open question 1/2).
+    chip("ATU", atuBypassOn, state.tuner_model || "none"),
+    // Antenna number, not the default_antenna_selected flag - that flag's
+    // meaning (whether this antenna is marked "default" in the band/antenna
+    // assignment table, not whether it's currently active) wasn't a useful
+    // or self-explanatory thing to show here.
+    chip("Antenna", true, bandStatus ? bandStatus.antenna_number : "unknown"),
   ];
   row.innerHTML = "";
   chips.forEach((c) => row.appendChild(c));
@@ -363,18 +415,21 @@ function renderGauges(state) {
 function mountOrUpdateGauge(el, def, telemetry, theme, forceWidget) {
   if (!el) return;
   const value = telemetry[def.id] ?? null;
-  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain };
+  // Computed before mount/update so the peak can be threaded into opts.peak
+  // for the bargraph's high-water marker (see gauges.js's appendPeakMarker())
+  // in the same pass that updates the badge below it.
+  const peak = updatePeak(def.id, value);
+  const avg = updateTxAverage(def.id, value);
+  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain, peak };
   const widget = resolveWidget(theme, opts, forceWidget);
 
   if (el.dataset.mountedWidget !== widget) {
     el.dataset.mountedWidget = widget;
     mountGauge(el, theme, opts, forceWidget);
   } else {
-    updateGauge(el, value);
+    updateGauge(el, value, peak);
   }
 
-  const peak = updatePeak(def.id, value);
-  const avg = updateTxAverage(def.id, value);
   const badge = ensurePeakBadge(el, def.id);
   badge.textContent = formatPeakBadge(def.id, peak, avg);
 }
@@ -417,19 +472,19 @@ function renderWarningBanner(state) {
 
 function wireControls() {
   document.getElementById("btn-power-on")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: true }))));
+  document.getElementById("btn-power-on-standalone")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: true }))));
   document.getElementById("btn-power-off")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: false }))));
   document.getElementById("btn-opr-toggle")?.addEventListener("click", withErrorBanner(() => {
     // Mirrors the real amp's own physical OPR/STB button: toggles between
     // the two states using the amp's own last-reported mode, not a
     // click-tracked guess. Anything other than a confirmed STB reading
     // (including OPR/RX, OPR/TX, or no comms yet) goes to the safe
-    // direction (STB) - OPR/TX itself is never fired from here, it stays
-    // its own separate, confirm-gated button (see openTxConfirmDialog).
+    // direction (STB).
     const modeName = appState.lastStatus?.telemetry?.mode_name;
     const nextMode = modeName === MODE_NAME_STB ? "opr_rx" : "stb";
     return apiFetch("/api/mode", postJson({ mode: nextMode }));
   }));
-  document.getElementById("btn-mode-opr-tx")?.addEventListener("click", openTxConfirmDialog);
+  document.getElementById("btn-atu-bypass")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/atu/bypass", { method: "POST" })));
   document.getElementById("btn-band-next")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/band", postJson({ direction: "next" }))));
   document.getElementById("btn-band-prev")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/band", postJson({ direction: "prev" }))));
   document.getElementById("btn-antenna-next")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/antenna", postJson({ action: "next" }))));
@@ -441,11 +496,6 @@ function wireControls() {
   document.getElementById("btn-setup-refresh")?.addEventListener("click", withErrorBanner(refreshFromAmp));
   document.getElementById("setup-tuner-select")?.addEventListener("change", updateAntennaSetupVisibility);
 
-  document.getElementById("tx-confirm-ok")?.addEventListener("click", confirmTxArmAndFire);
-  document.getElementById("tx-confirm-cancel")?.addEventListener("click", () => {
-    document.getElementById("tx-confirm-dialog")?.close();
-  });
-
   wireAtuDangerZone();
 }
 
@@ -453,41 +503,19 @@ function postJson(body) {
   return { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
 }
 
-function openTxConfirmDialog() {
-  const dialog = document.getElementById("tx-confirm-dialog");
-  if (dialog && typeof dialog.showModal === "function") dialog.showModal();
-}
-
-async function confirmTxArmAndFire() {
-  const dialog = document.getElementById("tx-confirm-dialog");
-  try {
-    const armResp = await apiFetch("/api/mode/arm_tx", { method: "POST" });
-    const { arm_token } = await armResp.json();
-    await apiFetch("/api/mode", postJson({ mode: "opr_tx", arm_token }));
-    // Only close the dialog - and only report success - once the amp has
-    // actually confirmed the mode change via send_command()'s OK/ERR wait.
-    dialog?.close();
-  } catch (err) {
-    // Leave the dialog open: closing it here would tell the operator TX
-    // fired when it didn't (e.g. the arm window expired, or the amp sent
-    // ERR) - they need to see the failure and decide whether to retry.
-    showActionError(`Failed to key OPR/TX: ${err.message || err}`);
-  }
-}
-
 // =============================================================================
 // Setup screen (amp/tuner model + Antenna Setup matrix)
 // =============================================================================
 
 function openSetupScreen() {
-  document.getElementById("dashboard").hidden = true;
-  document.getElementById("setup-screen").hidden = false;
+  appState.setupOpen = true;
+  updateScreenVisibility();
   loadSetup();
 }
 
 function closeSetupScreen() {
-  document.getElementById("setup-screen").hidden = true;
-  document.getElementById("dashboard").hidden = false;
+  appState.setupOpen = false;
+  updateScreenVisibility();
 }
 
 async function refreshFromAmp() {
