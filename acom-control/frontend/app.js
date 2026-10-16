@@ -275,6 +275,7 @@ function render(state) {
   renderWarningBanner(state);
   renderOprToggle(state);
   renderAtuBypassToggle(state);
+  renderPowerOnButton(state);
   updateScreenVisibility();
 }
 
@@ -312,7 +313,7 @@ function updateTxEdgeState(state) {
 // than click-tracked UI state - see data-opr-state in components.css for
 // the color mapping, and the button's click handler in wireControls() for
 // the toggle direction this same mode name drives. Per Tyler: just two
-// looks - green covers "Operate" broadly (OPR/RX or OPR/TX), grey is
+// looks - green covers "Operate" broadly (OPR/RX or OPR/TX), red is
 // Standby. No separate tx/rx distinction.
 function renderOprToggle(state) {
   const btn = document.getElementById("btn-opr-toggle");
@@ -322,6 +323,19 @@ function renderOprToggle(state) {
   if (modeName === MODE_NAME_STB) oprState = "stb";
   else if (modeName === MODE_NAME_OPR_RX || modeName === MODE_NAME_OPR_TX) oprState = "operate";
   btn.dataset.oprState = oprState;
+}
+
+// Hides the main button-bar's Power On button once the amp is confirmed
+// on - clicking it then does nothing useful (the mode command it would
+// otherwise send is only meaningful from STB, see /api/power's own
+// on:true branch), so it's just a dead button to leave visible. Power
+// Off is left alone - always needed while on. The power-off screen's own
+// standalone Power On button (see updateScreenVisibility()) is a
+// separate element, unaffected by this.
+function renderPowerOnButton(state) {
+  const btn = document.getElementById("btn-power-on");
+  if (!btn) return;
+  btn.hidden = state.power_state === "on";
 }
 
 // Colors the ATU Bypass button from the amp's own last-reported atu_label
@@ -538,6 +552,7 @@ function wireControls() {
     return apiFetch("/api/mode", postJson({ mode: nextMode }));
   }));
   document.getElementById("btn-atu-bypass")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/atu/bypass", { method: "POST" })));
+  document.getElementById("btn-atu-tune")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/atu/tune", { method: "POST" })));
   document.getElementById("btn-band-next")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/band", postJson({ direction: "next" }))));
   document.getElementById("btn-band-prev")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/band", postJson({ direction: "prev" }))));
   document.getElementById("btn-antenna-next")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/antenna", postJson({ action: "next" }))));

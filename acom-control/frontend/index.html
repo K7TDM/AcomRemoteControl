@@ -70,6 +70,12 @@
            current antenna) or 0x0E/0x01 "Full Tune" (re-engages it) via
            POST /api/atu/bypass depending on current state. -->
       <button id="btn-atu-bypass" class="acom-button" type="button" data-bypass-state="unknown">ATU Bypass</button>
+      <!-- Standalone 0x0E/0x01 Full Tune, independent of the Bypass toggle
+           above (which also sends this same command when exiting Bypass -
+           see POST /api/atu/bypass's docstring - there's no other way to
+           resume normal operation per the protocol doc). This button lets
+           a tune be started on demand without touching Bypass state. -->
+      <button id="btn-atu-tune" class="acom-button" type="button">Tune</button>
       <button id="btn-band-prev" class="acom-button" type="button">◀ Band</button>
       <button id="btn-band-next" class="acom-button" type="button">Band ▶</button>
       <button id="btn-antenna-next" class="acom-button" type="button">Next Antenna</button>
