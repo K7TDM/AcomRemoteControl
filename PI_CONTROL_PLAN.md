@@ -613,6 +613,16 @@ and matches the project's scale (a personal local-network control panel).
   rotate (size or time based) so it doesn't fill the SD card over months
   of uptime — plain `logging.handlers.RotatingFileHandler` is enough for
   v1, no need for anything fancier.
+- **Download logs from the UI**: Tyler wants a way to download the
+  backend's logs directly from the dashboard, somewhere in the Setup
+  screen, rather than needing to SSH in and run `journalctl`. Not
+  implemented yet - just a note for a future session. Likely shape: a new
+  `GET /api/logs` (or similar) endpoint that streams/zips whatever
+  `_configure_logging()` is currently writing to, plus a "Download Logs"
+  button in `index.html`'s `#setup-screen`. Depends on how logging is
+  actually configured by the time this gets built (journald via systemd
+  vs. a file - see "Backend vs. frontend logging" and the log rotation
+  note above), and interacts with the log-rotation item just above it.
 
 ## Follow-ups (explicitly out of scope for v1)
 
