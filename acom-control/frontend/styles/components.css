@@ -137,12 +137,19 @@
 
 /* ATU Bypass button color, driven by the amp's own last-reported
    atu_label (see renderAtuBypassToggle() in app.js) rather than
-   click-tracked state - green while bypassed, grey (default button look)
-   otherwise. */
-.acom-button[data-bypass-state="on"] {
+   click-tracked state - green while the ATU is actively engaged (normal
+   tuned operation), yellow while bypassed. Bypass isn't the "good"/
+   default state, so it doesn't get the same green as "active". */
+.acom-button[data-bypass-state="active"] {
   background: #2ea043;
   border-color: #2ea043;
   color: #ffffff;
+}
+
+.acom-button[data-bypass-state="bypass"] {
+  background: var(--warn-bg, #f5e050);
+  border-color: var(--warn-bg, #f5e050);
+  color: var(--warn-text, #1a1200);
 }
 
 .icon-button {
