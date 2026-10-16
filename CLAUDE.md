@@ -319,6 +319,13 @@ frame. Key ones:
    VERIFICATION: the timeout-inference path itself (as opposed to the
    pulse branches it unlocks, which are confirmed) hasn't been exercised
    against a real ambiguous-comms-loss event on the amp yet.
+
+   **TODO (not yet applied):** after seeing the new power-off screen
+   (`#power-off-screen` in the frontend) live, Tyler felt the ~10s
+   `ASSUME_OFF_AFTER_S` wait before it appears is too slow - wants it
+   closer to ~5s. No code change made yet; next session should just
+   lower the constant in `app.py` (and re-verify the auto-resolve timing
+   noted above still holds at the new value).
 6. On real hardware, the generic "request specific message" mechanism
    (`0x81` Cmd `0x01`, Byte4/5 = message address — confirmed from the
    protocol doc §5.1 to be a 16-bit Byte4(HW)/Byte5(LW) value, not a
@@ -366,6 +373,24 @@ frame. Key ones:
    2018 doc's 04AT/10AS, and 1200S vs. A1200S protocol differences) may
    ultimately be the real answer, in which case this needs ACOM/dealer
    clarification rather than further guessing from this doc alone.
+7. **TODO (not yet applied):** Tyler wants the frontend's "Comms" status
+   chip to act as a tighter watchdog - turn red after just ~0.5s of
+   silence, rather than its current behavior. Today the chip's LED just
+   mirrors `comms_ok` from `/api/status`/`AmpState`, which is driven by
+   `SerialLink._comms_watchdog()` in `serial_link.py` (polls once/sec,
+   flips unhealthy only after **10s** of no received frame - see its
+   `healthy = (now - self._last_rx_monotonic) < 10.0` check). That 10s/1s
+   granularity is tuned for a coarser "is the amp fundamentally there"
+   signal and already gates real behavior documented above (item 4/5's
+   `power_state` logic, `set_power()`'s pulse-vs-command branching) - so
+   simply lowering those two numbers to make the chip twitchier risks
+   spurious `power_state` flips on brief, harmless gaps. Likely the
+   right shape is a **second, separate, frontend-only** liveness signal
+   (e.g. the dashboard's own WebSocket already receives a timestamped
+   tick on every telemetry push - the frontend could track "ms since
+   last message" itself and flip the Comms LED red past 500ms) rather
+   than retuning the backend's `comms_ok`/`power_state` watchdog. No
+   code change made yet - this is a note only, per Tyler's instruction.
 
 ## Status
 
