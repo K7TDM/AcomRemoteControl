@@ -26,7 +26,11 @@
   --button-text: #f2f2f2;
   --button-bg-active: #e0a030;
   --button-text-active: #1a1200;
-  --zone-good: #8ddb4a;
+  /* A deeper green than the readout/LED green above - that paler shade
+     read as washed-out for the gauge digit/bargraph fill color specifically,
+     this matches the saturated green already used for "active" states
+     elsewhere (OPR/STB operate, ATU Bypass on). */
+  --zone-good: #2ea043;
   --zone-warn: #f0a830;
   --zone-danger: #ff4a3a;
 }
@@ -108,7 +112,10 @@
 
 [data-theme="acom"] .gauge-wrapper[data-mounted-widget="bargraph"] .gauge-peak,
 [data-theme="acom"] .gauge-hero[data-mounted-widget="bargraph"] .gauge-peak {
-  margin: 0 0.5rem 0.4rem;
+  /* Top value matches components.css's own .gauge-peak margin-top (this
+     rule's higher specificity was otherwise silently zeroing it out in
+     this theme specifically). */
+  margin: 0.3rem 0.5rem 0.4rem;
 }
 
 [data-theme="acom"] .freq-readout {

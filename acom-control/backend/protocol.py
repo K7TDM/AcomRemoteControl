@@ -471,6 +471,8 @@ def parse_atu_identity(frame: Frame) -> AtuIdentity:
 # 0x27 - current antenna/band/segment status (amp -> computer)
 # =============================================================================
 
+ATU_LABEL_BYPASS = 6  # see ATU_LABELS below - drives the frontend's ATU Bypass button state
+
 ATU_LABELS = {
     0: "No Label",
     1: "ATU Initialization",

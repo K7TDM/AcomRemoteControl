@@ -82,10 +82,11 @@ export function mountGauge(el, themeStyle, opts, forceWidget) {
   mountedWidgets.set(el, { widget, opts, bodyEl, valueEl });
 }
 
-export function updateGauge(el, value) {
+export function updateGauge(el, value, peak) {
   const mounted = mountedWidgets.get(el);
   if (!mounted) return;
   mounted.opts.value = value;
+  if (peak !== undefined) mounted.opts.peak = peak;
   mounted.valueEl.textContent = formatValue(value, mounted.opts.unit);
   mounted.valueEl.dataset.zone = zoneForFraction(fraction(mounted.opts));
   if (mounted.widget === "needle") {
@@ -129,16 +130,32 @@ function buildBargraphFill(track, opts, style) {
     fill.className = "fill zone-" + zoneForFraction(frac);
     fill.style.width = `${frac * 100}%`;
     track.appendChild(fill);
-    return;
+  } else {
+    const filledCount = Math.round(frac * BARGRAPH_SEGMENT_COUNT);
+    for (let i = 0; i < BARGRAPH_SEGMENT_COUNT; i++) {
+      const seg = document.createElement("div");
+      seg.className = "segment";
+      if (i < filledCount) seg.classList.add("filled");
+      if (i / BARGRAPH_SEGMENT_COUNT >= ZONE_DANGER_FRACTION) seg.classList.add("danger-zone");
+      track.appendChild(seg);
+    }
   }
-  const filledCount = Math.round(frac * BARGRAPH_SEGMENT_COUNT);
-  for (let i = 0; i < BARGRAPH_SEGMENT_COUNT; i++) {
-    const seg = document.createElement("div");
-    seg.className = "segment";
-    if (i < filledCount) seg.classList.add("filled");
-    if (i / BARGRAPH_SEGMENT_COUNT >= ZONE_DANGER_FRACTION) seg.classList.add("danger-zone");
-    track.appendChild(seg);
-  }
+  appendPeakMarker(track, opts);
+}
+
+// Thin red high-water mark at the gauge's current peak - a classic analog
+// meter's peak-hold needle, left behind at the highest point the fill has
+// reached. Reflects whatever app.js's updatePeak() already tracked for this
+// gauge (same value the "Pk:" badge below the track shows), so it follows
+// the exact same reset rules (grows-only, or resets on the next TX's rising
+// edge - see PEAK_RESET_ON_TX_IDS in app.js) with no logic duplicated here.
+function appendPeakMarker(track, opts) {
+  if (opts.peak === null || opts.peak === undefined || Number.isNaN(opts.peak)) return;
+  const peakFrac = fraction({ ...opts, value: opts.peak });
+  const marker = document.createElement("div");
+  marker.className = "peak-marker";
+  marker.style.left = `${peakFrac * 100}%`;
+  track.appendChild(marker);
 }
 
 // Three evenly-spaced numeric ticks (min / midpoint / max) under the track -

@@ -62,16 +62,25 @@
       <button id="btn-power-off" class="acom-button danger" type="button">Power Off</button>
       <!-- Single toggle mirroring the real amp's own physical OPR/STB
            button: color/state come from live telemetry.mode_name (see
-           renderOprToggle() in app.js), not click-tracked UI state. OPR/TX
-           stays its own separate, confirm-gated button below. -->
+           renderOprToggle() in app.js), not click-tracked UI state. -->
       <button id="btn-opr-toggle" class="acom-button" type="button" data-opr-state="unknown">OPR/STB</button>
-      <button id="btn-mode-opr-tx" class="acom-button danger" type="button">OPR/TX</button>
+      <!-- Toggle mirroring the amp's own last-reported atu_label (0x27),
+           same pattern as OPR/STB above - see renderAtuBypassToggle() in
+           app.js. Sends 0x0E/0x02 "Bypass" (bypasses ATU tuning for the
+           current antenna) or 0x0E/0x01 "Full Tune" (re-engages it) via
+           POST /api/atu/bypass depending on current state. -->
+      <button id="btn-atu-bypass" class="acom-button" type="button" data-bypass-state="off">ATU Bypass</button>
       <button id="btn-band-prev" class="acom-button" type="button">◀ Band</button>
       <button id="btn-band-next" class="acom-button" type="button">Band ▶</button>
       <button id="btn-antenna-next" class="acom-button" type="button">Next Antenna</button>
       <button id="btn-buzzer-test" class="acom-button" type="button">Buzzer Test</button>
     </div>
   </main>
+
+  <section id="power-off-screen" hidden>
+    <div class="power-off-logo">ACOM</div>
+    <button id="btn-power-on-standalone" class="acom-button" type="button">Power On</button>
+  </section>
 
   <section id="setup-screen" hidden>
     <div class="setup-section">
@@ -154,14 +163,6 @@
       <button id="btn-setup-close" class="acom-button" type="button">Close</button>
     </div>
   </section>
-
-  <dialog id="tx-confirm-dialog">
-    <p>Key the amplifier into OPR/TX mode?</p>
-    <div class="actions">
-      <button id="tx-confirm-cancel" class="acom-button" type="button">Cancel</button>
-      <button id="tx-confirm-ok" class="acom-button danger" type="button">Key TX</button>
-    </div>
-  </dialog>
 
   <script type="module" src="app.js"></script>
 </body>
