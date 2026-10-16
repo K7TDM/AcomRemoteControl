@@ -326,15 +326,16 @@ function renderOprToggle(state) {
 
 // Colors the ATU Bypass button from the amp's own last-reported atu_label
 // (0x27) rather than click-tracked UI state, same pattern as
-// renderOprToggle() above - green while bypassed, grey otherwise (see
-// data-bypass-state in components.css for the color mapping, and the
-// button's click handler in wireControls() for the direction this same
-// label drives).
+// renderOprToggle() above - green while the ATU is actively engaged
+// (normal tuned operation), yellow while bypassed (see data-bypass-state
+// in components.css for the color mapping, and the button's click handler
+// in wireControls() for the direction this same label drives). Per Tyler:
+// bypass isn't the "good"/default state, so it shouldn't read as green.
 function renderAtuBypassToggle(state) {
   const btn = document.getElementById("btn-atu-bypass");
   if (!btn) return;
   const labelName = state.antenna_band_status ? state.antenna_band_status.atu_label_name : null;
-  btn.dataset.bypassState = labelName === ATU_LABEL_NAME_BYPASS ? "on" : "off";
+  btn.dataset.bypassState = labelName === ATU_LABEL_NAME_BYPASS ? "bypass" : "active";
 }
 
 function renderStatusRow(state) {
@@ -342,16 +343,17 @@ function renderStatusRow(state) {
   if (!row) return;
   const t = state.telemetry;
   const bandStatus = state.antenna_band_status;
-  const atuBypassOn = bandStatus ? bandStatus.atu_label_name === ATU_LABEL_NAME_BYPASS : false;
+  const atuActive = bandStatus ? bandStatus.atu_label_name !== ATU_LABEL_NAME_BYPASS : false;
   const chips = [
     chip("Comms", state.comms_ok),
     chip("Mode", true, t ? t.mode_name : "unknown"),
-    // Same green/grey as the ATU Bypass button (see renderAtuBypassToggle())
-    // rather than atu_assigned - "assigned" vs. "none" wasn't a useful
-    // distinction here. Text is the configured switch/ATU model
-    // (state.tuner_model), not the amp-reported atu_identity, which stays
-    // empty on real hardware for the 06AT (see CLAUDE.md open question 1/2).
-    chip("ATU", atuBypassOn, state.tuner_model || "none"),
+    // On (green) when the ATU is actively engaged, same direction as the
+    // ATU Bypass button (see renderAtuBypassToggle()) rather than
+    // atu_assigned - "assigned" vs. "none" wasn't a useful distinction
+    // here. Text is the configured switch/ATU model (state.tuner_model),
+    // not the amp-reported atu_identity, which stays empty on real
+    // hardware for the 06AT (see CLAUDE.md open question 1/2).
+    chip("ATU", atuActive, state.tuner_model || "none"),
     // Antenna number, not the default_antenna_selected flag - that flag's
     // meaning (whether this antenna is marked "default" in the band/antenna
     // assignment table, not whether it's currently active) wasn't a useful
@@ -454,15 +456,66 @@ function renderFreqReadout(state) {
   el.innerHTML = `<span class="value">${mhz}</span><span class="unit">MHz</span>`;
 }
 
+// Cycling state for the warning banner - module-level rather than inside
+// renderWarningBanner() because the rotation needs its own timer, decoupled
+// from how often telemetry ticks arrive (several times/sec), not reset on
+// every render() call.
+const WARNING_ROTATION_MS = 2500;
+let warningActiveNames = [];
+let warningRotationIndex = 0;
+let warningRotationTimer = null;
+
+function stopWarningRotation() {
+  if (warningRotationTimer) {
+    clearInterval(warningRotationTimer);
+    warningRotationTimer = null;
+  }
+}
+
+// Shows all of the amp's currently active fault names, one at a time,
+// cycling through the list when there's more than one - rather than the
+// previous "first fault (+N more)" summary, which never surfaced what the
+// other faults actually were. Driven directly by state.error_flags on every
+// telemetry tick (not a timeout), so it still disappears the instant the
+// amp's own active_names list goes empty - same real-time clearing as
+// before, just now also handling the multi-fault case.
 function renderWarningBanner(state) {
   const el = document.getElementById("warning-banner");
   if (!el) return;
   const errors = state.error_flags;
-  if (errors && errors.active_names && errors.active_names.length > 0) {
-    el.textContent = errors.active_names[0] + (errors.active_names.length > 1 ? ` (+${errors.active_names.length - 1} more)` : "");
-    el.hidden = false;
-  } else {
+  const names = errors && errors.active_names ? errors.active_names : [];
+
+  if (names.length === 0) {
     el.hidden = true;
+    el.textContent = "";
+    warningActiveNames = [];
+    warningRotationIndex = 0;
+    stopWarningRotation();
+    return;
+  }
+
+  el.hidden = false;
+  // A fault clearing or a new one appearing changes which names are in the
+  // list - restart the cycle from the front rather than keep whatever index
+  // happened to be mid-rotation, which could now point past the end of a
+  // shorter list or land on a stale position.
+  const namesChanged =
+    names.length !== warningActiveNames.length || names.some((n, i) => n !== warningActiveNames[i]);
+  warningActiveNames = names;
+  if (namesChanged) warningRotationIndex = 0;
+
+  if (names.length === 1) {
+    stopWarningRotation();
+    el.textContent = names[0];
+    return;
+  }
+
+  el.textContent = names[warningRotationIndex % names.length];
+  if (!warningRotationTimer) {
+    warningRotationTimer = setInterval(() => {
+      warningRotationIndex = (warningRotationIndex + 1) % warningActiveNames.length;
+      el.textContent = warningActiveNames[warningRotationIndex];
+    }, WARNING_ROTATION_MS);
   }
 }
 

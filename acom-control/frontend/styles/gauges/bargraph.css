@@ -30,9 +30,13 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 2px;
-  margin-left: -1px;
+  width: 3px;
+  margin-left: -1.5px;
   background: var(--zone-danger, #d9402a);
+  /* A light outline on both sides so the marker stays legible whether it's
+     sitting over the dark unfilled track or over the green filled portion
+     (e.g. right after a peak - current gap closes back up). */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
   pointer-events: none;
   z-index: 2;
 }
