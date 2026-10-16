@@ -84,7 +84,14 @@ Known `Cmd` (Byte 3) values:
   all, antenna assignments)
 - `0x0E` **ATU Management** (Byte5): `0x01` Full Tune, `0x02` **Bypass
   Command (Number of Antenna)**, `0x2E`/`0x2F` activate cyclic display
-  messages, `0xFF` assign/unassign ATU
+  messages, `0xFF` assign/unassign ATU. **These four are the entire
+  command set** (confirmed directly from the doc's own §5.1 table, re-read
+  on request) - there is no fifth "resume normal tuned operation without
+  a fresh tuning cycle" command. So exiting Bypass only has one option
+  (Full Tune), and it will always visibly retune - not a bug in
+  `acom-control`'s `/api/atu/bypass` endpoint, just what the protocol
+  allows. `/api/atu/tune` exposes Full Tune standalone for when the
+  operator wants to tune on demand without touching Bypass state at all.
 - `0x0F` Request specific ATU tuning record (by antenna/band lookup index)
 - `0x10` ATU Service commands: erase current/specific/all tunings, erase
   whole ATU memory, memory dump-to-file / load-from-file, exit service menu
@@ -153,7 +160,24 @@ frame. Key ones:
   `0xA0` is the computer→amplifier write counterpart, see the Antenna
   naming/switching section above
 - `0x21` error codes bitfields (many warning/soft-fault/hard-fault bits,
-  incl. ATU comm errors, tuning failures, power-switch alarms)
+  incl. ATU comm errors, tuning failures, power-switch alarms). All ~130
+  documented codes are now in `protocol.py`'s `FAULT_CODE_NAMES` (was
+  previously only the ~35 "most common" ones, found insufficient once a
+  user actually hit an unlisted code live). **Confirmed erratum in the
+  protocol doc itself** (section 3.7.1): the "Error Codes 9" group (bytes
+  21/22, bias-voltage-threshold warnings) is printed with the *same*
+  `0x80`-`0x8F` hex labels as the "Error Codes 8" group right above it,
+  instead of the correct `0x90`-`0x9F` - confirmed because this backend's
+  own `active_bits()` bit-numbering (`word_idx * 16 + bit`) matches the
+  doc's printed labels for every other group (e.g. "Error Codes A" ↔
+  `0xA0`-`0xAF`) and only disagrees here. `FAULT_CODE_NAMES` uses the
+  mathematically-correct `0x90`-`0x9F`, not the doc's typo. Also:
+  `0x8C`-`0x8F` (same byte as `0x8A`/`0x8B`) are genuinely blank/undescribed
+  in the doc - not a transcription gap - so a user-visible "Unknown fault
+  0x8E" is expected and correct as of protocol doc v1.3; it may be a
+  spare/reserved bit, or a fault added on newer firmware/the 06AT that
+  this 2018 doc revision was never updated to describe (see open question
+  1/2 on 06AT/20AT vs. 04AT/10AS protocol differences).
 - `0x2A` "ATU Service" menu parameters (model, versions, working hours,
   tune % for C/L/CA, serial number)
 - `0x2E`/`0x2F` **main cyclic telemetry** — the one to poll/stream for a

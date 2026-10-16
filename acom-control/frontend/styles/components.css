@@ -123,15 +123,31 @@
   color: #d9402a;
 }
 
+/* Power Off specifically (not every .danger button - the ATU erase/segment
+   delete buttons keep the plain outline-only look above) gets a solid red
+   fill, per Tyler: it should read as a stop button, not just red-tinted
+   text on the default button background. */
+#btn-power-off {
+  background: #d9402a;
+  border-color: #d9402a;
+  color: #ffffff;
+}
+
 /* OPR/STB toggle color, driven by live telemetry.mode_name (see
    renderOprToggle() in app.js) rather than click-tracked state - per
    Tyler: green while in Operate (OPR/RX or OPR/TX, no distinction between
-   them), grey while in Standby. "stb" and "unknown" are left at the
-   default button look. Hardcoded rather than themed, same as
-   .acom-button.danger above: this reads the same regardless of theme. */
+   them), red while in Standby. "unknown" is left at the default button
+   look. Hardcoded rather than themed, same as .acom-button.danger above:
+   this reads the same regardless of theme. */
 .acom-button[data-opr-state="operate"] {
   background: #2ea043;
   border-color: #2ea043;
+  color: #ffffff;
+}
+
+.acom-button[data-opr-state="stb"] {
+  background: #d9402a;
+  border-color: #d9402a;
   color: #ffffff;
 }
 

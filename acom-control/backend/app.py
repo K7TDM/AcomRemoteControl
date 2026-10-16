@@ -414,7 +414,13 @@ async def toggle_atu_bypass() -> dict:
     currently selected antenna; anything else -> Bypass that same antenna
     (see protocol.build_atu_bypass's own note: this is the closest thing to
     a direct antenna-select command, not a "select antenna N for normal
-    tuned operation" command - CLAUDE.md open question 3)."""
+    tuned operation" command - CLAUDE.md open question 3).
+
+    Confirmed from the protocol doc (section 5.1's ATU Management table):
+    exiting Bypass via Full Tune ALWAYS runs a real tuning cycle - there is
+    no "just resume normal operation without retuning" command. That's not
+    a bug here, it's the only documented option. See /api/atu/tune for a
+    standalone way to run a tune cycle without going through Bypass."""
     link = _require_serial_link()
     status = amp_state.antenna_band_status
     if status is None:
@@ -424,6 +430,19 @@ async def toggle_atu_bypass() -> dict:
     else:
         frame = protocol.build_atu_bypass(status.antenna_number)
     return await _send_pulse_command(link, frame)
+
+
+@app.post("/api/atu/tune")
+async def tune() -> dict:
+    """Explicit, deliberate Full Tune (0x0E/0x01) - a separate action from
+    /api/atu/bypass. Per the protocol doc (section 5.1's ATU Management
+    table), Full Tune is also the *only* documented way to exit Bypass -
+    there's no "resume last tuning without a fresh cycle" command - so
+    toggle_atu_bypass() above already sends this same frame when exiting
+    Bypass. This endpoint exists so a tune can be started on demand without
+    going through the Bypass toggle at all (e.g. while already active)."""
+    link = _require_serial_link()
+    return await _send_pulse_command(link, protocol.build_atu_full_tune())
 
 
 # =============================================================================
