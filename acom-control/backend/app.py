@@ -1088,5 +1088,30 @@ async def erase_atu_memory(req: AtuEraseMemoryRequest) -> dict:
     return _require_confirmed(result)
 
 
-# Mounted last so it doesn't shadow the /api and /ws routes registered above.
+@app.get("/", include_in_schema=False)
+async def get_index() -> Response:
+    """Serves index.html with its asset URLs (app.js, styles/*.css)
+    cache-busted to the current version (?v=v0.1.3 etc.) instead of
+    plain filenames - a mismatched cached app.js/index.html pair
+    (stale JS referencing elements a fresh HTML page doesn't have, or
+    vice versa) was observed on real hardware to fail completely
+    silently (no visible error, button clicks just do nothing). Every
+    version gets its own asset URLs the browser has never cached
+    before, so there's nothing to go stale - no more manually clearing
+    site data after an update. This route (an exact match on "/") is
+    registered before the StaticFiles mount below and so takes
+    priority over it for this one path; everything else (app.js,
+    styles/*, etc.) still comes straight from disk via that mount,
+    unversioned - only the HTML shell needs this treatment, since it's
+    the one thing that assigns the version-tagged URLs those files are
+    fetched through.
+
+    Explicitly never cached itself (Cache-Control: no-store) - if this
+    shell were ever served stale, it would keep pointing at an old
+    asset version forever, defeating the whole point."""
+    html = (FRONTEND_DIR / "index.html").read_text().replace("{{ASSET_VERSION}}", GIT_VERSION)
+    return Response(content=html, media_type="text/html", headers={"Cache-Control": "no-store"})
+
+
+# Mounted last so it doesn't shadow the /api, /ws, and / routes registered above.
 app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
