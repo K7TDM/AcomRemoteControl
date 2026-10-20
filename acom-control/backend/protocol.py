@@ -420,6 +420,67 @@ def build_set_antenna_assignments(slots: list[AntennaSlot]) -> bytes:
 
 
 # =============================================================================
+# 0x11 - PCB Versions of the main CPU module (amp -> computer)
+# =============================================================================
+
+AMP_TYPE_A600S = 1
+AMP_TYPE_A1200S = 2
+
+AMP_TYPE_NAMES = {
+    AMP_TYPE_A600S: "A600S",
+    AMP_TYPE_A1200S: "A1200S",
+}
+
+
+@dataclass
+class AmplifierIdentity:
+    type_code: int
+    fw_version: int
+    fw_subversion: int
+    cpu_version: int
+    cpu_subversion: int
+    interface_a_version: int
+    interface_a_subversion: int
+    interface_b_version: int
+    interface_b_subversion: int
+    modem_version: int
+    modem_subversion: int
+    bootloader_version: int
+    bootloader_subversion: int
+    serial_number: str
+    hard_fault_count: int
+
+    @property
+    def type_name(self) -> str:
+        return AMP_TYPE_NAMES.get(self.type_code, f"unknown(0x{self.type_code:02X})")
+
+
+def parse_amplifier_identity(frame: Frame) -> AmplifierIdentity:
+    """Parses message 0x11 (30 bytes: Byte3 amplifier type, Byte4-15
+    FW/CPU/Interface_A/Interface_B/Modem/Bootloader version/subversion
+    pairs, Byte16-27 serial number, Byte28 Hard Fault record count)."""
+    data = frame.data  # bytes 3..28 inclusive (26 bytes)
+    serial = data[13:25].decode("ascii", errors="replace").rstrip("\x00")
+    return AmplifierIdentity(
+        type_code=data[0],
+        fw_version=data[1],
+        fw_subversion=data[2],
+        cpu_version=data[3],
+        cpu_subversion=data[4],
+        interface_a_version=data[5],
+        interface_a_subversion=data[6],
+        interface_b_version=data[7],
+        interface_b_subversion=data[8],
+        modem_version=data[9],
+        modem_subversion=data[10],
+        bootloader_version=data[11],
+        bootloader_subversion=data[12],
+        serial_number=serial,
+        hard_fault_count=data[25],
+    )
+
+
+# =============================================================================
 # 0x16 - ATU/ASEL identity (amp -> computer)
 # =============================================================================
 

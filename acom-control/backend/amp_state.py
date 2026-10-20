@@ -3,6 +3,7 @@ app.py (REST + WebSocket) and modbus_server.py both read from.
 """
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Literal, Optional
@@ -10,7 +11,9 @@ from typing import Literal, Optional
 from . import protocol
 
 PowerState = Literal["unknown", "on", "off"]
-from .amp_profiles import AmpProfile
+from .amp_profiles import AMP_TYPE_CODE_TO_MODEL, AmpProfile
+
+logger = logging.getLogger("acom.backend.amp_state")
 
 
 @dataclass
@@ -32,6 +35,7 @@ class AmpState:
     power_state: PowerState = "unknown"
 
     telemetry: Optional[protocol.AmpTelemetry] = None
+    amplifier_identity: Optional[protocol.AmplifierIdentity] = None
     atu_identity: Optional[protocol.AtuIdentity] = None
     antenna_band_status: Optional[protocol.AntennaBandStatus] = None
     error_flags: Optional[protocol.ErrorFlags] = None
@@ -45,6 +49,13 @@ class AmpState:
     )
 
     def mark_comms_ok(self) -> None:
+        # Guard the log line on the actual False->True edge, not every
+        # call - this runs on every single received frame (0x2F telemetry
+        # streams continuously), so logging unconditionally would spam the
+        # log instead of marking the one transition that matters for
+        # reconstructing power-on/recovery timing from a log export.
+        if not self.comms_ok:
+            logger.info("Comms restored (power_state %s -> on)", self.power_state)
         self.comms_ok = True
         self.last_update_ts = time.time()
         # Live telemetry is definitive proof the amp's CPU is up and
@@ -67,11 +78,21 @@ class AmpState:
         """Called after a deliberate, comms-confirmed pulse_power_toggle()
         for an off request (see app.py's set_power()) - the only way
         power_state is allowed to become "off"."""
+        logger.info("Power state confirmed OFF")
         self.power_state = "off"
 
     def update_telemetry(self, telemetry: protocol.AmpTelemetry) -> None:
         self.telemetry = telemetry
         self.mark_comms_ok()
+
+    def update_amplifier_identity(self, identity: protocol.AmplifierIdentity) -> None:
+        self.amplifier_identity = identity
+        self.mark_comms_ok()
+
+    def detected_amp_model(self) -> Optional[str]:
+        if self.amplifier_identity is None:
+            return None
+        return AMP_TYPE_CODE_TO_MODEL.get(self.amplifier_identity.type_code)
 
     def update_atu_identity(self, identity: protocol.AtuIdentity) -> None:
         self.atu_identity = identity
@@ -131,6 +152,8 @@ class AmpState:
             "has_pam2": self.profile.has_pam2,
             "tuner_model": self.tuner_model,
             "telemetry": _telemetry_to_dict(self.telemetry),
+            "amplifier_identity": _amplifier_identity_to_dict(self.amplifier_identity),
+            "detected_amp_model": self.detected_amp_model(),
             "atu_identity": _atu_identity_to_dict(self.atu_identity),
             "antenna_band_status": _band_status_to_dict(self.antenna_band_status),
             "error_flags": _error_flags_to_dict(self.error_flags),
@@ -176,6 +199,29 @@ def _telemetry_to_dict(t: Optional[protocol.AmpTelemetry]) -> Optional[dict]:
         "atu_assigned": t.atu_assigned,
         "hide_segments_scale": t.hide_segments_scale,
         "last_fault_is_hard": t.last_fault_is_hard,
+    }
+
+
+def _amplifier_identity_to_dict(a: Optional[protocol.AmplifierIdentity]) -> Optional[dict]:
+    if a is None:
+        return None
+    return {
+        "type_code": a.type_code,
+        "type_name": a.type_name,
+        "fw_version": a.fw_version,
+        "fw_subversion": a.fw_subversion,
+        "cpu_version": a.cpu_version,
+        "cpu_subversion": a.cpu_subversion,
+        "interface_a_version": a.interface_a_version,
+        "interface_a_subversion": a.interface_a_subversion,
+        "interface_b_version": a.interface_b_version,
+        "interface_b_subversion": a.interface_b_subversion,
+        "modem_version": a.modem_version,
+        "modem_subversion": a.modem_subversion,
+        "bootloader_version": a.bootloader_version,
+        "bootloader_subversion": a.bootloader_subversion,
+        "serial_number": a.serial_number,
+        "hard_fault_count": a.hard_fault_count,
     }
 
 

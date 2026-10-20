@@ -27,6 +27,14 @@ AMP_PROFILES: dict[str, AmpProfile] = {
 # name/assignment tables over RS-232.
 TUNER_MODELS: tuple[str, ...] = ("04AT", "06AT", "20AT")
 
+# Maps message 0x11's "Amplifier Type" byte (protocol.AMP_TYPE_NAMES) to our
+# own AMP_PROFILES keys, so a live-detected type can auto-select a profile.
+# Deliberately no entry for 2000S - the 2018 protocol doc this message comes
+# from predates that model and has no code for it (see CLAUDE.md open
+# question 2) - an unmapped/unrecognized code just means auto-detection
+# stays a no-op and the manual Setup-screen dropdown keeps governing.
+AMP_TYPE_CODE_TO_MODEL: dict[int, str] = {1: "600S", 2: "1200S"}
+
 
 def get_amp_profile(model: str) -> AmpProfile:
     try:

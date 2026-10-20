@@ -2,7 +2,12 @@
 # step 7 and acom-control's top-level README.md for install instructions.
 #
 # Install:
-#   sudo useradd --system --no-create-home --groups dialout acom-control
+#   sudo useradd --system --no-create-home --groups dialout,systemd-journal acom-control
+#   # systemd-journal is needed so GET /api/logs (Setup screen's "Download
+#   # Logs" button) can read this unit's own journal entries as this
+#   # unprivileged user - without it, journalctl exits with a permission
+#   # error. If the user already exists, add it after the fact instead:
+#   #   sudo usermod -aG systemd-journal acom-control
 #   sudo cp acom-control.service /etc/systemd/system/
 #   # edit the paths below (WorkingDirectory/ExecStart) if the repo isn't
 #   # checked out at /home/pi/AcomRemoteControl/acom-control

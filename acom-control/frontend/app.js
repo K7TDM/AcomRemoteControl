@@ -277,6 +277,7 @@ function render(state) {
   renderAtuBypassToggle(state);
   renderPowerOnButton(state);
   updateScreenVisibility();
+  if (appState.setupOpen) updateAntennaSetupVisibility();
 }
 
 // Three mutually-exclusive top-level screens: the normal dashboard, Setup
@@ -366,7 +367,12 @@ function renderStatusRow(state) {
     // atu_assigned - "assigned" vs. "none" wasn't a useful distinction
     // here. Text is the configured switch/ATU model (state.tuner_model),
     // not the amp-reported atu_identity, which stays empty on real
-    // hardware for the 06AT (see CLAUDE.md open question 1/2).
+    // hardware for the 06AT (see CLAUDE.md open question 1/2). NOTE: this
+    // predates updateAntennaSetupVisibility()/renderSetupDetectionNotes()
+    // relying on atu_identity.present to auto-show Antenna Setup - if this
+    // comment's claim holds on real hardware, that auto-detection won't
+    // fire for a 06AT either (falls back to the manual dropdown, same as
+    // today) - NEEDS REAL-HARDWARE VERIFICATION, see the plan note.
     chip("ATU", atuActive, state.tuner_model || "none"),
     // Antenna number, not the default_antenna_selected flag - that flag's
     // meaning (whether this antenna is marked "default" in the band/antenna
@@ -563,6 +569,7 @@ function wireControls() {
   document.getElementById("btn-setup-save")?.addEventListener("click", withErrorBanner(saveSetup));
   document.getElementById("btn-setup-refresh")?.addEventListener("click", withErrorBanner(refreshFromAmp));
   document.getElementById("setup-tuner-select")?.addEventListener("change", updateAntennaSetupVisibility);
+  document.getElementById("btn-download-logs")?.addEventListener("click", () => window.open("/api/logs", "_blank"));
 
   wireAtuDangerZone();
 }
@@ -650,6 +657,45 @@ function populateConfigForm(cfg) {
       `<option value="">None</option>` + cfg.available_tuner_models.map((m) => `<option value="${m}">${m}</option>`).join("");
     tunerSelect.value = cfg.tuner_model || "";
   }
+  const debugCheckbox = document.getElementById("setup-debug-logging");
+  if (debugCheckbox) debugCheckbox.checked = !!cfg.debug_logging_enabled;
+  renderSetupDetectionNotes(appState.lastStatus);
+}
+
+// Amp model is auto-detected from the amp's own 0x11 reply when possible
+// (see app.py's _maybe_apply_detected_amp_model, which already applies the
+// detected model to config/AmpState - this note just surfaces that it
+// happened, or that detection hasn't landed yet so the dropdown above is
+// still manual). Tuner model can't be auto-detected beyond presence (ACOM's
+// own 06AT/20AT manual: both report as "04AT", same control board) - this
+// only cross-checks presence against whatever's manually selected.
+function renderSetupDetectionNotes(state) {
+  const ampNote = document.getElementById("setup-amp-detect-note");
+  if (ampNote) {
+    const detected = state && state.detected_amp_model;
+    if (detected) {
+      ampNote.hidden = false;
+      ampNote.textContent = `Auto-detected from amp: ${detected}`;
+    } else {
+      ampNote.hidden = false;
+      ampNote.textContent = "Not yet detected from the amp - using manual selection.";
+    }
+  }
+
+  const tunerWarning = document.getElementById("setup-tuner-mismatch-warning");
+  const tunerSelect = document.getElementById("setup-tuner-select");
+  if (tunerWarning && tunerSelect) {
+    const atuPresent = state && state.atu_identity ? state.atu_identity.present : null;
+    if (atuPresent === true && !tunerSelect.value) {
+      tunerWarning.hidden = false;
+      tunerWarning.textContent = "ATU/ASEL detected on the amp, but no tuner model is selected above - pick one for display purposes.";
+    } else if (atuPresent === false && tunerSelect.value) {
+      tunerWarning.hidden = false;
+      tunerWarning.textContent = "No ATU/ASEL detected on the amp right now - check it's connected and assigned, or this label may be wrong.";
+    } else {
+      tunerWarning.hidden = true;
+    }
+  }
 }
 
 function populateSerialPortOptions(portsResp, currentDevice) {
@@ -713,7 +759,9 @@ function updateAntennaSetupVisibility() {
   const tunerSelect = document.getElementById("setup-tuner-select");
   const section = document.getElementById("antenna-setup-section");
   if (!tunerSelect || !section) return;
-  section.hidden = !tunerSelect.value;
+  const atuPresent = appState.lastStatus?.atu_identity?.present;
+  section.hidden = !tunerSelect.value && !atuPresent;
+  renderSetupDetectionNotes(appState.lastStatus);
 }
 
 function readAntennaMatrix() {
@@ -732,6 +780,7 @@ function readAntennaMatrix() {
 async function saveSetup() {
   const ampModel = document.getElementById("setup-amp-select").value;
   const tunerModel = document.getElementById("setup-tuner-select").value || null;
+  const debugLogging = document.getElementById("setup-debug-logging")?.checked;
   const serialSelect = document.getElementById("setup-serial-select");
   const serialDevice = serialSelect ? serialSelect.value : undefined;
   const serialChanged = !!serialSelect && serialDevice !== (serialSelect.dataset.originalValue || "");
@@ -747,6 +796,7 @@ async function saveSetup() {
     postJson({
       amp_model: ampModel,
       tuner_model: tunerModel,
+      logging_level: debugLogging ? "DEBUG" : "INFO",
       ...(serialChanged ? { serial_device: serialDevice, confirm: true } : {}),
     })
   );
