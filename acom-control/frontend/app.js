@@ -134,6 +134,10 @@ const appState = {
   // Settings (the gear icon) can be opened from either the normal dashboard
   // or the power-off screen - see updateScreenVisibility().
   setupOpen: false,
+  // Software update screen (the header's update icon) - same deal as
+  // setupOpen, mutually exclusive with it (see openSetupScreen()/
+  // openUpdateScreen()).
+  updateScreenOpen: false,
 };
 
 let ws = null;
@@ -288,6 +292,7 @@ function render(state) {
 // accessible from the header regardless of power state.
 function currentScreen() {
   if (appState.setupOpen) return "setup";
+  if (appState.updateScreenOpen) return "update";
   return appState.lastStatus?.power_state === "off" ? "power-off" : "dashboard";
 }
 
@@ -295,6 +300,7 @@ function updateScreenVisibility() {
   const screen = currentScreen();
   document.getElementById("dashboard").hidden = screen !== "dashboard";
   document.getElementById("setup-screen").hidden = screen !== "setup";
+  document.getElementById("update-screen").hidden = screen !== "update";
   document.getElementById("power-off-screen").hidden = screen !== "power-off";
 }
 
@@ -570,7 +576,8 @@ function wireControls() {
   document.getElementById("btn-setup-refresh")?.addEventListener("click", withErrorBanner(refreshFromAmp));
   document.getElementById("setup-tuner-select")?.addEventListener("change", updateAntennaSetupVisibility);
   document.getElementById("btn-download-logs")?.addEventListener("click", () => window.open("/api/logs", "_blank"));
-  document.getElementById("btn-update-available")?.addEventListener("click", toggleUpdatePopover);
+  document.getElementById("btn-update-available")?.addEventListener("click", openUpdateScreen);
+  document.getElementById("btn-update-close")?.addEventListener("click", closeUpdateScreen);
   document.getElementById("btn-update-now")?.addEventListener("click", withErrorBanner(applyUpdateNow));
   document.getElementById("btn-clear-logs")?.addEventListener("click", withErrorBanner(async () => {
     if (!window.confirm("Clear the log view? Downloaded logs will only include entries from this point forward - nothing is deleted from the system log itself.")) return;
@@ -591,6 +598,7 @@ function postJson(body) {
 
 function openSetupScreen() {
   appState.setupOpen = true;
+  appState.updateScreenOpen = false;
   updateScreenVisibility();
   loadSetup();
 }
@@ -870,16 +878,20 @@ function wireAtuDangerZone() {
 }
 
 // =============================================================================
-// Self-update: a header button that's always there and clickable - click
-// it, it checks right then and shows current vs. new build in the
-// popover, with "Update Now" available there if something's newer. On
-// top of that, the backend's own daily background check (journalctl-
-// visible) also drives the icon's appearance between clicks: a plain
-// icon normally, a highlighted + gently bouncing one once that check
-// has found something, so it can get your attention without requiring
-// a click first. Visible to anyone with the dashboard open, same as
-// every other control here - there's no auth in this app (per-user
-// login is a known future item, not built yet).
+// Self-update: a header button that opens a full screen (same pattern as
+// Setup's gear icon) showing current vs. new version, "Update Now" if
+// something's newer, a link to the full changelog, and - if a check
+// finds a new release - the actual changelog entries between the
+// running version and the new one, pulled straight from CHANGELOG.md
+// at the new release's tag (not the working tree, which hasn't been
+// updated yet - see app.py's _read_changelog_at_ref()). On top of the
+// on-click check, the backend's own daily background check
+// (journalctl-visible) drives the icon's appearance between clicks: a
+// plain icon normally, a highlighted + gently bouncing one once that
+// check has found something, so it can get your attention without
+// requiring a click first. Visible to anyone with the dashboard open,
+// same as every other control here - there's no auth in this app
+// (per-user login is a known future item, not built yet).
 // =============================================================================
 
 const UPDATE_STATUS_POLL_MS = 10 * 60 * 1000; // just re-reads the backend's cached daily-check result
@@ -901,23 +913,77 @@ async function refreshUpdateStatus() {
   }
 }
 
-async function toggleUpdatePopover() {
-  const popover = document.getElementById("update-popover");
-  if (!popover) return;
-  const opening = popover.hidden;
-  popover.toggleAttribute("hidden");
-  if (!opening) return;
+function openUpdateScreen() {
+  appState.setupOpen = false;
+  appState.updateScreenOpen = true;
+  updateScreenVisibility();
+  checkForUpdateNow();
+}
 
-  const headline = document.getElementById("update-popover-headline");
-  const currentEl = document.getElementById("update-current-commit");
-  const latestEl = document.getElementById("update-latest-commit");
+function closeUpdateScreen() {
+  appState.updateScreenOpen = false;
+  updateScreenVisibility();
+}
+
+function escapeHtml(text) {
+  return text.replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[ch]));
+}
+
+/** Minimal, tailored to this project's own CHANGELOG.md shape (not a
+ * general markdown renderer): "### Heading" lines and "- bullet" lines,
+ * everything else as plain text. Good enough since we're the only
+ * author of the content being rendered. */
+function renderChangelogMarkdown(markdown) {
+  let html = "";
+  let inList = false;
+  const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
+  for (const rawLine of markdown.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) { closeList(); continue; }
+    if (line.startsWith("### ")) {
+      closeList();
+      html += `<h4>${escapeHtml(line.slice(4))}</h4>`;
+    } else if (line.startsWith("- ")) {
+      if (!inList) { html += "<ul>"; inList = true; }
+      html += `<li>${escapeHtml(line.slice(2))}</li>`;
+    } else {
+      closeList();
+      html += `<p>${escapeHtml(line)}</p>`;
+    }
+  }
+  closeList();
+  return html;
+}
+
+function renderUpdateChanges() {
+  const section = document.getElementById("update-changes-section");
+  const body = document.getElementById("update-changes-body");
+  if (!section || !body) return;
+  const changes = updateStatus?.changes || [];
+  section.hidden = changes.length === 0;
+  if (changes.length === 0) return;
+  body.innerHTML = changes.map((entry) => {
+    const heading = `v${entry.version}${entry.date ? ` - ${entry.date}` : ""}`;
+    return `<h3 class="changelog-version">${escapeHtml(heading)}</h3>${renderChangelogMarkdown(entry.body)}`;
+  }).join("");
+}
+
+async function checkForUpdateNow() {
+  const headline = document.getElementById("update-headline");
+  const currentEl = document.getElementById("update-current-version");
+  const latestEl = document.getElementById("update-latest-version");
   const updateNowButton = document.getElementById("btn-update-now");
+  const statusEl = document.getElementById("update-status");
   if (headline) headline.textContent = "Checking for updates...";
   if (currentEl) currentEl.textContent = "";
   if (latestEl) latestEl.textContent = "";
+  if (statusEl) statusEl.hidden = true;
   // Hidden until a check actually confirms there's something to install -
   // nothing to click/no reason to restart the service otherwise.
-  if (updateNowButton) updateNowButton.hidden = true;
+  if (updateNowButton) { updateNowButton.hidden = true; updateNowButton.disabled = false; }
+  document.getElementById("update-changes-section")?.setAttribute("hidden", "");
 
   try {
     const resp = await apiFetch("/api/update/check", { method: "POST" });
@@ -930,6 +996,7 @@ async function toggleUpdatePopover() {
         : updateStatus.error ? `Check failed: ${updateStatus.error}` : "Already up to date";
     }
     if (updateNowButton) updateNowButton.hidden = !updateStatus.available;
+    renderUpdateChanges();
     renderUpdateButtonHighlight();
   } catch (err) {
     if (headline) headline.textContent = `Check failed: ${err.message}`;
@@ -941,7 +1008,7 @@ async function applyUpdateNow() {
     "Update now? The backend will restart - amp control will be briefly " +
     "unavailable (usually just a few seconds)."
   )) return;
-  const statusEl = document.getElementById("update-popover-status");
+  const statusEl = document.getElementById("update-status");
   const button = document.getElementById("btn-update-now");
   // Raw commit hash, not updateStatus.current_version (that's the
   // tag-based display string) - waitForUpdateRestart() just needs

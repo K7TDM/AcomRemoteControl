@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import secrets
 import subprocess
 import time
@@ -720,9 +721,62 @@ update_status: dict = {
     "latest_version": None,
     "checked_at": None,
     "error": None,
+    "changes": [],
 }
 
 _update_check_task: Optional[asyncio.Task] = None
+
+CHANGELOG_PATH = REPO_ROOT / "CHANGELOG.md"
+CHANGELOG_VERSION_HEADER_RE = re.compile(r"^## \[(\d+\.\d+\.\d+)\](?:\s*-\s*(.+))?$", re.MULTILINE)
+
+
+def _version_tuple(version: str) -> tuple[int, int, int]:
+    """Best-effort MAJOR.MINOR.PATCH parse. Strips a leading "v" and any
+    `git describe`-style "-N-gHASH" suffix (current_version can be e.g.
+    "v0.1.2-3-gabc1234" when ahead of the last tag) - unparseable input
+    (no tags yet, "unknown") falls back to (0, 0, 0) rather than raising,
+    since this only ever feeds a "which changelog entries are newer than
+    this" comparison, not something that needs to be exact."""
+    bare = version.lstrip("v").split("-")[0]
+    parts = bare.split(".")
+    try:
+        return tuple(int(p) for p in (parts + ["0", "0"])[:3])  # type: ignore[return-value]
+    except ValueError:
+        return (0, 0, 0)
+
+
+def _parse_changelog_entries(text: str) -> list[dict]:
+    """Splits a CHANGELOG.md (Keep a Changelog style) into per-version
+    sections keyed by `## [X.Y.Z] - date` headers - deliberately ignores
+    `[Unreleased]` (not a released version, and nothing a Pi update
+    would ever land on) and anything else that doesn't match that exact
+    shape, rather than trying to be a general markdown parser."""
+    matches = list(CHANGELOG_VERSION_HEADER_RE.finditer(text))
+    entries = []
+    for i, m in enumerate(matches):
+        version, date = m.group(1), (m.group(2) or "").strip()
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        entries.append({"version": version, "date": date, "body": text[start:end].strip()})
+    return entries
+
+
+async def _read_changelog_at_ref(ref: str) -> str:
+    """Reads CHANGELOG.md as of `ref` (a tag) straight from the local git
+    object database - not the working tree, which is still whatever's
+    currently checked out (the whole point of `check` mode is to never
+    touch it). Purely local once the tag's objects are fetched (already
+    done by the helper's own `check`/apply modes), so this runs directly
+    as this unprivileged process - no sudo needed, unlike the fetch/pull/
+    restart steps that need REPO_OWNER's network credentials or root."""
+    proc = await asyncio.create_subprocess_exec(
+        "git", "-C", str(REPO_ROOT), "show", f"{ref}:CHANGELOG.md",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(stderr.decode(errors="replace").strip() or "git show failed")
+    return stdout.decode(errors="replace")
 
 
 async def _run_update_helper(*args: str, timeout: float) -> tuple[int, str, str]:
@@ -741,6 +795,7 @@ async def _check_for_update() -> None:
     network, auth broken, etc.) are logged and recorded but never raised
     - this runs unattended on a timer, so there's no one to show an
     exception to."""
+    update_status["changes"] = []
     try:
         returncode, stdout, stderr = await _run_update_helper("check", timeout=UPDATE_CHECK_TIMEOUT_S)
         if returncode != 0:
@@ -755,6 +810,19 @@ async def _check_for_update() -> None:
             backend_logger.info(
                 "Update available: %s -> %s", update_status["current_version"], update_status["latest_version"]
             )
+            try:
+                changelog_text = await _read_changelog_at_ref(update_status["latest_version"])
+                current_v = _version_tuple(update_status["current_version"])
+                latest_v = _version_tuple(update_status["latest_version"])
+                update_status["changes"] = [
+                    entry for entry in _parse_changelog_entries(changelog_text)
+                    if current_v < _version_tuple(entry["version"]) <= latest_v
+                ]
+            except Exception as exc:
+                # Not fatal to the check itself - "update available" is
+                # still correct even if we can't show what's in it.
+                backend_logger.warning("Could not load changelog entries for %s: %s",
+                                        update_status["latest_version"], exc)
     except Exception as exc:
         update_status["error"] = str(exc)
         backend_logger.warning("Update check failed: %s", exc)
@@ -809,6 +877,19 @@ async def apply_update() -> dict:
         raise HTTPException(500, f"failed to launch update: {exc}") from exc
     backend_logger.info("Update requested from the dashboard (currently at commit %s)", GIT_COMMIT)
     return {"ok": True, "launched": True, "current_commit": GIT_COMMIT}
+
+
+@app.get("/changelog")
+async def get_changelog() -> Response:
+    """Full CHANGELOG.md as currently checked out, for the update
+    screen's "View full changelog" link (opens in a new tab) - plain
+    text rather than rendering markdown, no renderer dependency needed
+    for something this simple."""
+    try:
+        text = CHANGELOG_PATH.read_text()
+    except FileNotFoundError:
+        raise HTTPException(404, "CHANGELOG.md not found")
+    return Response(content=text, media_type="text/plain")
 
 
 # =============================================================================

@@ -17,6 +17,18 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.3] - 2026-10-20
+
+### Added
+- The update icon now opens a full screen (same pattern as the Setup
+  gear icon) instead of a small popover - current/new version, "Update
+  Now," and a "View full changelog" link that opens this file in a new
+  tab.
+- When a newer release is found, the update screen shows exactly
+  what's new - every changelog entry between the version you're on and
+  the new one, pulled from `CHANGELOG.md` as of the new release's tag
+  (not the working tree, which hasn't been updated yet).
+
 ## [0.1.2] - 2026-10-20
 
 ### Added

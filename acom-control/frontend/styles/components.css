@@ -200,25 +200,32 @@
   }
 }
 
-.update-popover {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 1rem;
-  z-index: 20;
-  width: min(300px, calc(100vw - 2rem));
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 1rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+#update-changes-body h4 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.9rem;
 }
 
-.update-popover p {
-  margin: 0.25rem 0;
+#update-changes-body h4:first-child {
+  margin-top: 0;
 }
 
-.update-popover .acom-button {
-  margin-top: 0.5rem;
+#update-changes-body ul {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.25rem;
+}
+
+#update-changes-body .changelog-version {
+  font-size: 1rem;
+  font-weight: bold;
+  border-top: 1px solid var(--border-color);
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+#update-changes-body .changelog-version:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
 }
 
 select.theme-select {

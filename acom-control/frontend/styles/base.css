@@ -84,7 +84,8 @@ main#dashboard {
   border: 1px solid var(--border-color);
 }
 
-#setup-screen {
+#setup-screen,
+#update-screen {
   max-width: 900px;
   margin: 0 auto;
   padding: 1rem;
@@ -94,6 +95,7 @@ main#dashboard {
 }
 
 #setup-screen[hidden],
+#update-screen[hidden],
 main#dashboard[hidden],
 #power-off-screen[hidden] {
   display: none;
