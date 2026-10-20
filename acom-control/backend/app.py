@@ -38,8 +38,8 @@ def _read_git_commit() -> str:
     """Short commit hash this process was started from - computed once at
     import time (cheap: the process restarts after any real update, so a
     stale cached value would only ever happen if something else patched
-    files without restarting). Used by the Setup screen to show what's
-    currently running and to detect when POST /api/update's restart has
+    files without restarting). Shown in the update popover, and used by
+    the frontend to detect when POST /api/update/apply's restart has
     actually landed, rather than guessing from connectivity blips alone."""
     try:
         result = subprocess.run(
@@ -669,12 +669,13 @@ async def clear_logs() -> dict:
 
 
 # =============================================================================
-# Self-update: a daily background check (no one has to go looking for an
-# update - the dashboard's header icon lights up on its own) plus the
-# apply action behind its popover's "Update Now" button. Built because
-# running multi-line SSH commands from a phone is a pain - both of these
-# shell out (via sudo) to the single fixed, install.sh-provisioned helper
-# script at UPDATE_APPLY_SCRIPT; see setup/acom-update-apply.sh and
+# Self-update: a header button that checks on click (plus the same check
+# once a day in the background, journalctl-visible even though nothing
+# in the UI polls for it) and the apply action behind its popover's
+# "Update Now" button. Built because running multi-line SSH commands
+# from a phone is a pain - both of these shell out (via sudo) to the
+# single fixed, install.sh-provisioned helper script at
+# UPDATE_APPLY_SCRIPT; see setup/acom-update-apply.sh and
 # setup/acom-control-update.sudoers for exactly what it's allowed to do
 # and why. Nothing here runs with any more privilege than that one
 # script grants - this process itself stays unprivileged. Visible/
@@ -745,11 +746,15 @@ async def _update_check_loop() -> None:
         await asyncio.sleep(UPDATE_CHECK_INTERVAL_S)
 
 
-@app.get("/api/update/status")
-async def get_update_status() -> dict:
-    """Cached result of the daily background check (_update_check_loop) -
-    cheap, just reads an in-memory dict, no git calls on this request
-    path. Drives the header icon/popover's visibility and commit display."""
+@app.post("/api/update/check")
+async def check_for_update_now() -> dict:
+    """On-demand version of the same daily background check - the header
+    icon's popover calls this every time it's opened, so "Update Now" is
+    always backed by a fresh answer rather than whatever the daily timer
+    last happened to see (which could be hours stale, or simply hasn't
+    run yet on a freshly restarted service). Read-only, never pulls or
+    restarts."""
+    await _check_for_update()
     return dict(update_status)
 
 
@@ -760,9 +765,8 @@ async def apply_update() -> dict:
     acom-update-apply.sh. Detached (not awaited): `systemctl restart`
     kills this very process partway through, so this returns as soon as
     the update is *launched*, not once it's finished. The frontend
-    should watch GET /api/update/status (or just /api/config's
-    git_commit) for the restart actually landing, not expect this
-    request to stay alive for it."""
+    should watch /api/config's git_commit for the restart actually
+    landing, not expect this request to stay alive for it."""
     try:
         subprocess.Popen(
             ["sudo", UPDATE_APPLY_SCRIPT],

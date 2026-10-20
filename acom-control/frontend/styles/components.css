@@ -177,12 +177,6 @@
   cursor: pointer;
 }
 
-#btn-update-available {
-  color: var(--warn-text, #1a1200);
-  background: var(--warn-bg, #f5e050);
-  border-color: var(--warn-bg, #f5e050);
-}
-
 .update-popover {
   position: absolute;
   top: calc(100% + 0.5rem);
