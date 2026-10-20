@@ -893,9 +893,13 @@ async function toggleUpdatePopover() {
   const headline = document.getElementById("update-popover-headline");
   const currentEl = document.getElementById("update-current-commit");
   const latestEl = document.getElementById("update-latest-commit");
+  const updateNowButton = document.getElementById("btn-update-now");
   if (headline) headline.textContent = "Checking for updates...";
   if (currentEl) currentEl.textContent = "";
   if (latestEl) latestEl.textContent = "";
+  // Hidden until a check actually confirms there's something to install -
+  // nothing to click/no reason to restart the service otherwise.
+  if (updateNowButton) updateNowButton.hidden = true;
 
   try {
     const resp = await apiFetch("/api/update/check", { method: "POST" });
@@ -907,6 +911,7 @@ async function toggleUpdatePopover() {
         ? "Update available"
         : updateStatus.error ? `Check failed: ${updateStatus.error}` : "Already up to date";
     }
+    if (updateNowButton) updateNowButton.hidden = !updateStatus.available;
   } catch (err) {
     if (headline) headline.textContent = `Check failed: ${err.message}`;
   }
