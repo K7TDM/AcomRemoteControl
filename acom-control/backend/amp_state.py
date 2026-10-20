@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Literal, Optional
 
 from . import protocol
@@ -36,6 +36,7 @@ class AmpState:
 
     telemetry: Optional[protocol.AmpTelemetry] = None
     amplifier_identity: Optional[protocol.AmplifierIdentity] = None
+    amp_settings: Optional[protocol.AmpSettings] = None
     atu_identity: Optional[protocol.AtuIdentity] = None
     antenna_band_status: Optional[protocol.AntennaBandStatus] = None
     error_flags: Optional[protocol.ErrorFlags] = None
@@ -43,6 +44,13 @@ class AmpState:
     atu_service_info: Optional[protocol.AtuServiceInfo] = None
     atu_measure: Optional[protocol.AtuMeasureTelemetry] = None
     last_command_result: Optional[protocol.CommandAck] = None
+    # Hard Fault event record (0x31-0x34) - on-demand only (not part of
+    # the normal startup handshake/resync), see app.py's amp-snapshot
+    # collection. Stale/absent until explicitly requested.
+    hard_fault_record_1: Optional[protocol.HardFaultRecord1] = None
+    hard_fault_record_2: Optional[protocol.HardFaultRecord2] = None
+    hard_fault_record_3: Optional[protocol.HardFaultRecord3] = None
+    hard_fault_record_4: Optional[protocol.HardFaultRecord4] = None
 
     antenna_config: list[protocol.AntennaSlot] = field(
         default_factory=lambda: [protocol.AntennaSlot(number=i) for i in range(1, 5)]
@@ -93,6 +101,26 @@ class AmpState:
         if self.amplifier_identity is None:
             return None
         return AMP_TYPE_CODE_TO_MODEL.get(self.amplifier_identity.type_code)
+
+    def update_amp_settings(self, settings: protocol.AmpSettings) -> None:
+        self.amp_settings = settings
+        self.mark_comms_ok()
+
+    def update_hard_fault_record_1(self, record: protocol.HardFaultRecord1) -> None:
+        self.hard_fault_record_1 = record
+        self.mark_comms_ok()
+
+    def update_hard_fault_record_2(self, record: protocol.HardFaultRecord2) -> None:
+        self.hard_fault_record_2 = record
+        self.mark_comms_ok()
+
+    def update_hard_fault_record_3(self, record: protocol.HardFaultRecord3) -> None:
+        self.hard_fault_record_3 = record
+        self.mark_comms_ok()
+
+    def update_hard_fault_record_4(self, record: protocol.HardFaultRecord4) -> None:
+        self.hard_fault_record_4 = record
+        self.mark_comms_ok()
 
     def update_atu_identity(self, identity: protocol.AtuIdentity) -> None:
         self.atu_identity = identity
@@ -153,6 +181,11 @@ class AmpState:
             "tuner_model": self.tuner_model,
             "telemetry": _telemetry_to_dict(self.telemetry),
             "amplifier_identity": _amplifier_identity_to_dict(self.amplifier_identity),
+            "amp_settings": _amp_settings_to_dict(self.amp_settings),
+            "hard_fault_record_1": _hard_fault_record_1_to_dict(self.hard_fault_record_1),
+            "hard_fault_record_2": asdict(self.hard_fault_record_2) if self.hard_fault_record_2 else None,
+            "hard_fault_record_3": asdict(self.hard_fault_record_3) if self.hard_fault_record_3 else None,
+            "hard_fault_record_4": asdict(self.hard_fault_record_4) if self.hard_fault_record_4 else None,
             "detected_amp_model": self.detected_amp_model(),
             "atu_identity": _atu_identity_to_dict(self.atu_identity),
             "antenna_band_status": _band_status_to_dict(self.antenna_band_status),
@@ -225,6 +258,23 @@ def _amplifier_identity_to_dict(a: Optional[protocol.AmplifierIdentity]) -> Opti
     }
 
 
+def _amp_settings_to_dict(s: Optional[protocol.AmpSettings]) -> Optional[dict]:
+    if s is None:
+        return None
+    return {
+        "cat_interface_type": s.cat_interface_type,
+        "cat_interface_type_name": s.cat_interface_type_name,
+        "cat_command_set": s.cat_command_set,
+        "cat_command_set_name": s.cat_command_set_name,
+        "cat_baud_rate": s.cat_baud_rate,
+        "cat_baud_rate_name": s.cat_baud_rate_name,
+        "cat_byte_spacing_us": s.cat_byte_spacing_us,
+        "cat_polling_time_ms": s.cat_polling_time_ms,
+        "buzzer_volume": s.buzzer_volume,
+        "user_flags": s.user_flags,
+    }
+
+
 def _atu_identity_to_dict(a: Optional[protocol.AtuIdentity]) -> Optional[dict]:
     if a is None:
         return None
@@ -255,6 +305,19 @@ def _band_status_to_dict(s: Optional[protocol.AntennaBandStatus]) -> Optional[di
         "segment_status_raw": list(s.segment_status_raw),
         "atu_label": s.atu_label,
         "atu_label_name": s.atu_label_name,
+    }
+
+
+def _hard_fault_record_1_to_dict(r: Optional[protocol.HardFaultRecord1]) -> Optional[dict]:
+    if r is None:
+        return None
+    return {
+        "hf_count": r.hf_count,
+        "hf_num": r.hf_num,
+        "error_flags": _error_flags_to_dict(r.error_flags),
+        "amplifier_mode": r.amplifier_mode,
+        "amplifier_transition_state": r.amplifier_transition_state,
+        "system_counter": r.system_counter,
     }
 
 

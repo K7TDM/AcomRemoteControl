@@ -19,6 +19,20 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Added
+- Setup screen's new "CAT / Rig Control" section shows and lets you
+  change the amp's own rear-panel CAT port config (interface type,
+  command set/"library", baud rate, byte spacing, polling time) - same
+  settings as the amp's own front-panel CAT menu, read via message
+  `0x12` and written via `0x05`/`0x06`/`0x07`.
+- "Download Amp Snapshot" button (Setup screen) re-syncs and downloads
+  every piece of amp state this backend knows how to ask for as one
+  JSON file - for comparing real-hardware setups over time (different
+  radio, with/without a tuner, etc.), not a single-field lookup. Now
+  includes the full per-antenna/per-band ATU tuning matrix (44 combos)
+  and all four Hard Fault event records, neither of which existed
+  before - see `CLAUDE.md` open question 15.
+
 ### Fixed
 - Header update icon rendered as Apple's own colorful emoji glyph on
   iOS ("an arrow with a blue box") instead of the plain styleable

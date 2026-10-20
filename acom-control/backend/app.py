@@ -9,11 +9,13 @@ Run during development with:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import secrets
 import subprocess
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
@@ -158,6 +160,8 @@ def _on_frame(frame: protocol.Frame) -> None:
             identity = protocol.parse_amplifier_identity(frame)
             amp_state.update_amplifier_identity(identity)
             _maybe_apply_detected_amp_model(identity)
+        elif frame.address == 0x12:
+            amp_state.update_amp_settings(protocol.parse_amp_settings(frame))
         elif frame.address == 0x16:
             amp_state.update_atu_identity(protocol.parse_atu_identity(frame))
         elif frame.address == 0x18:
@@ -174,6 +178,14 @@ def _on_frame(frame: protocol.Frame) -> None:
             amp_state.update_atu_service_info(protocol.parse_atu_service_info(frame))
         elif frame.address == 0x2E:
             amp_state.update_atu_measure(protocol.parse_atu_measure_telemetry(frame))
+        elif frame.address == 0x31:
+            amp_state.update_hard_fault_record_1(protocol.parse_hard_fault_record_1(frame))
+        elif frame.address == 0x32:
+            amp_state.update_hard_fault_record_2(protocol.parse_hard_fault_record_2(frame))
+        elif frame.address == 0x33:
+            amp_state.update_hard_fault_record_3(protocol.parse_hard_fault_record_3(frame))
+        elif frame.address == 0x34:
+            amp_state.update_hard_fault_record_4(protocol.parse_hard_fault_record_4(frame))
         elif frame.address == 0x03:
             amp_state.update_last_command_result(protocol.parse_ok(frame))
         elif frame.address == 0x04:
@@ -306,6 +318,137 @@ async def resync() -> dict:
     link = _require_serial_link()
     await link.resync()
     return {"ok": True}
+
+
+async def _wait_for_matching_reply(predicate, timeout_s: float, poll_interval_s: float = 0.02):
+    """Polls `predicate()` (reads straight from amp_state) until it
+    returns something truthy or `timeout_s` elapses. This protocol has
+    no request/reply correlation ID, so this is the only way to line a
+    reply up with the request that (hopefully) triggered it - safe
+    here specifically because every reply this is used for self-
+    identifies (ATU tuning records carry their own antenna/band; Hard
+    Fault records each land on their own fixed address), so polling
+    AmpState for "the thing I just asked for" can't be confused by a
+    reply to some unrelated, earlier request."""
+    deadline = asyncio.get_running_loop().time() + timeout_s
+    while asyncio.get_running_loop().time() < deadline:
+        result = predicate()
+        if result is not None:
+            return result
+        await asyncio.sleep(poll_interval_s)
+    return None
+
+
+async def _collect_atu_tuning_matrix(link: SerialLink, timeout_s: float = 0.3) -> list[dict]:
+    """Loops over every antenna x band combination (4 x 11 = 44),
+    requesting each one's stored ATU tuning record (0x81 Cmd 0x0F) and
+    waiting briefly for the amp's self-identifying 0x1A reply. Not part
+    of the normal startup handshake (too slow/unnecessary for every
+    dashboard session) - only run as part of the full amp-snapshot
+    download. No reply within the timeout is treated as "no stored
+    tuning for this combo," not an error - plausible for antenna/band
+    pairs that were never tuned. NEEDS REAL-HARDWARE VERIFICATION -
+    never exercised against a real amp."""
+    results = []
+    for antenna_number in range(1, protocol.NUM_ANTENNAS + 1):
+        for band_number in range(1, len(protocol.BAND_NAMES) + 1):
+            await link.enqueue(protocol.build_request_atu_tuning_record(antenna_number, band_number))
+
+            def check():
+                t = amp_state.atu_segment_tuning
+                if t and t.antenna_number == antenna_number and t.band_number == band_number:
+                    return t
+                return None
+
+            tuning = await _wait_for_matching_reply(check, timeout_s)
+            if tuning is not None:
+                results.append({
+                    "antenna_number": antenna_number,
+                    "band_number": band_number,
+                    "band_name": protocol.BAND_NAMES[band_number - 1],
+                    **_atu_segment_tuning_dict(tuning),
+                })
+    return results
+
+
+def _atu_segment_tuning_dict(t: protocol.AtuSegmentTuning) -> dict:
+    return {
+        "low_freq_khz": t.low_freq_khz,
+        "high_freq_khz": t.high_freq_khz,
+        "segment_count": t.segment_count,
+        "current_segment": t.current_segment,
+        "antenna_type": t.antenna_type,
+        "segment_low_freq_khz": t.segment_low_freq_khz,
+        "segment_high_freq_khz": t.segment_high_freq_khz,
+        "tuning_ct_pct": t.tuning_ct_pct,
+        "tuning_l_pct": t.tuning_l_pct,
+        "tuning_ca_pct": t.tuning_ca_pct,
+        "tuning_age_hours": t.tuning_age_hours,
+    }
+
+
+async def _collect_hard_fault_records(link: SerialLink, timeout_s: float = 0.5) -> dict:
+    """Requests all four Hard Fault record messages (0x81 Cmd 0x03,
+    Byte5=1..4) and waits for each one's own fixed-address reply
+    (0x31-0x34) - see build_request_hard_fault_record()'s docstring for
+    the "one event, four messages" interpretation this assumes. Not
+    part of the normal startup handshake - on-demand only, as part of
+    the full amp-snapshot download. NEEDS REAL-HARDWARE VERIFICATION -
+    never exercised against a real amp."""
+    records: dict[str, Optional[dict]] = {}
+    specs = [
+        (1, lambda: amp_state.hard_fault_record_1, "record_1"),
+        (2, lambda: amp_state.hard_fault_record_2, "record_2"),
+        (3, lambda: amp_state.hard_fault_record_3, "record_3"),
+        (4, lambda: amp_state.hard_fault_record_4, "record_4"),
+    ]
+    for record_number, getter, key in specs:
+        before = getter()
+        await link.enqueue(protocol.build_request_hard_fault_record(record_number))
+        after = await _wait_for_matching_reply(lambda: getter() if getter() is not before else None, timeout_s)
+        records[key] = asdict(after) if after is not None else None
+    return records
+
+
+@app.get("/api/amp-snapshot")
+async def download_amp_snapshot() -> Response:
+    """Re-syncs (same as "Refresh from Amp"/POST /api/resync), then
+    pulls every piece of amp state this backend knows how to ask for -
+    including the full per-antenna/per-band ATU tuning matrix and all
+    four Hard Fault record messages, neither of which the normal
+    startup handshake requests - into one downloadable JSON file.
+    Meant for comparing real-hardware setups over time (different
+    radio, tuner vs. no tuner, etc.), not for any single field.
+    Re-syncing doesn't make a message reply that genuinely never does
+    on this hardware - antenna names/band assignments (0x18/0x1B) are
+    included if present, but are expected to still be empty per
+    CLAUDE.md open question 6 until that's otherwise resolved; this is
+    a capture tool, not a fix for it. Can take 10+ seconds (44 paced
+    ATU tuning requests, each with its own short reply-wait) - that's
+    expected, not a hang."""
+    link = _require_serial_link()
+    await link.resync()
+    await asyncio.sleep(1.0)  # give the resync's own replies a moment to land first
+    atu_tuning_matrix = await _collect_atu_tuning_matrix(link)
+    hard_fault_records = await _collect_hard_fault_records(link)
+    snapshot = {
+        "captured_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "backend_version": GIT_VERSION,
+        "config": {
+            "amp_model": config.amp.model,
+            "tuner_model": config.tuner.model,
+            "serial_device": config.amp.serial_device,
+        },
+        "amp_state": amp_state.to_dict(),
+        "atu_tuning_matrix": atu_tuning_matrix,
+        "hard_fault_records": hard_fault_records,
+    }
+    filename = f"acom-amp-snapshot-{time.strftime('%Y%m%d-%H%M%S')}.json"
+    return Response(
+        content=json.dumps(snapshot, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.websocket("/ws/status")
@@ -941,6 +1084,62 @@ async def set_antenna_config(req: AntennaConfigRequest) -> dict:
     await link.enqueue(protocol.build_request_message(0x1B))
 
     backend_logger.info("Antenna Setup saved: %s", [s.to_dict() for s in ordered])
+    return {"ok": True}
+
+
+# =============================================================================
+# CAT / Rig Control (message 0x12 get, 0x05/0x06/0x07 set) - lets the
+# Setup screen show and change what the amp's own rear-panel CAT port
+# is configured to talk to (interface type, command set/"library",
+# baud rate, byte spacing, polling time), same settings the amp's own
+# front panel exposes under its CAT menu.
+# =============================================================================
+
+
+class CatSettingsRequest(BaseModel):
+    interface_type: int
+    command_set: int
+    baud_rate: int
+    byte_spacing_us: int
+    polling_time_ms: int
+
+
+@app.post("/api/cat-settings")
+async def set_cat_settings(req: CatSettingsRequest) -> dict:
+    link = _require_serial_link()
+    if not 0 <= req.interface_type <= 0xF:
+        raise HTTPException(400, "interface_type must be 0-15")
+    if not 0 <= req.command_set <= 0xF:
+        raise HTTPException(400, "command_set must be 0-15")
+    if not 0 <= req.baud_rate <= 0xF:
+        raise HTTPException(400, "baud_rate must be 0-15")
+    if not 0 <= req.byte_spacing_us <= 0xFFFF:
+        raise HTTPException(400, "byte_spacing_us must be 0-65535")
+    if not 0 <= req.polling_time_ms <= 0xFFFF:
+        raise HTTPException(400, "polling_time_ms must be 0-65535")
+
+    result = await link.send_command(
+        protocol.build_cat_settings_1(req.interface_type, req.command_set, req.baud_rate)
+    )
+    if not result.ok:
+        raise HTTPException(502, f"amplifier did not confirm CAT Settings 1 (param=0x{result.param:04X})")
+    result = await link.send_command(protocol.build_cat_settings_2(req.byte_spacing_us))
+    if not result.ok:
+        raise HTTPException(502, f"amplifier did not confirm CAT Settings 2 (param=0x{result.param:04X})")
+    result = await link.send_command(protocol.build_cat_settings_3(req.polling_time_ms))
+    if not result.ok:
+        raise HTTPException(502, f"amplifier did not confirm CAT Settings 3 (param=0x{result.param:04X})")
+
+    # Refresh AmpState from the amp's own echo rather than trusting the
+    # write blindly - same pattern as Antenna Setup above. Status query
+    # (reply is the requested message itself, not an OK/ERR), so it
+    # stays fire-and-forget.
+    await link.enqueue(protocol.build_request_message(0x12))
+
+    backend_logger.info(
+        "CAT settings saved: interface_type=%d command_set=%d baud_rate=%d byte_spacing_us=%d polling_time_ms=%d",
+        req.interface_type, req.command_set, req.baud_rate, req.byte_spacing_us, req.polling_time_ms,
+    )
     return {"ok": True}
 
 

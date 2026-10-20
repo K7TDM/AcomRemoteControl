@@ -530,6 +530,106 @@ frame. Key ones:
    change made in the end; `serial_link.py` only kept a harmless, pure
    refactor (`_reopen_port()` extracted from `_read_loop()`'s existing
    reopen code, identical behavior).
+13. **Real-hardware fault `0x72` seen active, undocumented - not a
+   backend bug.** A log capture's single `0x21` (error flags) frame
+   decoded to word 7 (`0x70`-`0x7F`) = `0x0005`, i.e. bits `0x70` and
+   `0x72` both active simultaneously. `0x70` is documented ("CAT
+   ERROR" - the amp's CAT/rig-control interface, not this backend's
+   own RS-232 link); `0x71`-`0x7F` are otherwise blank in the protocol
+   doc itself (`protocol.py`'s own comment: "only 0x70 documented"),
+   same situation as the already-known `0x8C`-`0x8F` gap. So
+   `FAULT_CODE_NAMES.get(c, f"Unknown fault 0x{c:02X}")` showing
+   "Unknown fault 0x72" in the UI is correct, honest behavior, not a
+   lookup-table gap to fix - there's no name for this bit anywhere in
+   the one spec document this project has. Notable, unconfirmed clue:
+   it fired at the exact same instant as the documented CAT ERROR
+   (`0x70`) - worth keeping in mind that `0x72` might be CAT/rig-
+   control related too, but that's speculation from a single
+   co-occurrence, not confirmed.
+14. **CAT/rig-control config (read + write), implemented but NEEDS
+   REAL-HARDWARE VERIFICATION.** Prompted by Tyler wanting to see/
+   change the amp's rear-panel CAT port setup (his radio: Yaesu
+   FTdx101D) from the Setup screen instead of the amp's own front
+   panel. Message `0x12` ("Settings of the Amplifier", doc §3.5.2) is
+   the read side - reports current CAT Interface Type/Command Set/
+   Baud Rate/Byte Spacing/Polling Time (plus User Flags/buzzer volume,
+   included in `amp_state.to_dict()`/the amp-snapshot download, not
+   yet exposed in the CAT/Rig Control UI itself) - now requested at
+   startup/resync
+   alongside `0x11`/`0x16`/`0x18`/`0x1B`/`0x2A`. `0x05`/`0x06`/`0x07`
+   (doc §5.1) are the write side, already listed in this file's
+   protocol facts but never built until now - `protocol.py` gained
+   `build_cat_settings_1/2/3()`, exposed via `POST /api/cat-settings`.
+   Synthetic-frame round-trip (parse → rebuild → re-parse) confirmed
+   internally consistent, but that only proves the code agrees with
+   itself, not with a real amp.
+
+   **Known gap, not a bug:** the doc's §5.1 write-command table only
+   *names* Command Set values 0-5 (None/ICOM/Yaesu FT-450 family/
+   Yaesu FT-817+897 family/Yaesu FT-1000MP family/Elecraft K3+Kenwood
+   TS-480) of the full 4-bit range (0-15) - values 6-15 are valid and
+   settable, just unlabeled in the only spec document this project
+   has. The FTdx101D isn't named anywhere in this 2018 doc (it's a
+   newer radio) - the amp's own front-panel menu almost certainly has
+   a proper name for it, this app can't. Reading back whatever's
+   *currently* configured (via `0x12`) at least shows which numeric
+   slot is already working, even without a name for it.
+
+   **Unconfirmed byte-order wrinkle:** the status reply (`0x12`)
+   describes CAT Settings 1 as Byte3=Low Byte then Byte4=High Byte;
+   the write command (`0x05`) describes Byte4=HW then Byte5=LW -
+   opposite ordering conventions, by name, for what should be the same
+   16-bit value. Implemented trusting each in isolation (matches
+   `build_request_message`'s own established HW-then-LW convention for
+   the write side) - NEEDS REAL-HARDWARE VERIFICATION that a value
+   written via `0x05` actually reads back correctly via `0x12`, which
+   would settle whether this wrinkle is real or just inconsistent doc
+   terminology for the same layout.
+15. **Full per-antenna/per-band ATU tuning matrix + Hard Fault records,
+   implemented but NEEDS REAL-HARDWARE VERIFICATION - neither ever
+   exercised against a real amp.** A protocol-coverage audit (prompted
+   by Tyler wanting "every single bit of data we can get" in the amp-
+   snapshot download) found two readable, documented data sources the
+   backend had either underused or never touched at all:
+
+   - **ATU tuning matrix:** `build_request_atu_tuning_record()`/`0x1A`
+     (doc §3.6.1) already existed as an on-demand single lookup, but
+     `AmpState` only ever kept the *last* result, overwritten every
+     time - the amp-snapshot download was capturing at most one
+     antenna/band combo, not the full picture. `app.py` gained
+     `_collect_atu_tuning_matrix()`, which loops all 4 antennas x 11
+     bands (44 combos), sending each request and polling for the
+     amp's own self-identifying reply (`0x1A`'s own
+     `antenna_number`/`band_number` fields) before moving to the next
+     - safe to fire this way *because* the reply self-identifies,
+     unlike Hard Fault records below. No reply within ~300ms is
+     treated as "no stored tuning for this combo," not an error.
+     Expected to take 10+ seconds end to end - that's the 44 paced
+     round-trips, not a hang.
+   - **Hard Fault event records (`0x31`-`0x34`, doc section 4):**
+     completely unimplemented before this - `protocol.py` gained all
+     four parsers (`parse_hard_fault_record_1..4`) plus
+     `build_request_hard_fault_record()`, wired into `_on_frame` and a
+     new `_collect_hard_fault_records()` collector. **Interpretation
+     call, not explicitly confirmed by the doc text:** treated this as
+     *one* stored fault event (most recent only) split across four
+     messages because a single 72-byte frame can't hold it all (the
+     doc's own section headers are literally "Record 1".."Record 4",
+     and the request's "Byte 5 – Number of HARD FAULT event record"
+     is read as selecting which of the four *messages* to request,
+     not selecting among multiple historical events) - the doc never
+     explicitly rules out the alternative reading (multiple stored
+     events, one message-set each). `AmplifierIdentity.hard_fault_count`
+     (from `0x11`) is a lifetime total either way, not a count of
+     retrievable records.
+
+   Both are on-demand only (not added to `STARTUP_REQUEST_MESSAGES` -
+   too slow/unnecessary for every normal dashboard session), triggered
+   solely by `GET /api/amp-snapshot`. Synthetic-frame round-trips
+   (hand-built directly from the doc's own byte tables, parse → assert
+   every field) passed for all four Hard Fault records and the request
+   builder - confirms the code's internal consistency with its own
+   reading of the doc, not with a real amp.
 
 ## Status
 
