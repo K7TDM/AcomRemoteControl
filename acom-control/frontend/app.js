@@ -870,42 +870,45 @@ function wireAtuDangerZone() {
 }
 
 // =============================================================================
-// Self-update: header icon + popover, driven by the backend's daily
-// background check (GET /api/update/status - cheap, just reads an
-// in-memory dict, no git calls) rather than this frontend triggering its
-// own check on every page load. Visible to anyone with the dashboard
-// open, same as every other control here - there's no auth in this app
-// (per-user login is a known future item, not built yet).
+// Self-update: a header button that's always there (no separate "is one
+// available" state to track in the UI) - click it, it checks right then
+// and shows current vs. new build in the popover, with "Update Now"
+// always available there too. The backend also runs this same check
+// once a day on its own (journalctl-visible), but the UI doesn't need to
+// poll for that - it just checks fresh every time the popover opens.
+// Visible to anyone with the dashboard open, same as every other control
+// here - there's no auth in this app (per-user login is a known future
+// item, not built yet).
 // =============================================================================
 
-const UPDATE_STATUS_POLL_MS = 10 * 60 * 1000; // just re-reads the backend's cached daily-check result
 let updateStatus = null;
 
-function toggleUpdatePopover() {
-  document.getElementById("update-popover")?.toggleAttribute("hidden");
-}
+async function toggleUpdatePopover() {
+  const popover = document.getElementById("update-popover");
+  if (!popover) return;
+  const opening = popover.hidden;
+  popover.toggleAttribute("hidden");
+  if (!opening) return;
 
-function renderUpdateBadge() {
-  const btn = document.getElementById("btn-update-available");
+  const headline = document.getElementById("update-popover-headline");
   const currentEl = document.getElementById("update-current-commit");
   const latestEl = document.getElementById("update-latest-commit");
-  if (!btn || !updateStatus) return;
-  btn.hidden = !updateStatus.available;
-  if (currentEl) currentEl.textContent = updateStatus.current_commit || "unknown";
-  if (latestEl) latestEl.textContent = updateStatus.latest_commit || "unknown";
-  if (!updateStatus.available) {
-    document.getElementById("update-popover")?.setAttribute("hidden", "");
-  }
-}
+  if (headline) headline.textContent = "Checking for updates...";
+  if (currentEl) currentEl.textContent = "";
+  if (latestEl) latestEl.textContent = "";
 
-async function refreshUpdateStatus() {
   try {
-    const resp = await fetch("/api/update/status");
-    if (!resp.ok) return;
+    const resp = await apiFetch("/api/update/check", { method: "POST" });
     updateStatus = await resp.json();
-    renderUpdateBadge();
-  } catch {
-    // Silent - this is a passive background poll, not a user action.
+    if (currentEl) currentEl.textContent = updateStatus.current_commit || "unknown";
+    if (latestEl) latestEl.textContent = updateStatus.latest_commit || updateStatus.current_commit || "unknown";
+    if (headline) {
+      headline.textContent = updateStatus.available
+        ? "Update available"
+        : updateStatus.error ? `Check failed: ${updateStatus.error}` : "Already up to date";
+    }
+  } catch (err) {
+    if (headline) headline.textContent = `Check failed: ${err.message}`;
   }
 }
 
@@ -978,8 +981,6 @@ async function boot() {
     // WebSocket connect below will retry; initial render just stays empty.
   }
   connectWebSocket();
-  refreshUpdateStatus();
-  setInterval(refreshUpdateStatus, UPDATE_STATUS_POLL_MS);
 }
 
 boot();
