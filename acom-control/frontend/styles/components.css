@@ -177,6 +177,11 @@
   cursor: pointer;
 }
 
+.icon-button svg {
+  display: block;
+  vertical-align: middle;
+}
+
 /* Daily background check found something - highlight the icon and give
    it a small, infrequent bounce so it earns a glance without being
    obnoxious about it (one quick bounce every few seconds, not a
