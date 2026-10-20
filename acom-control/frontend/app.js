@@ -900,8 +900,8 @@ async function toggleUpdatePopover() {
   try {
     const resp = await apiFetch("/api/update/check", { method: "POST" });
     updateStatus = await resp.json();
-    if (currentEl) currentEl.textContent = updateStatus.current_commit || "unknown";
-    if (latestEl) latestEl.textContent = updateStatus.latest_commit || updateStatus.current_commit || "unknown";
+    if (currentEl) currentEl.textContent = updateStatus.current_version || "unknown";
+    if (latestEl) latestEl.textContent = updateStatus.latest_version || "no tagged release yet";
     if (headline) {
       headline.textContent = updateStatus.available
         ? "Update available"
@@ -919,7 +919,16 @@ async function applyUpdateNow() {
   )) return;
   const statusEl = document.getElementById("update-popover-status");
   const button = document.getElementById("btn-update-now");
-  const beforeCommit = updateStatus?.current_commit;
+  // Raw commit hash, not updateStatus.current_version (that's the
+  // tag-based display string) - waitForUpdateRestart() just needs
+  // something that changes once the new process comes up.
+  let beforeCommit = null;
+  try {
+    beforeCommit = (await (await fetch("/api/config")).json()).git_commit;
+  } catch {
+    // If this fails, waitForUpdateRestart() below will just run out its
+    // timeout without detecting a restart - acceptable degradation.
+  }
   if (button) button.disabled = true;
   if (statusEl) {
     statusEl.hidden = false;

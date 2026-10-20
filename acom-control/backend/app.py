@@ -53,6 +53,28 @@ def _read_git_commit() -> str:
 
 GIT_COMMIT = _read_git_commit()
 
+
+def _read_git_version() -> str:
+    """Human-facing version string - the nearest reachable release tag
+    (see CHANGELOG.md), e.g. "v0.1.0" if HEAD is exactly at that tag, or
+    "v0.1.0-3-gabc1234" if 3 commits past it (standard `git describe`
+    format). Falls back to the raw short hash if no tag exists yet.
+    Shown in the update popover instead of GIT_COMMIT's raw hash, which
+    stays reserved for the frontend's "did the restart actually land"
+    check - that one needs to just change on any new commit, not track
+    releases specifically."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "describe", "--tags", "--always"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+GIT_VERSION = _read_git_version()
+
 TX_ARM_WINDOW_S = 15.0
 
 app = FastAPI(title="ACOM Remote Control")
@@ -694,8 +716,8 @@ UPDATE_CHECK_STARTUP_DELAY_S = 30.0  # let the startup handshake settle first
 # ever touched from this module's own asyncio loop, so no locking needed.
 update_status: dict = {
     "available": False,
-    "current_commit": GIT_COMMIT,
-    "latest_commit": None,
+    "current_version": GIT_VERSION,
+    "latest_version": None,
     "checked_at": None,
     "error": None,
 }
@@ -725,12 +747,13 @@ async def _check_for_update() -> None:
             raise RuntimeError(stderr.strip() or f"exited {returncode}")
         fields = dict(line.split("=", 1) for line in stdout.splitlines() if "=" in line)
         update_status["available"] = fields.get("update_available") == "yes"
-        upstream = fields.get("upstream", "")
-        update_status["latest_commit"] = upstream[:7] if upstream else None
+        update_status["current_version"] = fields.get("current", GIT_VERSION)
+        latest = fields.get("latest", "none")
+        update_status["latest_version"] = latest if latest != "none" else None
         update_status["error"] = None
         if update_status["available"]:
             backend_logger.info(
-                "Update available: %s -> %s", GIT_COMMIT, update_status["latest_commit"]
+                "Update available: %s -> %s", update_status["current_version"], update_status["latest_version"]
             )
     except Exception as exc:
         update_status["error"] = str(exc)
