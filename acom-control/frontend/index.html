@@ -39,7 +39,17 @@
         <option value="modern">Modern</option>
       </select>
       <button id="theme-mode-toggle" class="icon-button" type="button" aria-label="Toggle light/dark"></button>
-      <button id="btn-update-available" class="icon-button" type="button" aria-label="Check for updates">⬆</button>
+      <!-- Inline SVG, not a Unicode arrow character - iOS rendered a bare
+           "⬆" as Apple's own colorful emoji glyph, which ignores the
+           .has-update CSS color entirely (see PI_CONTROL_PLAN.md
+           Follow-ups). An inline shape has no OS-level presentation to
+           override; fill="currentColor" picks up the button's own CSS
+           color, so .has-update's amber highlight actually reaches it. -->
+      <button id="btn-update-available" class="icon-button" type="button" aria-label="Check for updates">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2 L20 12 L15 12 L15 20 L9 20 L9 12 L4 12 Z" />
+        </svg>
+      </button>
       <button id="btn-setup-open" class="icon-button" type="button" aria-label="Setup">⚙</button>
     </div>
   </header>

@@ -687,17 +687,6 @@ and matches the project's scale (a personal local-network control panel).
   self-update feature (`/api/update/*` in `app.py`) being visible/
   actionable by anyone with the dashboard open, same as every other
   control today - not an urgent gap, just the thing that surfaced it.
-- The header update icon (`#btn-update-available` in `index.html`, the
-  bare "⬆" Unicode character) renders as Apple's own colorful emoji
-  glyph on Tyler's iPhone ("an arrow with a blue box") instead of the
-  plain styleable text glyph the CSS assumes - the `.has-update` amber
-  highlight and the bounce animation (`styles/components.css`) are
-  probably still firing, just invisible underneath the OS's own emoji
-  rendering, which ignores `color`/`background`. Likely fix: replace
-  the bare Unicode character with a small inline SVG icon, which always
-  renders exactly as styled regardless of platform - not done yet, per
-  Tyler's own "dig into later" on this one.
-
 ## Status
 
 The initial `acom-control/` build now exists (config, backend, frontend,

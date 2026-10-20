@@ -19,6 +19,14 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Fixed
+- Header update icon rendered as Apple's own colorful emoji glyph on
+  iOS ("an arrow with a blue box") instead of the plain styleable
+  glyph the `.has-update` amber highlight/bounce assumed, since a bare
+  Unicode character's presentation is up to the OS, not CSS. Replaced
+  with an inline SVG, which always renders exactly as styled with no
+  OS-level substitution possible.
+
 ## [0.1.4] - 2026-10-20
 
 ### Fixed
