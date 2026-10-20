@@ -17,6 +17,15 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.2] - 2026-10-20
+
+### Added
+- The header update icon now highlights (amber) and gives a small,
+  infrequent bounce on its own once the daily background check finds
+  a newer tagged release - no click needed to notice. Re-added `GET
+  /api/update/status` (cheap, cached - no git calls) for the frontend
+  to poll every 10 minutes to drive this.
+
 ## [0.1.1] - 2026-10-20
 
 ### Fixed
