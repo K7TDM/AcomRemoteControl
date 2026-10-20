@@ -14,9 +14,14 @@ protocol details and `PI_CONTROL_PLAN.md` for the full build plan.
 Protocol research and build planning are done (see `CLAUDE.md` /
 `PI_CONTROL_PLAN.md`). The backend/frontend application now lives in
 `acom-control/` - see `acom-control/README.md` for install/run
-instructions. It hasn't been tested against real hardware yet (no Pi/amp
-attached during development); see `PI_CONTROL_PLAN.md`'s "Status" section
-for exactly what still needs verification once hardware is available.
+instructions. It's been run against real hardware across several
+sessions now; see `PI_CONTROL_PLAN.md`'s "Status" section and
+`CLAUDE.md`'s open questions for what's confirmed vs. still needs
+further real-hardware verification.
+
+Releases are tagged (`vX.Y.Z`) - see `CHANGELOG.md` for what's in each
+one. The dashboard's own update checker tracks these tags, not every
+commit to `main`.
 
 ## Hardware
 

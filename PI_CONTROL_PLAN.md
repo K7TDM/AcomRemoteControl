@@ -654,6 +654,23 @@ and matches the project's scale (a personal local-network control panel).
   timestamps are the ground truth for precise timing, not the derived
   flag.
 
+- **Self-update + versioning, implemented:** a header button on the
+  dashboard checks on click (and once a day in the background) whether
+  a newer release is available, and can pull + restart on demand - see
+  `app.py`'s `/api/update/*` endpoints and `setup/acom-update-apply.sh`.
+  Versioning is git tags (`vX.Y.Z`, see `CHANGELOG.md`), not raw
+  commits - deliberately, so ordinary pushes to `main` don't trigger a
+  false "update available" notice, and the updater never auto-deploys
+  unreleased work just because it landed on `main`. The backend process
+  itself stays unprivileged; `install.sh` provisions one fixed,
+  root-owned helper script plus a sudoers drop-in granting exactly two
+  argument forms of it - see `setup/acom-control-update.sudoers`.
+  **NEEDS REAL-HARDWARE VERIFICATION** end-to-end (the sudo escalation,
+  the tag-fast-forward logic, and the restart-detection polling have
+  only been reviewed/syntax-checked here, never run against the actual
+  Pi). No auth gates any of this - same as every other control in the
+  app - noted as a follow-up below.
+
 ## Follow-ups (explicitly out of scope for v1)
 
 - Active 06AT/20AT tuner commands, pending protocol confirmation from
