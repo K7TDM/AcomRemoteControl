@@ -344,12 +344,23 @@ frame. Key ones:
    pulse branches it unlocks, which are confirmed) hasn't been exercised
    against a real ambiguous-comms-loss event on the amp yet.
 
-   **TODO (not yet applied):** after seeing the new power-off screen
-   (`#power-off-screen` in the frontend) live, Tyler felt the ~10s
-   `ASSUME_OFF_AFTER_S` wait before it appears is too slow - wants it
-   closer to ~5s. No code change made yet; next session should just
-   lower the constant in `app.py` (and re-verify the auto-resolve timing
-   noted above still holds at the new value).
+   **Applied:** real-hardware testing (2026-10-20) found a front-panel
+   power-off took up to ~20s to show up in the UI - the comms watchdog's
+   own 10s detection window (item 7 below) plus this 10s grace period,
+   stacked. A DEBUG-level log from that same session showed telemetry
+   (`0x2F`) actually arriving every ~120-180ms once comms are up, far
+   faster than either 10s value assumed - so both were dropped to 3.0s
+   together (`ASSUME_OFF_AFTER_S` here, `COMMS_HEALTHY_WINDOW_S` in
+   `serial_link.py`), landing around ~6-7s worst case instead of ~20s,
+   still a wide margin over one real telemetry gap. Deliberately kept
+   nonzero rather than instant - an amp that's merely hung/glitched
+   while still powered on needs *some* window to avoid a later Power On
+   click's pulse turning it off instead (the exact failure mode this
+   whole `power_state` design exists to prevent). NEEDS REAL-HARDWARE
+   VERIFICATION that 3.0s/3.0s doesn't introduce false "off" flips on
+   brief real-world comms hiccups - only confirmed safe by log analysis
+   of the normal telemetry cadence, not by provoking an actual flaky
+   link.
 6. On real hardware, the generic "request specific message" mechanism
    (`0x81` Cmd `0x01`, Byte4/5 = message address — confirmed from the
    protocol doc §5.1 to be a 16-bit Byte4(HW)/Byte5(LW) value, not a
@@ -397,24 +408,28 @@ frame. Key ones:
    2018 doc's 04AT/10AS, and 1200S vs. A1200S protocol differences) may
    ultimately be the real answer, in which case this needs ACOM/dealer
    clarification rather than further guessing from this doc alone.
-7. **TODO (not yet applied):** Tyler wants the frontend's "Comms" status
-   chip to act as a tighter watchdog - turn red after just ~0.5s of
-   silence, rather than its current behavior. Today the chip's LED just
-   mirrors `comms_ok` from `/api/status`/`AmpState`, which is driven by
-   `SerialLink._comms_watchdog()` in `serial_link.py` (polls once/sec,
-   flips unhealthy only after **10s** of no received frame - see its
-   `healthy = (now - self._last_rx_monotonic) < 10.0` check). That 10s/1s
-   granularity is tuned for a coarser "is the amp fundamentally there"
-   signal and already gates real behavior documented above (item 4/5's
-   `power_state` logic, `set_power()`'s pulse-vs-command branching) - so
-   simply lowering those two numbers to make the chip twitchier risks
-   spurious `power_state` flips on brief, harmless gaps. Likely the
-   right shape is a **second, separate, frontend-only** liveness signal
-   (e.g. the dashboard's own WebSocket already receives a timestamped
-   tick on every telemetry push - the frontend could track "ms since
-   last message" itself and flip the Comms LED red past 500ms) rather
-   than retuning the backend's `comms_ok`/`power_state` watchdog. No
-   code change made yet - this is a note only, per Tyler's instruction.
+7. Tyler wants the frontend's "Comms" status chip to act as a tighter
+   watchdog - originally floated as "turn red after just ~0.5s of
+   silence." The chip's LED just mirrors `comms_ok` from
+   `/api/status`/`AmpState`, driven by `SerialLink._comms_watchdog()` in
+   `serial_link.py` (polls once/sec, flips unhealthy after
+   `COMMS_HEALTHY_WINDOW_S` of no received frame - see item 5's update
+   above for the ~20s→~6-7s fix). **Partially applied:** that window
+   was lowered from 10.0s to 3.0s (alongside `ASSUME_OFF_AFTER_S`) as
+   part of fixing the power-off lag, which also makes the Comms chip
+   itself noticeably snappier as a side effect - but 3.0s is still far
+   from the originally-floated ~0.5s, and this was tuned for the
+   `power_state`/pulse-vs-command safety logic (item 4/5), not
+   specifically for the chip. Going all the way to ~0.5s on the shared
+   backend watchdog still risks spurious `power_state` flips on brief,
+   harmless gaps in a way a value tuned for "coarser, is the amp
+   fundamentally there" doesn't. If ~0.5s responsiveness on the chip
+   specifically still matters after trying 3.0s live, the right shape
+   is probably still a **second, separate, frontend-only** liveness
+   signal (the dashboard's WebSocket already gets a timestamped tick on
+   every telemetry push - the frontend could track "ms since last
+   message" itself) rather than lowering the shared backend watchdog
+   further. No such frontend-only signal built yet.
 8. **Amp-model auto-detection, implemented but NEEDS REAL-HARDWARE
    VERIFICATION:** message `0x11` ("PCB Versions of the main CPU
    module", doc §3.5.1) was previously documented above but never wired
