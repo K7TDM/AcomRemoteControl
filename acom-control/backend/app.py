@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+import subprocess
 import time
 from pathlib import Path
 from typing import Optional
@@ -27,9 +28,30 @@ from .modbus_server import ModbusServer
 from .serial_link import SerialLink, list_serial_ports
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 backend_logger = logging.getLogger("acom.backend")
 frontend_logger = logging.getLogger("acom.frontend")
+
+
+def _read_git_commit() -> str:
+    """Short commit hash this process was started from - computed once at
+    import time (cheap: the process restarts after any real update, so a
+    stale cached value would only ever happen if something else patched
+    files without restarting). Used by the Setup screen to show what's
+    currently running and to detect when POST /api/update's restart has
+    actually landed, rather than guessing from connectivity blips alone."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+GIT_COMMIT = _read_git_commit()
 
 TX_ARM_WINDOW_S = 15.0
 
@@ -206,7 +228,7 @@ def _require_serial_link() -> SerialLink:
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    global serial_link, modbus_server
+    global serial_link, modbus_server, _update_check_task
     _configure_logging()
     backend_logger.info("Starting ACOM Remote Control backend (amp=%s tuner=%s)", config.amp.model, config.tuner.model)
     serial_link = SerialLink(device=config.amp.serial_device, on_frame=_on_frame, on_comms_change=_on_comms_change)
@@ -228,10 +250,13 @@ async def on_startup() -> None:
             host=config.modbus.host, port=config.modbus.port, amp_state=amp_state, serial_link=serial_link
         )
         await modbus_server.start()
+    _update_check_task = _spawn(_update_check_loop())
 
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
+    if _update_check_task is not None:
+        _update_check_task.cancel()
     if modbus_server is not None:
         await modbus_server.stop()
     if serial_link is not None:
@@ -523,6 +548,7 @@ def _config_response() -> dict:
         "serial_device": config.amp.serial_device,
         "debug_logging_enabled": config.logging.level == "DEBUG",
         "log_marker": config.logging.log_marker,
+        "git_commit": GIT_COMMIT,
         "comms_ok": amp_state.comms_ok,
         "available_amp_models": sorted(AMP_PROFILES),
         "available_tuner_models": list(TUNER_MODELS),
@@ -640,6 +666,112 @@ async def clear_logs() -> dict:
     config.save()
     backend_logger.info("Log view cleared - future exports will only include entries after %s", marker)
     return {"ok": True, "log_marker": marker}
+
+
+# =============================================================================
+# Self-update: a daily background check (no one has to go looking for an
+# update - the dashboard's header icon lights up on its own) plus the
+# apply action behind its popover's "Update Now" button. Built because
+# running multi-line SSH commands from a phone is a pain - both of these
+# shell out (via sudo) to the single fixed, install.sh-provisioned helper
+# script at UPDATE_APPLY_SCRIPT; see setup/acom-update-apply.sh and
+# setup/acom-control-update.sudoers for exactly what it's allowed to do
+# and why. Nothing here runs with any more privilege than that one
+# script grants - this process itself stays unprivileged. Visible/
+# actionable by anyone with the dashboard open - there's no auth in this
+# app yet (per-user login is a known future item, not built).
+# =============================================================================
+
+UPDATE_APPLY_SCRIPT = "/usr/local/bin/acom-update-apply"
+UPDATE_CHECK_TIMEOUT_S = 30.0
+UPDATE_CHECK_INTERVAL_S = 24 * 60 * 60.0
+UPDATE_CHECK_STARTUP_DELAY_S = 30.0  # let the startup handshake settle first
+
+# Mutable, not a dataclass - this is purely informational UI state (not
+# amp hardware state, so it doesn't belong in AmpState/amp_state.py,
+# which ModbusServer also reads from and has no use for this), and only
+# ever touched from this module's own asyncio loop, so no locking needed.
+update_status: dict = {
+    "available": False,
+    "current_commit": GIT_COMMIT,
+    "latest_commit": None,
+    "checked_at": None,
+    "error": None,
+}
+
+_update_check_task: Optional[asyncio.Task] = None
+
+
+async def _run_update_helper(*args: str, timeout: float) -> tuple[int, str, str]:
+    proc = await asyncio.create_subprocess_exec(
+        "sudo", UPDATE_APPLY_SCRIPT, *args,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    return proc.returncode, stdout.decode(errors="replace"), stderr.decode(errors="replace")
+
+
+async def _check_for_update() -> None:
+    """Runs the helper's read-only `check` mode (git fetch + compare,
+    never pulls or restarts - see acom-update-apply.sh) and records the
+    result in `update_status` for the dashboard to show. Failures (no
+    network, auth broken, etc.) are logged and recorded but never raised
+    - this runs unattended on a timer, so there's no one to show an
+    exception to."""
+    try:
+        returncode, stdout, stderr = await _run_update_helper("check", timeout=UPDATE_CHECK_TIMEOUT_S)
+        if returncode != 0:
+            raise RuntimeError(stderr.strip() or f"exited {returncode}")
+        fields = dict(line.split("=", 1) for line in stdout.splitlines() if "=" in line)
+        update_status["available"] = fields.get("update_available") == "yes"
+        upstream = fields.get("upstream", "")
+        update_status["latest_commit"] = upstream[:7] if upstream else None
+        update_status["error"] = None
+        if update_status["available"]:
+            backend_logger.info(
+                "Update available: %s -> %s", GIT_COMMIT, update_status["latest_commit"]
+            )
+    except Exception as exc:
+        update_status["error"] = str(exc)
+        backend_logger.warning("Update check failed: %s", exc)
+    finally:
+        update_status["checked_at"] = time.time()
+
+
+async def _update_check_loop() -> None:
+    await asyncio.sleep(UPDATE_CHECK_STARTUP_DELAY_S)
+    while True:
+        await _check_for_update()
+        await asyncio.sleep(UPDATE_CHECK_INTERVAL_S)
+
+
+@app.get("/api/update/status")
+async def get_update_status() -> dict:
+    """Cached result of the daily background check (_update_check_loop) -
+    cheap, just reads an in-memory dict, no git calls on this request
+    path. Drives the header icon/popover's visibility and commit display."""
+    return dict(update_status)
+
+
+@app.post("/api/update/apply")
+async def apply_update() -> dict:
+    """Launches the helper's default (no-arg) mode - pulls, reinstalls
+    requirements if changed, and restarts the service - see
+    acom-update-apply.sh. Detached (not awaited): `systemctl restart`
+    kills this very process partway through, so this returns as soon as
+    the update is *launched*, not once it's finished. The frontend
+    should watch GET /api/update/status (or just /api/config's
+    git_commit) for the restart actually landing, not expect this
+    request to stay alive for it."""
+    try:
+        subprocess.Popen(
+            ["sudo", UPDATE_APPLY_SCRIPT],
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"failed to launch update: {exc}") from exc
+    backend_logger.info("Update requested from the dashboard (currently at commit %s)", GIT_COMMIT)
+    return {"ok": True, "launched": True, "current_commit": GIT_COMMIT}
 
 
 # =============================================================================

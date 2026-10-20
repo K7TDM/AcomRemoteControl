@@ -39,7 +39,16 @@
         <option value="modern">Modern</option>
       </select>
       <button id="theme-mode-toggle" class="icon-button" type="button" aria-label="Toggle light/dark"></button>
+      <button id="btn-update-available" class="icon-button" type="button" aria-label="Update available" hidden>⬆</button>
       <button id="btn-setup-open" class="icon-button" type="button" aria-label="Setup">⚙</button>
+    </div>
+
+    <div id="update-popover" class="update-popover" hidden>
+      <p>Update available</p>
+      <p>Current build: <span id="update-current-commit"></span></p>
+      <p>New build: <span id="update-latest-commit"></span></p>
+      <button id="btn-update-now" class="acom-button" type="button">Update Now</button>
+      <p id="update-popover-status" class="danger-warning" hidden></p>
     </div>
   </header>
 
