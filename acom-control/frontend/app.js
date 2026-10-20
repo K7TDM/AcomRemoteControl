@@ -7,6 +7,21 @@ import { mountGauge, updateGauge, resolveWidget } from "./gauges.js";
 const BAND_NAMES = ["160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"];
 const ANTENNA_TYPES = ["Sharp", "Regular", "Wide", "Fixed"];
 
+// Mirrors protocol.py's CAT_*_NAMES dicts exactly - these are fixed,
+// protocol-defined values, not backend config, so hardcoding here
+// matches BAND_NAMES's own pattern above rather than round-tripping a
+// static list through an API call. Command Set only names 0-5 per the
+// amp's own protocol doc (section 5.1) - 6-15 are valid 4-bit values
+// the amp accepts, just never given a name in that document (the
+// amp's own front-panel menu almost certainly has friendlier names for
+// all of them, since it postdates this 2018 doc).
+const CAT_INTERFACE_TYPES = ["None", "RS232", "TTL", "BCD", "Analog"];
+const CAT_COMMAND_SETS = [
+  "None", "ICOM", "Yaesu FT-450 family", "Yaesu FT-817 / FT-897 family",
+  "Yaesu FT-1000MP family", "Elecraft K3 / Kenwood TS-480",
+];
+const CAT_BAUD_RATES = ["None", "1200", "4800", "9600", "19200", "38400", "57600"];
+
 // Exact strings protocol.py's mode_name() emits for these three categories
 // (see MODE_CATEGORY_NAMES) - the OPR/STB toggle button keys off these.
 const MODE_NAME_STB = "STB Mode";
@@ -574,8 +589,10 @@ function wireControls() {
   document.getElementById("btn-setup-close")?.addEventListener("click", closeSetupScreen);
   document.getElementById("btn-setup-save")?.addEventListener("click", withErrorBanner(saveSetup));
   document.getElementById("btn-setup-refresh")?.addEventListener("click", withErrorBanner(refreshFromAmp));
+  document.getElementById("btn-cat-settings-save")?.addEventListener("click", withErrorBanner(saveCatSettings));
   document.getElementById("setup-tuner-select")?.addEventListener("change", updateAntennaSetupVisibility);
   document.getElementById("btn-download-logs")?.addEventListener("click", () => window.open("/api/logs", "_blank"));
+  document.getElementById("btn-amp-snapshot")?.addEventListener("click", () => window.open("/api/amp-snapshot", "_blank"));
   document.getElementById("btn-update-available")?.addEventListener("click", openUpdateScreen);
   document.getElementById("btn-update-close")?.addEventListener("click", closeUpdateScreen);
   document.getElementById("btn-update-now")?.addEventListener("click", withErrorBanner(applyUpdateNow));
@@ -636,7 +653,71 @@ async function loadSetup() {
   populateAntennaMatrix(antennaResp.antennas);
   populateSegmentDeleteBandOptions();
   renderAtuStatusPanel(appState.lastStatus);
+  populateCatSettingsOptions();
+  renderCatSettingsForm(appState.lastStatus);
   updateAntennaSetupVisibility();
+}
+
+// =============================================================================
+// CAT / Rig Control (amp's own rear-panel CAT port config)
+// =============================================================================
+
+function populateCatSettingsOptions() {
+  const interfaceSelect = document.getElementById("cat-interface-type");
+  const commandSetSelect = document.getElementById("cat-command-set");
+  const baudSelect = document.getElementById("cat-baud-rate");
+  if (interfaceSelect && !interfaceSelect.options.length) {
+    interfaceSelect.innerHTML = CAT_INTERFACE_TYPES.map((label, i) => `<option value="${i}">${label}</option>`).join("");
+  }
+  if (commandSetSelect && !commandSetSelect.options.length) {
+    const named = CAT_COMMAND_SETS.map((label, i) => `<option value="${i}">${label}</option>`);
+    const unnamed = Array.from({ length: 16 - CAT_COMMAND_SETS.length }, (_, j) => {
+      const value = CAT_COMMAND_SETS.length + j;
+      return `<option value="${value}">Commands Set ${value}</option>`;
+    });
+    commandSetSelect.innerHTML = named.concat(unnamed).join("");
+  }
+  if (baudSelect && !baudSelect.options.length) {
+    baudSelect.innerHTML = CAT_BAUD_RATES.map((label, i) => `<option value="${i}">${label}</option>`).join("");
+  }
+}
+
+function renderCatSettingsForm(state) {
+  const settings = state && state.amp_settings;
+  const interfaceSelect = document.getElementById("cat-interface-type");
+  const commandSetSelect = document.getElementById("cat-command-set");
+  const baudSelect = document.getElementById("cat-baud-rate");
+  const byteSpacingInput = document.getElementById("cat-byte-spacing");
+  const pollingTimeInput = document.getElementById("cat-polling-time");
+  if (!settings) return; // leave selects at their default (first) option until a real reading arrives
+  if (interfaceSelect) interfaceSelect.value = String(settings.cat_interface_type);
+  if (commandSetSelect) commandSetSelect.value = String(settings.cat_command_set);
+  if (baudSelect) baudSelect.value = String(settings.cat_baud_rate);
+  if (byteSpacingInput) byteSpacingInput.value = settings.cat_byte_spacing_us;
+  if (pollingTimeInput) pollingTimeInput.value = settings.cat_polling_time_ms;
+}
+
+async function saveCatSettings() {
+  const statusEl = document.getElementById("cat-settings-status");
+  const body = {
+    interface_type: Number(document.getElementById("cat-interface-type").value),
+    command_set: Number(document.getElementById("cat-command-set").value),
+    baud_rate: Number(document.getElementById("cat-baud-rate").value),
+    byte_spacing_us: Number(document.getElementById("cat-byte-spacing").value) || 0,
+    polling_time_ms: Number(document.getElementById("cat-polling-time").value) || 0,
+  };
+  await apiFetch("/api/cat-settings", postJson(body));
+  if (statusEl) {
+    // Deliberately doesn't re-render the form from appState.lastStatus
+    // here - the amp's fresh 0x12 echo (enqueued by the backend, not
+    // awaited) hasn't necessarily arrived yet, so doing that would just
+    // redisplay the stale pre-save values right under a "Saved."
+    // message. Click "Refresh from Amp" for the confirmed values, same
+    // as Antenna Setup's own save flow.
+    statusEl.hidden = false;
+    statusEl.textContent = "Saved. Click \"Refresh from Amp\" to confirm the amp's new reading.";
+    setTimeout(() => { statusEl.hidden = true; }, 6000);
+  }
 }
 
 function renderAtuStatusPanel(state) {

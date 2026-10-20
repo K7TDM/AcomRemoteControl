@@ -237,6 +237,22 @@ def build_factory_reset(selection: int) -> bytes:
     return build_amp_command(CMD_FACTORY_RESET, param_lw=selection)
 
 
+def build_request_hard_fault_record(record_number: int) -> bytes:
+    """0x81 Cmd 0x03 - Byte4 "No matter", Byte5 = record number. Doc
+    section 4 describes exactly one stored Hard Fault event (most
+    recent only - "list of parameters... saved in non volatile EEPROM",
+    singular), split across four fixed-address replies (0x31-0x34)
+    because one 72-byte frame can't hold it all - each reply repeats
+    the same HF Count/HF NUM header fields, and the section headers are
+    literally titled "Record 1".."Record 4". NEEDS REAL-HARDWARE
+    VERIFICATION: interpreting `record_number` here as 1-4 (selecting
+    which of the four reply messages you want back), not as selecting
+    among multiple historical fault events - the doc names the four
+    reply sections "Record 1..4" to match, but never explicitly states
+    there's only one stored event rather than a history of them."""
+    return build_amp_command(CMD_HARD_FAULT_RECORD, param_lw=record_number)
+
+
 def build_user_flags(flags: int) -> bytes:
     return build_amp_command(CMD_USER_FLAGS, param_hw=(flags >> 8) & 0xFF, param_lw=flags & 0xFF)
 
@@ -478,6 +494,124 @@ def parse_amplifier_identity(frame: Frame) -> AmplifierIdentity:
         serial_number=serial,
         hard_fault_count=data[25],
     )
+
+
+# =============================================================================
+# 0x12 - "Settings of the Amplifier" (CAT interface config, User Flags,
+# buzzer volume) - amp -> computer, generated once on request (doc
+# section 3.5.2). Companion to the 0x05/0x06/0x07 write commands below
+# (doc section 5.1) - this is how the amp reports back what's currently
+# configured; the Setup screen's CAT/Rig Control section reads this,
+# shows the write commands' effect, and lets the operator change it.
+# =============================================================================
+
+CAT_INTERFACE_TYPE_NAMES = {
+    0: "None",
+    1: "RS232",
+    2: "TTL",
+    3: "BCD",
+    4: "Analog",
+}
+
+# Doc section 5.1's 0x05 table only names command sets 0-5; 6-15 are valid
+# (4-bit field, 0-15) but left unlabeled in the doc itself - not a
+# transcription gap, same situation as several fault-code gaps already
+# noted in CLAUDE.md. Whatever's already configured on a working amp
+# (read back via this message) is more trustworthy than guessing a name
+# for an unlabeled slot.
+CAT_COMMAND_SET_NAMES = {
+    0: "None",
+    1: "ICOM",
+    2: "Yaesu FT-450 family",
+    3: "Yaesu FT-817 / FT-897 family",
+    4: "Yaesu FT-1000MP family",
+    5: "Elecraft K3 / Kenwood TS-480",
+}
+
+CAT_BAUD_RATE_NAMES = {
+    0: "None",
+    1: "1200",
+    2: "4800",
+    3: "9600",
+    4: "19200",
+    5: "38400",
+    6: "57600",
+}
+
+
+@dataclass
+class AmpSettings:
+    cat_interface_type: int
+    cat_command_set: int
+    cat_baud_rate: int
+    cat_byte_spacing_us: int
+    cat_polling_time_ms: int
+    user_flags: int
+    buzzer_volume: int
+
+    @property
+    def cat_interface_type_name(self) -> str:
+        return CAT_INTERFACE_TYPE_NAMES.get(self.cat_interface_type, f"unknown({self.cat_interface_type})")
+
+    @property
+    def cat_command_set_name(self) -> str:
+        return CAT_COMMAND_SET_NAMES.get(self.cat_command_set, f"Commands Set {self.cat_command_set}")
+
+    @property
+    def cat_baud_rate_name(self) -> str:
+        return CAT_BAUD_RATE_NAMES.get(self.cat_baud_rate, f"unknown({self.cat_baud_rate})")
+
+
+def parse_amp_settings(frame: Frame) -> AmpSettings:
+    """Parses message 0x12 (13 bytes). Byte3 = CAT Settings 1 Low (bits
+    4-7 baud rate, bits 0-3 unused), Byte4 = CAT Settings 1 High (bits
+    4-7 interface type, bits 0-3 command set), Byte5/6 = CAT Settings 2
+    (byte spacing, us, low/high), Byte7/8 = CAT Settings 3 (polling
+    time, ms, low/high), Byte9/10 = User Flags (low/high), Byte11 =
+    buzzer volume."""
+    data = frame.data  # bytes 3..11 inclusive (9 bytes)
+    cat1_low, cat1_high = data[0], data[1]
+    return AmpSettings(
+        cat_interface_type=(cat1_high >> 4) & 0xF,
+        cat_command_set=cat1_high & 0xF,
+        cat_baud_rate=(cat1_low >> 4) & 0xF,
+        cat_byte_spacing_us=data[2] | (data[3] << 8),
+        cat_polling_time_ms=data[4] | (data[5] << 8),
+        user_flags=data[6] | (data[7] << 8),
+        buzzer_volume=data[8],
+    )
+
+
+def build_cat_settings_1(interface_type: int, command_set: int, baud_rate: int) -> bytes:
+    """0x05 - CAT Settings 1: Byte4(HW) = (Interface Type << 4 | Command
+    Set), Byte5(LW) = (Baud Rate << 4) with the low nibble unused -
+    doc section 5.1 describes this as one 16-bit value (bits 15-12
+    Interface Type, 11-8 Command Set, 7-4 Baud Rate, 3-0 unused) split
+    across Byte4/Byte5 the same way build_request_message's message
+    address is - see its own docstring. NEEDS REAL-HARDWARE
+    VERIFICATION: the doc's status-reply message (0x12, above) lists
+    CAT Settings 1's Low Byte first (Byte3) then High Byte (Byte4) -
+    opposite of this write command's own Byte4(HW)-then-Byte5(LW)
+    labeling - both are trusted at face value here since nothing
+    contradicts either individually, but the two haven't been cross-
+    checked against each other on a real amp yet."""
+    hw = ((interface_type & 0xF) << 4) | (command_set & 0xF)
+    lw = (baud_rate & 0xF) << 4
+    return build_amp_command(CMD_CAT_SETTINGS_1, param_hw=hw, param_lw=lw)
+
+
+def build_cat_settings_2(byte_spacing_us: int) -> bytes:
+    """0x06 - CAT Settings 2: Byte Spacing [us], Byte4(HW)/Byte5(LW) of
+    one 16-bit value (0..65535)."""
+    value = byte_spacing_us & 0xFFFF
+    return build_amp_command(CMD_CAT_SETTINGS_2, param_hw=(value >> 8) & 0xFF, param_lw=value & 0xFF)
+
+
+def build_cat_settings_3(polling_time_ms: int) -> bytes:
+    """0x07 - CAT Settings 3: Polling Time [ms], Byte4(HW)/Byte5(LW) of
+    one 16-bit value (0..65535)."""
+    value = polling_time_ms & 0xFFFF
+    return build_amp_command(CMD_CAT_SETTINGS_3, param_hw=(value >> 8) & 0xFF, param_lw=value & 0xFF)
 
 
 # =============================================================================
@@ -1045,4 +1179,199 @@ def parse_atu_measure_telemetry(frame: Frame) -> AtuMeasureTelemetry:
         atu_temp_c=_k_to_c(u16(22)),
         atu_working_hours=u16(24),
         sys_status=data[26],
+    )
+
+
+# =============================================================================
+# 0x31-0x34 - Hard Fault event record, 4 messages (amp -> computer, doc
+# section 4) - see build_request_hard_fault_record()'s docstring for the
+# "one event, four messages" interpretation this assumes. Every message
+# shares the same two leading fields (lifetime count + this record's
+# EEPROM slot number) ahead of its own category of data.
+# =============================================================================
+
+
+@dataclass
+class HardFaultRecord1:
+    """Record 1 (0x31): error-code snapshot + amp mode at the fault."""
+    hf_count: int
+    hf_num: int
+    error_flags: ErrorFlags  # 10 words (Error Codes 0-9) - one fewer than 0x21's 11
+    amplifier_mode: int
+    amplifier_transition_state: int
+    system_counter: int
+
+
+def parse_hard_fault_record_1(frame: Frame) -> HardFaultRecord1:
+    data = frame.data  # bytes 3..36 inclusive (34 bytes)
+
+    def u16(i: int) -> int:
+        return data[i] | (data[i + 1] << 8)
+
+    words = [u16(2 + 2 * i) for i in range(10)]  # Error Codes 0-9, Byte5..24
+    high_word = u16(28)  # Byte31/32
+    low_word = u16(30)  # Byte33/34
+    return HardFaultRecord1(
+        hf_count=data[0],
+        hf_num=data[1],
+        error_flags=ErrorFlags(words=words),
+        amplifier_mode=u16(24),
+        amplifier_transition_state=u16(26),
+        system_counter=(high_word << 16) | low_word,
+    )
+
+
+@dataclass
+class HardFaultRecord2:
+    """Record 2 (0x32): telemetry snapshot at the fault (same shape of
+    data as the normal 0x2F cyclic telemetry, frozen at the fault
+    moment) - HV2/ID2/PAM2 temp/P_DC2 fields are PAM2-only, "Not Used"
+    per the doc on amps without a second PAM."""
+    hf_count: int
+    hf_num: int
+    carrier_freq_khz: int
+    forward_power_w: int
+    reflected_power_w: int
+    input_power_w: float
+    vcc26_v: float
+    vcc5_mv: int
+    hv1_v: float
+    hv2_v: float
+    id1_ma: int
+    id2_ma: int
+    pam1_temp_k: int
+    pam2_temp_k: int
+    pdc1_w: float
+    pdc2_w: float
+
+
+def parse_hard_fault_record_2(frame: Frame) -> HardFaultRecord2:
+    data = frame.data  # bytes 3..36 inclusive (34 bytes)
+
+    def u16(i: int) -> int:
+        return data[i] | (data[i + 1] << 8)
+
+    return HardFaultRecord2(
+        hf_count=data[0],
+        hf_num=data[1],
+        carrier_freq_khz=u16(2),
+        forward_power_w=u16(4),
+        reflected_power_w=u16(6),
+        input_power_w=u16(8) / 10,
+        vcc26_v=u16(12) / 10,
+        vcc5_mv=u16(14),
+        hv1_v=u16(16) / 10,
+        hv2_v=u16(18) / 10,
+        id1_ma=u16(20),
+        id2_ma=u16(22),
+        pam1_temp_k=u16(24),
+        pam2_temp_k=u16(26),
+        pdc1_w=u16(28) / 10,
+        pdc2_w=u16(30) / 10,
+    )
+
+
+@dataclass
+class HardFaultRecord3:
+    """Record 3 (0x33): bias/dissipation/SWR/CAT-settings snapshot at
+    the fault. bias_1[c,d]/bias_2[a-d]/p_dis2 are "Not Used" on amps
+    without a second PAM, per the doc."""
+    hf_count: int
+    hf_num: int
+    bias_1a_mv: int
+    bias_1b_mv: int
+    bias_1c_mv: int
+    bias_1d_mv: int
+    bias_2a_mv: int
+    bias_2b_mv: int
+    bias_2c_mv: int
+    bias_2d_mv: int
+    p_dis1_w: float
+    p_dis2_w: float
+    swr: float
+    analog_band_data_mv: int
+    cat_interface_type: int
+    cat_command_set: int
+    cat_baud_rate: int
+    cat_byte_spacing_us: int
+    cat_polling_time_ms: int
+
+
+def parse_hard_fault_record_3(frame: Frame) -> HardFaultRecord3:
+    data = frame.data  # bytes 3..36 inclusive (34 bytes)
+
+    def u16(i: int) -> int:
+        return data[i] | (data[i + 1] << 8)
+
+    cat1_low, cat1_high = data[26], data[27]
+    return HardFaultRecord3(
+        hf_count=data[0],
+        hf_num=data[1],
+        bias_1a_mv=u16(2),
+        bias_1b_mv=u16(4),
+        bias_1c_mv=u16(6),
+        bias_1d_mv=u16(8),
+        bias_2a_mv=u16(10),
+        bias_2b_mv=u16(12),
+        bias_2c_mv=u16(14),
+        bias_2d_mv=u16(16),
+        p_dis1_w=u16(18) / 10,
+        p_dis2_w=u16(20) / 10,
+        swr=u16(22) / 100,
+        analog_band_data_mv=u16(24),
+        cat_interface_type=(cat1_high >> 4) & 0xF,
+        cat_command_set=cat1_high & 0xF,
+        cat_baud_rate=(cat1_low >> 4) & 0xF,
+        cat_byte_spacing_us=u16(28),
+        cat_polling_time_ms=u16(30),
+    )
+
+
+@dataclass
+class HardFaultRecord4:
+    """Record 4 (0x34): bias setpoints (all "Not Used" per the doc -
+    kept for completeness, same "every single bit of data" goal as the
+    rest of this record), error source, ATU/user-flags/LPF/amplifier-
+    flags state at the fault."""
+    hf_count: int
+    hf_num: int
+    bias_1a_set_mv: int
+    bias_1b_set_mv: int
+    bias_1c_set_mv: int
+    bias_1d_set_mv: int
+    bias_2a_set_mv: int
+    bias_2b_set_mv: int
+    bias_2c_set_mv: int
+    bias_2d_set_mv: int
+    error_source: int
+    atu_settings: int
+    user_flags: int
+    lpf_state: int
+    amplifier_flags_1: int
+    amplifier_flags_2: int
+
+
+def parse_hard_fault_record_4(frame: Frame) -> HardFaultRecord4:
+    data = frame.data  # bytes 3..36 inclusive (34 bytes)
+
+    def u16(i: int) -> int:
+        return data[i] | (data[i + 1] << 8)
+
+    return HardFaultRecord4(
+        hf_count=data[0],
+        hf_num=data[1],
+        bias_1a_set_mv=u16(2),
+        bias_1b_set_mv=u16(4),
+        bias_1c_set_mv=u16(6),
+        bias_1d_set_mv=u16(8),
+        bias_2a_set_mv=u16(10),
+        bias_2b_set_mv=u16(12),
+        bias_2c_set_mv=u16(14),
+        bias_2d_set_mv=u16(16),
+        error_source=u16(18),
+        atu_settings=u16(22),
+        user_flags=data[24] | (data[25] << 8),
+        lpf_state=u16(26),
+        amplifier_flags_1=u16(28),
+        amplifier_flags_2=u16(30),
     )

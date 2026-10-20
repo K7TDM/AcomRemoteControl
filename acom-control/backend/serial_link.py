@@ -57,13 +57,15 @@ COMMAND_MAX_ATTEMPTS = 5
 # Messages pulled once at startup to populate amp/ATU identity + antenna
 # config before the Setup/Antenna Setup screens trust anything - see
 # PI_CONTROL_PLAN.md "Setup Wizard & Antenna Setup". 0x11 (PCB versions,
-# including the amp-model byte used for Setup-screen auto-detection) and
-# 0x2A (ATU Service menu params) are requested the same generic way (0x81
-# Cmd 0x01, Byte4/5 = message number) as 0x16/0x18/0x1B - NEEDS REAL-
-# HARDWARE VERIFICATION that 0x11/0x2A actually respond to this generic
-# request mechanism rather than requiring the amp to be in a specific
-# menu/mode first; harmless no-op either way if they don't.
-STARTUP_REQUEST_MESSAGES = (0x11, 0x16, 0x18, 0x1B, 0x2A)
+# including the amp-model byte used for Setup-screen auto-detection),
+# 0x12 ("Settings of the Amplifier" - CAT interface config for the
+# Setup screen's CAT/Rig Control section), and 0x2A (ATU Service menu
+# params) are requested the same generic way (0x81 Cmd 0x01, Byte4/5 =
+# message number) as 0x16/0x18/0x1B - NEEDS REAL-HARDWARE VERIFICATION
+# that 0x11/0x12/0x2A actually respond to this generic request
+# mechanism rather than requiring the amp to be in a specific menu/mode
+# first; harmless no-op either way if they don't.
+STARTUP_REQUEST_MESSAGES = (0x11, 0x12, 0x16, 0x18, 0x1B, 0x2A)
 
 # Stable udev symlink from setup/99-acom-amp.rules - always surfaced in
 # list_serial_ports() alongside raw enumerated devices, even though pyserial
