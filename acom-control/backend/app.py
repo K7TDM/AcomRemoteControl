@@ -209,7 +209,7 @@ def _maybe_apply_detected_amp_model(identity: protocol.AmplifierIdentity) -> Non
     config.save()
 
 
-ASSUME_OFF_AFTER_S = 10.0
+ASSUME_OFF_AFTER_S = 3.0
 
 
 def _on_comms_change(ok: bool) -> None:

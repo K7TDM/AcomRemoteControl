@@ -17,9 +17,22 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.1] - 2026-10-20
+
 ### Fixed
 - "Update Now" button is hidden until a check actually confirms a
   newer release is available, instead of always being clickable.
+- Front-panel power-off could take up to ~20s to show up in the
+  dashboard (two chained 10s grace periods, comms-watchdog detection
+  plus an "assume off" timeout) - both lowered to 3s, cutting
+  worst-case latency to ~6-7s.
+
+### Changed
+- READMEs no longer point to `CLAUDE.md` (being retired before this
+  goes public) - pinout, the power-toggle behavior, and protocol
+  basics are inlined directly instead. Also documented the debug-
+  logging/log-download/clear and self-update features, which weren't
+  mentioned in either README before.
 
 ## [0.1.0] - 2026-10-20
 

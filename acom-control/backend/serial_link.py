@@ -34,6 +34,15 @@ MAX_REOPEN_RETRIES = 5
 READ_CHUNK_SIZE = 256
 READ_POLL_INTERVAL_S = 0.02
 
+# How long without a received byte before comms are considered down.
+# Telemetry (0x2E/0x2F) streams continuously once enabled, so this only
+# needs to be comfortably longer than one normal gap between frames, not
+# a generous cushion - was 10.0s (CLAUDE.md open question 7's TODO to
+# tighten this), which combined with app.py's own ASSUME_OFF_AFTER_S
+# grace period made a front-panel power-off take up to ~20s to show up
+# in the UI. Lowered together with that constant per Tyler's direction.
+COMMS_HEALTHY_WINDOW_S = 3.0
+
 # DTR/RTS "Remote Power On" pulse: confirmed on real hardware that a 1.5s
 # pulse on both lines, then release, toggles the amp's power state (on<->
 # off) - see pulse_power_toggle(). _open_port() deliberately never drives
@@ -370,7 +379,7 @@ class SerialLink:
         while True:
             await asyncio.sleep(1.0)
             now = asyncio.get_running_loop().time()
-            healthy = (now - self._last_rx_monotonic) < 10.0 if self._last_rx_monotonic else False
+            healthy = (now - self._last_rx_monotonic) < COMMS_HEALTHY_WINDOW_S if self._last_rx_monotonic else False
             if healthy != comms_ok:
                 comms_ok = healthy
                 if self._on_comms_change is not None:

@@ -5,19 +5,19 @@ Remote control for ACOM S-series amplifiers (600S/1200S/2000S) and
 ACOM's eBox Ethernet Remote Control accessory.
 
 The Pi connects to the amp's rear-panel RS-232 port over a USB-to-RS232
-adapter, speaks the amp's serial protocol, and will host a local web
-dashboard for status + control. See `CLAUDE.md` for the reverse-engineered
-protocol details and `PI_CONTROL_PLAN.md` for the full build plan.
+adapter and speaks its serial protocol (reverse-engineered from ACOM's
+own protocol spec - RS-232, 9600 baud 8N1, a simple length-prefixed,
+checksummed frame format), hosting a local web dashboard for status and
+control. See `PI_CONTROL_PLAN.md` for the full build plan.
 
 ## Status
 
-Protocol research and build planning are done (see `CLAUDE.md` /
-`PI_CONTROL_PLAN.md`). The backend/frontend application now lives in
-`acom-control/` - see `acom-control/README.md` for install/run
-instructions. It's been run against real hardware across several
-sessions now; see `PI_CONTROL_PLAN.md`'s "Status" section and
-`CLAUDE.md`'s open questions for what's confirmed vs. still needs
-further real-hardware verification.
+Protocol research and build planning are done (see `PI_CONTROL_PLAN.md`).
+The backend/frontend application now lives in `acom-control/` - see
+`acom-control/README.md` for install/run instructions. It's been run
+against real hardware across several sessions now; see
+`PI_CONTROL_PLAN.md`'s "Status" section for what's confirmed vs. still
+needs further real-hardware verification.
 
 Releases are tagged (`vX.Y.Z`) - see `CHANGELOG.md` for what's in each
 one. The dashboard's own update checker tracks these tags, not every
