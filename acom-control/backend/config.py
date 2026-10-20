@@ -58,6 +58,14 @@ class ModbusConfig:
 @dataclass
 class LoggingConfig:
     level: str = "INFO"
+    # Set by POST /api/logs/clear (Setup screen's "Clear Log" button) - a
+    # journalctl `--since`-compatible local-time string. Doesn't touch
+    # journald itself (the acom-control user only has read access via
+    # systemd-journal, see setup/acom-control.service), just moves the
+    # start of what GET /api/logs exports forward so old entries stop
+    # showing up in downloads. None means "no marker set - export the
+    # usual tail of recent lines instead."
+    log_marker: Optional[str] = None
 
 
 @dataclass

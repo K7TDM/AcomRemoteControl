@@ -618,13 +618,28 @@ and matches the project's scale (a personal local-network control panel).
   logging path that was never actually built.
 - **Download logs from the UI**: **implemented.** `GET /api/logs`
   (`app.py`) shells out to `journalctl -u acom-control --no-pager -n
-  20000` (fixed scope, no query params yet) and returns it as a
-  downloadable attachment; `index.html`'s `#setup-screen` has a
-  "Download Logs" button that just opens it in a new tab. Requires the
-  `acom-control` system user to be in the `systemd-journal` group (see
-  `setup/acom-control.service`'s install comment) - NEEDS REAL-HARDWARE
-  VERIFICATION that the permission actually works as installed on the
-  real Pi, not just that the endpoint runs locally. Also added a live
+  20000` and returns it as a downloadable attachment; `index.html`'s
+  `#setup-screen` has a "Download Logs" button that just opens it in a
+  new tab. Requires the `acom-control` system user to be in the
+  `systemd-journal` group (see `setup/acom-control.service`'s install
+  comment) - **CONFIRMED working on the real Pi**: a real export
+  (`acom-control-20261020-130018.log`, 20000 lines spanning ~14 hours)
+  was downloaded and read successfully, so the permission is sufficient
+  in practice, not just locally.
+
+  A real-hardware session then hit exactly the "fixed scope" gap this
+  was written assuming: a 14-hour-spanning download that was mostly a
+  single long "amp is off" stretch (expected, not a bug - see
+  CLAUDE.md's open question 12) with the specific few minutes of actual
+  activity buried in it. Added a **"Clear Log" button** (`POST
+  /api/logs/clear`) right next to Download Logs: it doesn't touch
+  journald (no delete permission, by design - see above), it just
+  records a `journalctl --since`-compatible marker timestamp in
+  `config.json` (`LoggingConfig.log_marker`); `GET /api/logs` then uses
+  `--since <marker>` instead of just `-n 20000` whenever one's set, so
+  downloads after clearing only cover what's happened since, staying
+  small and focused instead of re-covering the service's entire uptime
+  every time. Also added a live
   debug-logging toggle (checkbox in the same Setup section, backed by
   `POST /api/config`'s new `logging_level` field) so Tyler can turn
   verbose TX/RX frame capture on/off for a remote session without

@@ -334,14 +334,20 @@ class SerialLink:
                 backoff = min(1.0 * reopen_attempts, 5.0)
                 await asyncio.sleep(backoff)
                 try:
-                    if self._serial is not None:
-                        self._serial.close()
-                    self._open_port()
+                    self._reopen_port()
                     reopen_attempts = 0
                     logger.info("Reopened %s - re-running startup handshake", self.device)
                     await self._startup_handshake()
                 except Exception as reopen_exc:
                     logger.warning("Failed to reopen %s: %s", self.device, reopen_exc)
+
+    def _reopen_port(self) -> None:
+        if self._serial is not None:
+            try:
+                self._serial.close()
+            except Exception:
+                pass
+        self._open_port()
 
     async def _comms_watchdog(self) -> None:
         """Flags comms as lost if nothing's been received for a while -
