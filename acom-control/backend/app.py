@@ -341,10 +341,20 @@ async def set_power(req: PowerRequest) -> dict:
     # amp's own shutdown sequence 100% of the time it's been tried on
     # real hardware, while the pulse has been clean 4/4 (see CLAUDE.md
     # open question 4/5). The pulse is a blind TOGGLE, not a deterministic
-    # off, so this only fires when comms_ok confirms the amp is actually
-    # on right now - without that, we can't tell a pulse-to-off apart
-    # from an accidental pulse-to-on.
-    if not amp_state.comms_ok:
+    # off, so this only fires when we're confident the amp is actually on
+    # right now - without that, we can't tell a pulse-to-off apart from an
+    # accidental pulse-to-on.
+    if amp_state.power_state == "off":
+        # Already off (most likely our own prior pulse). comms_ok can
+        # still read stale-True for up to ~10s after that pulse - the
+        # watchdog only samples once/sec and needs 10s of silence to flip
+        # (CLAUDE.md open question 7) - so without this check, a second
+        # rapid Power Off click/retry inside that window would fall
+        # through to another blind pulse and actually turn the amp back
+        # ON while this code kept right on reporting "off". Treat it as
+        # a no-op instead of re-pulsing.
+        return {"ok": True, "pulsed": False}
+    if amp_state.power_state == "unknown" or not amp_state.comms_ok:
         raise HTTPException(
             409, "cannot safely power off: comms with the amplifier are down, so its current power state is unknown"
         )
@@ -512,6 +522,7 @@ def _config_response() -> dict:
         "tuner_model": config.tuner.model,
         "serial_device": config.amp.serial_device,
         "debug_logging_enabled": config.logging.level == "DEBUG",
+        "log_marker": config.logging.log_marker,
         "comms_ok": amp_state.comms_ok,
         "available_amp_models": sorted(AMP_PROFILES),
         "available_tuner_models": list(TUNER_MODELS),
@@ -592,9 +603,18 @@ async def download_logs() -> Response:
     "Backend vs. frontend logging"), so this just shells out to
     journalctl rather than reading a file. Requires the acom-control
     system user to be in the systemd-journal group - see
-    setup/acom-control.service's install comment."""
+    setup/acom-control.service's install comment.
+
+    If a log_marker is set (POST /api/logs/clear), only exports entries
+    from that point forward instead of the usual tail - keeps a long-
+    running service's downloads focused on what's currently going on
+    rather than growing to cover its entire uptime."""
+    args = ["journalctl", "-u", LOG_UNIT_NAME, "--no-pager"]
+    if config.logging.log_marker:
+        args += ["--since", config.logging.log_marker]
+    args += ["-n", str(LOG_EXPORT_LINES)]
     proc = await asyncio.create_subprocess_exec(
-        "journalctl", "-u", LOG_UNIT_NAME, "--no-pager", "-n", str(LOG_EXPORT_LINES),
+        *args,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await proc.communicate()
@@ -606,6 +626,20 @@ async def download_logs() -> Response:
         media_type="text/plain",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.post("/api/logs/clear")
+async def clear_logs() -> dict:
+    """Doesn't delete anything from journald (the acom-control user only
+    has read access, see download_logs()'s docstring) - just records a
+    marker timestamp so future GET /api/logs downloads start from here
+    instead of the usual tail, which also keeps those downloads small
+    for a service that's been running a long time."""
+    marker = time.strftime("%Y-%m-%d %H:%M:%S")
+    config.logging.log_marker = marker
+    config.save()
+    backend_logger.info("Log view cleared - future exports will only include entries after %s", marker)
+    return {"ok": True, "log_marker": marker}
 
 
 # =============================================================================

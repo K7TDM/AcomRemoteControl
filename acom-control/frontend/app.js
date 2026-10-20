@@ -570,6 +570,11 @@ function wireControls() {
   document.getElementById("btn-setup-refresh")?.addEventListener("click", withErrorBanner(refreshFromAmp));
   document.getElementById("setup-tuner-select")?.addEventListener("change", updateAntennaSetupVisibility);
   document.getElementById("btn-download-logs")?.addEventListener("click", () => window.open("/api/logs", "_blank"));
+  document.getElementById("btn-clear-logs")?.addEventListener("click", withErrorBanner(async () => {
+    if (!window.confirm("Clear the log view? Downloaded logs will only include entries from this point forward - nothing is deleted from the system log itself.")) return;
+    await apiFetch("/api/logs/clear", { method: "POST" });
+    await loadSetup();
+  }));
 
   wireAtuDangerZone();
 }
@@ -659,6 +664,11 @@ function populateConfigForm(cfg) {
   }
   const debugCheckbox = document.getElementById("setup-debug-logging");
   if (debugCheckbox) debugCheckbox.checked = !!cfg.debug_logging_enabled;
+  const logMarkerNote = document.getElementById("setup-log-marker-note");
+  if (logMarkerNote) {
+    logMarkerNote.hidden = !cfg.log_marker;
+    logMarkerNote.textContent = cfg.log_marker ? `Log view cleared at ${cfg.log_marker} - downloads only include entries since then.` : "";
+  }
   renderSetupDetectionNotes(appState.lastStatus);
 }
 

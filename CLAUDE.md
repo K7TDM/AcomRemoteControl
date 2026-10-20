@@ -472,6 +472,50 @@ frame. Key ones:
    truth for "when did telemetry really stop/resume," not these derived
    transition logs.
 
+   **`systemd-journal` permission CONFIRMED working** (item 10's one
+   remaining real-hardware gap): a real `GET /api/logs` download
+   (`acom-control-20261020-130018.log`, 20000 lines spanning ~14 hours)
+   was pulled from the Pi and read successfully, so the `acom-control`
+   user's `systemd-journal` group membership is sufficient in practice,
+   not just locally.
+11. **Fixed real bug, found from that same log export: `POST /api/power`
+   (off) could blindly re-pulse and desync `power_state` from reality.**
+   `set_power()`'s `on: false` branch only guarded on `amp_state.comms_ok`,
+   never on `power_state` itself. `comms_ok` is only updated by the 1s/10s
+   watchdog (item 7), so right after a successful off-pulse it can still
+   read stale-`True` for up to ~10s. The log showed exactly this: two
+   `POST /api/power` (off) calls 8s apart, each logging "Power state
+   confirmed OFF" - the second call passed the `comms_ok` guard despite
+   `power_state` already being `"off"` from the first, and would have
+   blindly pulsed again (which, since the pulse is a blind toggle, risks
+   turning the amp back ON while the backend kept reporting "off").
+   Fixed in `app.py`'s `set_power()`: the off-branch now checks
+   `power_state` first (mirroring the on-branch's existing symmetric
+   check) and is a no-op if already `"off"`, instead of falling through
+   to `comms_ok`. NEEDS REAL-HARDWARE VERIFICATION: specifically, that a
+   rapid double Power-Off (or a frontend retry) within ~10s of the first
+   now returns `{"pulsed": false}` and leaves the amp off rather than
+   toggling it back on.
+12. **Not a bug, ruled out:** that same `acom-control-20261020-130018.log`
+   showed "Comms down - re-sending startup handshake" firing every 5s
+   continuously for ~14 hours (Oct 19 22:53 through the Oct 20 12:54
+   restart), which initially looked like a wedged-port failure the
+   watchdog couldn't recover from on its own, since `_read_loop()`'s
+   reopen path only triggers on an actual `OSError`/`SerialException`
+   and none occurred. **Per Tyler: the amp was deliberately powered off
+   for that entire stretch**, so zero bytes received the whole time is
+   exactly the expected behavior, not evidence of anything wedged - the
+   handshake resend is correctly a no-op until the amp is powered back
+   on and starts replying, same as item 6's chicken-and-egg case already
+   describes. A speculative `_comms_watchdog()` escalation (forcing a
+   full port close/reopen after 60s of silence) was tried and then
+   reverted for this reason - it would have made the watchdog cycle the
+   port every 60s indefinitely any time someone legitimately leaves the
+   amp off for a while, which is normal usage, not a fault condition. No
+   change made in the end; `serial_link.py` only kept a harmless, pure
+   refactor (`_reopen_port()` extracted from `_read_loop()`'s existing
+   reopen code, identical behavior).
+
 ## Status
 
 Protocol reverse-engineering is captured above; the backend/frontend built
