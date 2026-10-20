@@ -177,6 +177,29 @@
   cursor: pointer;
 }
 
+/* Daily background check found something - highlight the icon and give
+   it a small, infrequent bounce so it earns a glance without being
+   obnoxious about it (one quick bounce every few seconds, not a
+   constant wiggle). */
+#btn-update-available.has-update {
+  color: var(--warn-text, #1a1200);
+  background: var(--warn-bg, #f5e050);
+  border-color: var(--warn-bg, #f5e050);
+  animation: update-available-bounce 3s ease-in-out infinite;
+}
+
+@keyframes update-available-bounce {
+  0%, 75%, 100% {
+    transform: translateY(0);
+  }
+  82% {
+    transform: translateY(-4px);
+  }
+  89% {
+    transform: translateY(0);
+  }
+}
+
 .update-popover {
   position: absolute;
   top: calc(100% + 0.5rem);

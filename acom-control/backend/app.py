@@ -769,6 +769,16 @@ async def _update_check_loop() -> None:
         await asyncio.sleep(UPDATE_CHECK_INTERVAL_S)
 
 
+@app.get("/api/update/status")
+async def get_update_status() -> dict:
+    """Cached result of the daily background check (_update_check_loop) -
+    cheap, just reads an in-memory dict, no git calls on this request
+    path. Drives the header icon's highlighted/bouncing vs. plain state
+    between popover opens, so the icon can get your attention on its
+    own instead of requiring a click first."""
+    return dict(update_status)
+
+
 @app.post("/api/update/check")
 async def check_for_update_now() -> dict:
     """On-demand version of the same daily background check - the header

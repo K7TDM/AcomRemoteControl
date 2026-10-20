@@ -870,18 +870,36 @@ function wireAtuDangerZone() {
 }
 
 // =============================================================================
-// Self-update: a header button that's always there (no separate "is one
-// available" state to track in the UI) - click it, it checks right then
-// and shows current vs. new build in the popover, with "Update Now"
-// always available there too. The backend also runs this same check
-// once a day on its own (journalctl-visible), but the UI doesn't need to
-// poll for that - it just checks fresh every time the popover opens.
-// Visible to anyone with the dashboard open, same as every other control
-// here - there's no auth in this app (per-user login is a known future
-// item, not built yet).
+// Self-update: a header button that's always there and clickable - click
+// it, it checks right then and shows current vs. new build in the
+// popover, with "Update Now" available there if something's newer. On
+// top of that, the backend's own daily background check (journalctl-
+// visible) also drives the icon's appearance between clicks: a plain
+// icon normally, a highlighted + gently bouncing one once that check
+// has found something, so it can get your attention without requiring
+// a click first. Visible to anyone with the dashboard open, same as
+// every other control here - there's no auth in this app (per-user
+// login is a known future item, not built yet).
 // =============================================================================
 
+const UPDATE_STATUS_POLL_MS = 10 * 60 * 1000; // just re-reads the backend's cached daily-check result
 let updateStatus = null;
+
+function renderUpdateButtonHighlight() {
+  const btn = document.getElementById("btn-update-available");
+  if (btn) btn.classList.toggle("has-update", !!updateStatus?.available);
+}
+
+async function refreshUpdateStatus() {
+  try {
+    const resp = await fetch("/api/update/status");
+    if (!resp.ok) return;
+    updateStatus = await resp.json();
+    renderUpdateButtonHighlight();
+  } catch {
+    // Silent - this is a passive background poll, not a user action.
+  }
+}
 
 async function toggleUpdatePopover() {
   const popover = document.getElementById("update-popover");
@@ -912,6 +930,7 @@ async function toggleUpdatePopover() {
         : updateStatus.error ? `Check failed: ${updateStatus.error}` : "Already up to date";
     }
     if (updateNowButton) updateNowButton.hidden = !updateStatus.available;
+    renderUpdateButtonHighlight();
   } catch (err) {
     if (headline) headline.textContent = `Check failed: ${err.message}`;
   }
@@ -995,6 +1014,8 @@ async function boot() {
     // WebSocket connect below will retry; initial render just stays empty.
   }
   connectWebSocket();
+  refreshUpdateStatus();
+  setInterval(refreshUpdateStatus, UPDATE_STATUS_POLL_MS);
 }
 
 boot();
