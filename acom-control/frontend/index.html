@@ -95,10 +95,12 @@
         Amp model:
         <select id="setup-amp-select" class="theme-select"></select>
       </label>
+      <p id="setup-amp-detect-note" class="danger-warning" hidden></p>
       <label>
         Tuner / switch:
         <select id="setup-tuner-select" class="theme-select"></select>
       </label>
+      <p id="setup-tuner-mismatch-warning" class="danger-warning" hidden></p>
       <label>
         Serial port:
         <select id="setup-serial-select" class="theme-select"></select>
@@ -106,6 +108,15 @@
       <p id="setup-serial-warning" class="danger-warning" hidden>
         Changing the serial port may toggle the amplifier's power state.
       </p>
+      <label>
+        <input type="checkbox" id="setup-debug-logging" />
+        Debug logging (verbose serial capture)
+      </label>
+    </div>
+
+    <div class="setup-section">
+      <h2>Logs</h2>
+      <button id="btn-download-logs" class="acom-button" type="button">Download Logs</button>
     </div>
 
     <div id="antenna-setup-section" class="setup-section" hidden>

@@ -15,12 +15,12 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import protocol
-from .amp_profiles import AMP_PROFILES, TUNER_MODELS, get_amp_profile
+from .amp_profiles import AMP_PROFILES, AMP_TYPE_CODE_TO_MODEL, TUNER_MODELS, get_amp_profile
 from .amp_state import AmpState
 from .config import AppConfig, load_config, validate_config
 from .modbus_server import ModbusServer
@@ -109,6 +109,10 @@ def _on_frame(frame: protocol.Frame) -> None:
         handled = True
         if frame.address == 0x2F:
             amp_state.update_telemetry(protocol.parse_telemetry(frame, amp_state.profile))
+        elif frame.address == 0x11:
+            identity = protocol.parse_amplifier_identity(frame)
+            amp_state.update_amplifier_identity(identity)
+            _maybe_apply_detected_amp_model(identity)
         elif frame.address == 0x16:
             amp_state.update_atu_identity(protocol.parse_atu_identity(frame))
         elif frame.address == 0x18:
@@ -140,6 +144,25 @@ def _on_frame(frame: protocol.Frame) -> None:
             _spawn(ws_manager.broadcast(amp_state.to_dict()))
     except Exception:
         backend_logger.exception("Failed to parse frame at address 0x%02X", frame.address)
+
+
+def _maybe_apply_detected_amp_model(identity: protocol.AmplifierIdentity) -> None:
+    """Auto-selects the AmpProfile from the amp's own self-reported type
+    (message 0x11) when it maps to a known model and differs from the
+    currently configured one - see PI_CONTROL_PLAN.md's amp-model
+    auto-detection note. Unrecognized/unmapped codes (including 2000S,
+    which this message can't represent - see CLAUDE.md open question 2)
+    are a no-op: the manual Setup-screen dropdown keeps governing."""
+    detected_model = AMP_TYPE_CODE_TO_MODEL.get(identity.type_code)
+    if detected_model is None or detected_model == config.amp.model:
+        return
+    backend_logger.info(
+        "Amp self-reported type 0x%02X (%s) - auto-switching amp model %s -> %s",
+        identity.type_code, identity.type_name, config.amp.model, detected_model,
+    )
+    config.amp.model = detected_model
+    amp_state.profile = get_amp_profile(detected_model)
+    config.save()
 
 
 ASSUME_OFF_AFTER_S = 10.0
@@ -460,6 +483,9 @@ async def get_serial_ports() -> dict:
 # =============================================================================
 
 
+VALID_LOG_LEVELS = ("INFO", "DEBUG")
+
+
 class ConfigRequest(BaseModel):
     # Both Optional with no default so `exclude_unset` can distinguish
     # "field omitted - don't touch it" from "field explicitly sent (even
@@ -467,6 +493,11 @@ class ConfigRequest(BaseModel):
     amp_model: Optional[str] = None
     tuner_model: Optional[str] = None
     serial_device: Optional[str] = None
+    # "DEBUG" turns on verbose TX/RX frame + retry logging (see
+    # serial_link.py) - off by default since it's noisy for 24/7
+    # operation, toggled live from the Setup screen rather than requiring
+    # a config.json edit + restart.
+    logging_level: Optional[str] = None
     # Must be explicitly true to change serial_device - switching ports
     # closes/reopens the OS-level handle, which risks toggling the amp's
     # power via DTR (see CLAUDE.md open question 4) - this is enforced
@@ -480,6 +511,7 @@ def _config_response() -> dict:
         "amp_model": config.amp.model,
         "tuner_model": config.tuner.model,
         "serial_device": config.amp.serial_device,
+        "debug_logging_enabled": config.logging.level == "DEBUG",
         "comms_ok": amp_state.comms_ok,
         "available_amp_models": sorted(AMP_PROFILES),
         "available_tuner_models": list(TUNER_MODELS),
@@ -502,11 +534,15 @@ async def set_config(req: ConfigRequest) -> dict:
     new_amp_model = provided.get("amp_model", config.amp.model)
     new_tuner_model = provided["tuner_model"] if "tuner_model" in provided else config.tuner.model
     new_serial_device = provided.get("serial_device", config.amp.serial_device)
+    new_logging_level = provided.get("logging_level", config.logging.level)
 
     try:
         validate_config(new_amp_model, new_tuner_model)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+    if new_logging_level not in VALID_LOG_LEVELS:
+        raise HTTPException(400, f"logging_level must be one of {VALID_LOG_LEVELS}")
 
     device_changed = new_serial_device != config.amp.serial_device
     if device_changed and not req.confirm:
@@ -521,17 +557,55 @@ async def set_config(req: ConfigRequest) -> dict:
             # leave config pointing at the last-known-good device.
             raise HTTPException(502, f"Failed to open {new_serial_device!r}: {exc}") from exc
 
+    if new_logging_level != config.logging.level:
+        logging.getLogger().setLevel(getattr(logging, new_logging_level))
+        backend_logger.info("Logging level changed: %s -> %s", config.logging.level, new_logging_level)
+
     config.amp.model = new_amp_model
     config.tuner.model = new_tuner_model
+    config.logging.level = new_logging_level
     if device_changed:
         config.amp.serial_device = new_serial_device
     amp_state.profile = get_amp_profile(new_amp_model)
     amp_state.tuner_model = new_tuner_model
     config.save()
     backend_logger.info(
-        "Config updated live: amp=%s tuner=%s serial_device=%s", new_amp_model, new_tuner_model, config.amp.serial_device
+        "Config updated live: amp=%s tuner=%s serial_device=%s logging=%s",
+        new_amp_model, new_tuner_model, config.amp.serial_device, new_logging_level,
     )
     return _config_response()
+
+
+# =============================================================================
+# Setup Wizard: debug log export
+# =============================================================================
+
+LOG_UNIT_NAME = "acom-control"
+LOG_EXPORT_LINES = 20000
+
+
+@app.get("/api/logs")
+async def download_logs() -> Response:
+    """Exports recent backend logs for offline analysis (see
+    PI_CONTROL_PLAN.md's "Download logs from the UI" note) - everything
+    goes to stdout -> journald (no app-managed log file exists, see
+    "Backend vs. frontend logging"), so this just shells out to
+    journalctl rather than reading a file. Requires the acom-control
+    system user to be in the systemd-journal group - see
+    setup/acom-control.service's install comment."""
+    proc = await asyncio.create_subprocess_exec(
+        "journalctl", "-u", LOG_UNIT_NAME, "--no-pager", "-n", str(LOG_EXPORT_LINES),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise HTTPException(502, f"journalctl failed: {stderr.decode(errors='replace')}")
+    filename = f"acom-control-{time.strftime('%Y%m%d-%H%M%S')}.log"
+    return Response(
+        content=stdout,
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # =============================================================================

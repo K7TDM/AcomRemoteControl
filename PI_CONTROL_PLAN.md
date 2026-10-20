@@ -609,20 +609,35 @@ and matches the project's scale (a personal local-network control panel).
   memorizing an IP.
 - **Mobile-responsive layout** for the frontend, since it'll likely get
   used from a phone as often as a desktop browser.
-- **Log rotation**: telemetry/debug logging on a Pi running 24/7 should
-  rotate (size or time based) so it doesn't fill the SD card over months
-  of uptime — plain `logging.handlers.RotatingFileHandler` is enough for
-  v1, no need for anything fancier.
-- **Download logs from the UI**: Tyler wants a way to download the
-  backend's logs directly from the dashboard, somewhere in the Setup
-  screen, rather than needing to SSH in and run `journalctl`. Not
-  implemented yet - just a note for a future session. Likely shape: a new
-  `GET /api/logs` (or similar) endpoint that streams/zips whatever
-  `_configure_logging()` is currently writing to, plus a "Download Logs"
-  button in `index.html`'s `#setup-screen`. Depends on how logging is
-  actually configured by the time this gets built (journald via systemd
-  vs. a file - see "Backend vs. frontend logging" and the log rotation
-  note above), and interacts with the log-rotation item just above it.
+- **Log rotation**: not actually an app concern - `_configure_logging()`
+  (`app.py`) only ever called `logging.basicConfig()`, no `filename=`;
+  everything goes to stdout → journald per "Backend vs. frontend
+  logging", so there's no app-managed log file to rotate. Rotation/size
+  caps are journald's own job (`journald.conf`, see the Pi OS & System
+  Setup section above) - this item was written assuming a file-based
+  logging path that was never actually built.
+- **Download logs from the UI**: **implemented.** `GET /api/logs`
+  (`app.py`) shells out to `journalctl -u acom-control --no-pager -n
+  20000` (fixed scope, no query params yet) and returns it as a
+  downloadable attachment; `index.html`'s `#setup-screen` has a
+  "Download Logs" button that just opens it in a new tab. Requires the
+  `acom-control` system user to be in the `systemd-journal` group (see
+  `setup/acom-control.service`'s install comment) - NEEDS REAL-HARDWARE
+  VERIFICATION that the permission actually works as installed on the
+  real Pi, not just that the endpoint runs locally. Also added a live
+  debug-logging toggle (checkbox in the same Setup section, backed by
+  `POST /api/config`'s new `logging_level` field) so Tyler can turn
+  verbose TX/RX frame capture on/off for a remote session without
+  editing `config.json` or restarting the service. Targeted logging
+  additions for timing reconstruction (comms-restored, pulse-released,
+  power-off-confirmed log lines) were added to `amp_state.py`/
+  `serial_link.py` alongside this, for analyzing shutdown/power-on
+  timing from an exported log - see the "Status" section below. Note:
+  the comms watchdog's 10s/1s granularity (see the Comms-chip TODO
+  further up) means `comms_ok`/`power_state` log transitions can lag
+  the real wire event by up to ~10s - the raw DEBUG-level RX frame
+  timestamps are the ground truth for precise timing, not the derived
+  flag.
 
 ## Follow-ups (explicitly out of scope for v1)
 

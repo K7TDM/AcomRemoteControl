@@ -45,15 +45,16 @@ POWER_PULSE_SECONDS = 1.5
 COMMAND_CONFIRM_TIMEOUT_S = 0.3
 COMMAND_MAX_ATTEMPTS = 5
 
-# Messages pulled once at startup to populate ATU identity + antenna config
-# before the Setup/Antenna Setup screens trust anything - see
-# PI_CONTROL_PLAN.md "Setup Wizard & Antenna Setup". 0x2A (ATU Service menu
-# params) is requested the same generic way (0x81 Cmd 0x01, Byte4/5 =
-# message number) as 0x16/0x18/0x1B - NEEDS REAL-HARDWARE VERIFICATION
-# that 0x2A actually responds to this generic request mechanism rather
-# than requiring the amp to be in a specific menu/mode first; harmless
-# no-op either way if it doesn't.
-STARTUP_REQUEST_MESSAGES = (0x16, 0x18, 0x1B, 0x2A)
+# Messages pulled once at startup to populate amp/ATU identity + antenna
+# config before the Setup/Antenna Setup screens trust anything - see
+# PI_CONTROL_PLAN.md "Setup Wizard & Antenna Setup". 0x11 (PCB versions,
+# including the amp-model byte used for Setup-screen auto-detection) and
+# 0x2A (ATU Service menu params) are requested the same generic way (0x81
+# Cmd 0x01, Byte4/5 = message number) as 0x16/0x18/0x1B - NEEDS REAL-
+# HARDWARE VERIFICATION that 0x11/0x2A actually respond to this generic
+# request mechanism rather than requiring the amp to be in a specific
+# menu/mode first; harmless no-op either way if they don't.
+STARTUP_REQUEST_MESSAGES = (0x11, 0x16, 0x18, 0x1B, 0x2A)
 
 # Stable udev symlink from setup/99-acom-amp.rules - always surfaced in
 # list_serial_ports() alongside raw enumerated devices, even though pyserial
@@ -181,6 +182,7 @@ class SerialLink:
         await asyncio.sleep(POWER_PULSE_SECONDS)
         self._serial.dtr = False
         self._serial.rts = False
+        logger.info("Released DTR+RTS after %.1fs pulse", POWER_PULSE_SECONDS)
 
     async def send_command(
         self,

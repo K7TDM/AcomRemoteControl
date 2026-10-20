@@ -415,6 +415,62 @@ frame. Key ones:
    last message" itself and flip the Comms LED red past 500ms) rather
    than retuning the backend's `comms_ok`/`power_state` watchdog. No
    code change made yet - this is a note only, per Tyler's instruction.
+8. **Amp-model auto-detection, implemented but NEEDS REAL-HARDWARE
+   VERIFICATION:** message `0x11` ("PCB Versions of the main CPU
+   module", doc §3.5.1) was previously documented above but never wired
+   up in code. It's now requested at startup/resync alongside
+   `0x16`/`0x18`/`0x1B`/`0x2A`, parsed by `protocol.parse_amplifier_identity()`,
+   and when its Byte3 "Amplifier Type" (`1`=A600S, `2`=A1200S) maps to a
+   known profile and differs from the configured `amp.model`, `app.py`'s
+   `_maybe_apply_detected_amp_model()` auto-switches `config.amp.model`/
+   `amp_state.profile` live (same effect as picking it in the Setup
+   screen, which still works as a manual fallback - this message can't
+   represent 2000S at all, and it's still open question 2 whether the
+   2024 1200S's wire protocol even matches this 2018-documented byte).
+   Byte-offset decoding was verified against a synthetic frame built
+   directly from the doc's table, but the message itself has never been
+   requested from a real amp - unconfirmed whether it replies at all to
+   the generic "request specific message" mechanism, same caveat already
+   open question 6 raised for `0x18`/`0x1B`/`0x2A`.
+9. **Tuner-presence auto-detection, implemented but NEEDS REAL-HARDWARE
+   VERIFICATION:** the Setup screen's Antenna Setup section now also
+   auto-shows when live `atu_identity.present` (message `0x16`) is true,
+   not just when a tuner model is manually picked - see
+   `updateAntennaSetupVisibility()` in `app.js`. This relies on `0x16`'s
+   `type_code` actually populating on real hardware; a comment elsewhere
+   in `app.js` (`renderStatusRow`'s ATU chip) claims it "stays empty on
+   real hardware for the 06AT," which would directly contradict this and
+   silently fall back to manual-only (not a crash, just degraded to
+   today's behavior) - this needs resolving against a real 06AT/20AT
+   before trusting the auto-show behavior. Separately, per ACOM's own
+   06AT/20AT manual (§6.2.1): the exact tuner model (04AT vs. 06AT vs.
+   20AT) can *never* be auto-detected beyond presence - all three report
+   identically as "04AT" since they share the same control board - so
+   the specific-model dropdown stays a manual, cosmetic-only label by
+   design, not a gap to fix later.
+10. **Debug-logging toggle + log download, implemented:** `POST
+   /api/config`'s new `logging_level` field (`"INFO"`/`"DEBUG"`) flips
+   `logging.getLogger().setLevel()` live and persists to `config.json`,
+   surfaced as a checkbox in the Setup screen. `GET /api/logs` exports
+   the last 20000 lines of `journalctl -u acom-control` as a downloadable
+   attachment (no app-managed log file exists - everything already went
+   to journald, see "Backend vs. frontend logging" in
+   `PI_CONTROL_PLAN.md`). Requires the `acom-control` system user to be
+   in the `systemd-journal` group (added to `setup/acom-control.service`'s
+   install comment) - NEEDS REAL-HARDWARE VERIFICATION that this
+   permission is actually sufficient on the real Pi's journald config,
+   not just that the endpoint runs locally. Also added explicit log
+   lines for comms-restored (`amp_state.mark_comms_ok()`), power-off-
+   confirmed (`amp_state.mark_power_off_confirmed()`), and DTR/RTS pulse
+   release (`serial_link.pulse_power_toggle()`) so shutdown/power-on
+   timing can be reconstructed from an exported log - previously only
+   the *start* of each transition was logged, not when it resolved.
+   Caveat for anyone analyzing a future log export: the comms watchdog's
+   10s/1s granularity (item 7 above) means the derived `comms_ok`/
+   `power_state` log lines can lag the real wire event by up to ~10s -
+   with DEBUG on, the raw RX frame timestamps are the actual ground
+   truth for "when did telemetry really stop/resume," not these derived
+   transition logs.
 
 ## Status
 
