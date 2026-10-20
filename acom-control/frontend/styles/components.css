@@ -177,6 +177,33 @@
   cursor: pointer;
 }
 
+#btn-update-available {
+  color: var(--warn-text, #1a1200);
+  background: var(--warn-bg, #f5e050);
+  border-color: var(--warn-bg, #f5e050);
+}
+
+.update-popover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 1rem;
+  z-index: 20;
+  width: min(300px, calc(100vw - 2rem));
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.update-popover p {
+  margin: 0.25rem 0;
+}
+
+.update-popover .acom-button {
+  margin-top: 0.5rem;
+}
+
 select.theme-select {
   background: var(--bg-page);
   color: var(--text-primary);

@@ -570,6 +570,8 @@ function wireControls() {
   document.getElementById("btn-setup-refresh")?.addEventListener("click", withErrorBanner(refreshFromAmp));
   document.getElementById("setup-tuner-select")?.addEventListener("change", updateAntennaSetupVisibility);
   document.getElementById("btn-download-logs")?.addEventListener("click", () => window.open("/api/logs", "_blank"));
+  document.getElementById("btn-update-available")?.addEventListener("click", toggleUpdatePopover);
+  document.getElementById("btn-update-now")?.addEventListener("click", withErrorBanner(applyUpdateNow));
   document.getElementById("btn-clear-logs")?.addEventListener("click", withErrorBanner(async () => {
     if (!window.confirm("Clear the log view? Downloaded logs will only include entries from this point forward - nothing is deleted from the system log itself.")) return;
     await apiFetch("/api/logs/clear", { method: "POST" });
@@ -868,6 +870,101 @@ function wireAtuDangerZone() {
 }
 
 // =============================================================================
+// Self-update: header icon + popover, driven by the backend's daily
+// background check (GET /api/update/status - cheap, just reads an
+// in-memory dict, no git calls) rather than this frontend triggering its
+// own check on every page load. Visible to anyone with the dashboard
+// open, same as every other control here - there's no auth in this app
+// (per-user login is a known future item, not built yet).
+// =============================================================================
+
+const UPDATE_STATUS_POLL_MS = 10 * 60 * 1000; // just re-reads the backend's cached daily-check result
+let updateStatus = null;
+
+function toggleUpdatePopover() {
+  document.getElementById("update-popover")?.toggleAttribute("hidden");
+}
+
+function renderUpdateBadge() {
+  const btn = document.getElementById("btn-update-available");
+  const currentEl = document.getElementById("update-current-commit");
+  const latestEl = document.getElementById("update-latest-commit");
+  if (!btn || !updateStatus) return;
+  btn.hidden = !updateStatus.available;
+  if (currentEl) currentEl.textContent = updateStatus.current_commit || "unknown";
+  if (latestEl) latestEl.textContent = updateStatus.latest_commit || "unknown";
+  if (!updateStatus.available) {
+    document.getElementById("update-popover")?.setAttribute("hidden", "");
+  }
+}
+
+async function refreshUpdateStatus() {
+  try {
+    const resp = await fetch("/api/update/status");
+    if (!resp.ok) return;
+    updateStatus = await resp.json();
+    renderUpdateBadge();
+  } catch {
+    // Silent - this is a passive background poll, not a user action.
+  }
+}
+
+async function applyUpdateNow() {
+  if (!window.confirm(
+    "Update now? The backend will restart - amp control will be briefly " +
+    "unavailable (usually just a few seconds)."
+  )) return;
+  const statusEl = document.getElementById("update-popover-status");
+  const button = document.getElementById("btn-update-now");
+  const beforeCommit = updateStatus?.current_commit;
+  if (button) button.disabled = true;
+  if (statusEl) {
+    statusEl.hidden = false;
+    statusEl.textContent = "Updating and restarting...";
+  }
+  try {
+    await apiFetch("/api/update/apply", { method: "POST" });
+  } catch (err) {
+    if (statusEl) statusEl.textContent = `Failed to start update: ${err.message}`;
+    if (button) button.disabled = false;
+    return;
+  }
+  await waitForUpdateRestart(beforeCommit, statusEl, button);
+}
+
+/** Polls /api/config (cheap, already-existing endpoint) for its
+ * git_commit field to change - that's the real confirmation the restart
+ * landed, not just a connectivity blip that could also be caused by
+ * something unrelated restarting the service. If it never changes
+ * within the timeout, hedge rather than claim a false "failed" or
+ * "succeeded" - could mean already up to date, or a genuine failure. */
+async function waitForUpdateRestart(beforeCommit, statusEl, button) {
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const resp = await fetch("/api/config");
+      if (resp.ok) {
+        const cfg = await resp.json();
+        if (cfg.git_commit && cfg.git_commit !== beforeCommit) {
+          if (statusEl) statusEl.textContent = `Updated to ${cfg.git_commit} - reloading...`;
+          setTimeout(() => window.location.reload(), 1000);
+          return;
+        }
+      }
+    } catch {
+      // Expected while the service is restarting - keep polling.
+    }
+  }
+  if (statusEl) {
+    statusEl.textContent =
+      "No restart detected yet - may already be up to date, or the update " +
+      "may have failed. Check the logs if you expected a change.";
+  }
+  if (button) button.disabled = false;
+}
+
+// =============================================================================
 // Boot
 // =============================================================================
 
@@ -881,6 +978,8 @@ async function boot() {
     // WebSocket connect below will retry; initial render just stays empty.
   }
   connectWebSocket();
+  refreshUpdateStatus();
+  setInterval(refreshUpdateStatus, UPDATE_STATUS_POLL_MS);
 }
 
 boot();

@@ -664,8 +664,12 @@ and matches the project's scale (a personal local-network control panel).
   Director's (or whichever app's) expected map is confirmed.
 - Telemetry history storage/graphing and the hard-fault event log viewer
   (see above) — straightforward additions once v1's plumbing exists.
-- Optional auth (shared token) for the web UI/API/Modbus server, if the
-  "trust the LAN" v1 decision ever needs revisiting.
+- Auth for the web UI/API/Modbus server, if the "trust the LAN" v1
+  decision ever needs revisiting. Per Tyler: leaning toward a real login
+  screen (username/password) rather than a shared token, prompted by the
+  self-update feature (`/api/update/*` in `app.py`) being visible/
+  actionable by anyone with the dashboard open, same as every other
+  control today - not an urgent gap, just the thing that surfaced it.
 
 ## Status
 

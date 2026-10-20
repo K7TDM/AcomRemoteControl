@@ -1,0 +1,18 @@
+# Grants the unprivileged acom-control service account passwordless sudo
+# for exactly two fixed invocations of one script, no other arguments -
+# see install.sh and acom-update-apply.sh. This lets app.py's
+# /api/update/* endpoints (the header-icon popover's "Update Now" button,
+# plus a daily background check) read/pull/restart, without giving the
+# web-facing backend any broader root access.
+#
+# Each entry's exact argument list is deliberate: sudoers otherwise
+# allows *any* arguments to be appended to a bare command, which this
+# doesn't need and shouldn't allow.
+#
+# Installed by install.sh, which validates this file with `visudo -cf`
+# before copying it into place - if you ever edit this by hand instead,
+# do the same (a syntax error here can break sudo system-wide):
+#   sudo visudo -cf acom-control-update.sudoers
+#   sudo cp acom-control-update.sudoers /etc/sudoers.d/acom-control-update
+#   sudo chmod 440 /etc/sudoers.d/acom-control-update
+acom-control ALL=(root) NOPASSWD: /usr/local/bin/acom-update-apply "", /usr/local/bin/acom-update-apply check

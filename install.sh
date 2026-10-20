@@ -20,6 +20,7 @@ fi
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$HOME/acom-control-venv"
+INSTALL_USER="$(whoami)"
 
 echo "==> Updating apt package lists"
 sudo apt-get update
@@ -80,7 +81,14 @@ SERVICE_DST="/etc/systemd/system/acom-control.service"
 
 echo "==> Setting up and starting the acom-control systemd service"
 if ! id acom-control &>/dev/null; then
-  sudo useradd --system --no-create-home --groups dialout acom-control
+  # systemd-journal is needed so GET /api/logs (Setup screen's "Download
+  # Logs" button) can read this unit's own journal entries as this
+  # unprivileged user - without it, journalctl exits with a permission
+  # error. If the user already exists from before this was added, fix it
+  # up below instead of re-running useradd.
+  sudo useradd --system --no-create-home --groups dialout,systemd-journal acom-control
+else
+  sudo usermod -aG systemd-journal acom-control
 fi
 sed \
   -e "s#^WorkingDirectory=.*#WorkingDirectory=$REPO_DIR/acom-control#" \
@@ -88,11 +96,40 @@ sed \
   -e "s#^ExecStart=.*#ExecStart=$VENV_DIR/bin/uvicorn backend.app:app --host 0.0.0.0 --port 8000#" \
   "$SERVICE_SRC" | sudo tee "$SERVICE_DST" >/dev/null
 sudo systemctl daemon-reload
+sudo systemctl enable acom-control
 # Opening the serial port raises DTR, which has been observed to toggle
 # the amp's power state on real 1200S hardware (CLAUDE.md open question
 # 4/5) - accepted as a known risk rather than gated here, so this starts
-# the service unattended rather than stopping short.
-sudo systemctl enable --now acom-control
+# the service unattended rather than stopping short. Using `restart`
+# rather than `enable --now`'s implicit `start` so this also actually
+# takes effect when this script is re-run on top of a service that's
+# already active (e.g. after a `git pull`) - `systemctl start` is a
+# no-op on an already-running unit, which silently defeated the "re-run
+# this script any time requirements.txt changes" note below until now.
+sudo systemctl restart acom-control
+
+echo "==> Installing the self-update helper (dashboard's update icon + daily check)"
+UPDATE_SCRIPT_SRC="$REPO_DIR/acom-control/setup/acom-update-apply.sh"
+UPDATE_SCRIPT_DST="/usr/local/bin/acom-update-apply"
+sed \
+  -e "s#__REPO_DIR__#$REPO_DIR#" \
+  -e "s#__REPO_OWNER__#$INSTALL_USER#" \
+  -e "s#__VENV_DIR__#$VENV_DIR#" \
+  "$UPDATE_SCRIPT_SRC" | sudo tee "$UPDATE_SCRIPT_DST" >/dev/null
+sudo chown root:root "$UPDATE_SCRIPT_DST"
+sudo chmod 755 "$UPDATE_SCRIPT_DST"
+
+SUDOERS_SRC="$REPO_DIR/acom-control/setup/acom-control-update.sudoers"
+SUDOERS_DST="/etc/sudoers.d/acom-control-update"
+SUDOERS_TMP="$(mktemp)"
+cp "$SUDOERS_SRC" "$SUDOERS_TMP"
+# Validate before installing - a syntax error in /etc/sudoers.d can break
+# sudo system-wide, so this must never be copied in unchecked.
+sudo visudo -cf "$SUDOERS_TMP"
+sudo cp "$SUDOERS_TMP" "$SUDOERS_DST"
+sudo chown root:root "$SUDOERS_DST"
+sudo chmod 440 "$SUDOERS_DST"
+rm -f "$SUDOERS_TMP"
 
 cat <<EOF
 
@@ -122,4 +159,12 @@ cat <<EOF
   power state if it was already on.
   journalctl -u acom-control -f
 - Re-run this script any time requirements.txt changes.
+- To update later without SSHing in again: the dashboard checks for
+  updates once a day on its own and shows an icon in the top bar when
+  one's available - click it, then "Update Now" to pull and restart
+  from there. (It works by granting the acom-control service account
+  passwordless sudo for exactly two fixed invocations of one script,
+  /usr/local/bin/acom-update-apply - see
+  acom-control/setup/acom-control-update.sudoers if you want to review
+  or revoke that.) The manual fallback is: sudo acom-update-apply
 EOF
