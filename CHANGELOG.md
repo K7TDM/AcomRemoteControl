@@ -17,6 +17,10 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Fixed
+- "Update Now" button is hidden until a check actually confirms a
+  newer release is available, instead of always being clickable.
+
 ## [0.1.0] - 2026-10-20
 
 First tagged release. Still pre-1.0: several items are implemented but
