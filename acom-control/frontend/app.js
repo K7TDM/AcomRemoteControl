@@ -926,8 +926,6 @@ function wireControls() {
     }
   }));
   document.getElementById("btn-atu-tune")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/atu/tune", { method: "POST" })));
-  document.getElementById("btn-band-next")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/band", postJson({ direction: "next" }))));
-  document.getElementById("btn-band-prev")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/band", postJson({ direction: "prev" }))));
   document.getElementById("btn-antenna-next")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/antenna", postJson({ action: "next" }))));
   document.getElementById("btn-buzzer-test")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/buzzer", postJson({ signal: 1, volume: 50 }))));
 
