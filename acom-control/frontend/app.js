@@ -5,6 +5,42 @@ import { initThemeSwitcher, loadTheme } from "./theme.js";
 import { mountGauge, updateGauge, resolveWidget } from "./gauges.js";
 
 const BAND_NAMES = ["160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"];
+
+// Full-band edges [kHz] for the band panel's scale, indexed like
+// BAND_NAMES. 0x27 only carries the current *segment's* edges, so the
+// whole-band span has to come from a table. US amateur allocations per
+// the ARRL "US Amateur Radio Bands" chart (rev. 1/16/2026), from Tyler.
+// The amp's own segments can run past these (e.g. 18049-18200 on 17m) -
+// renderFreqReadout() clips the highlight to the band.
+const BAND_EDGES_KHZ = [
+  [1800, 2000], [3500, 4000], [5330.5, 5405], [7000, 7300], [10100, 10150],
+  [14000, 14350], [18068, 18168], [21000, 21450], [24890, 24990],
+  [28000, 29700], [50000, 54000],
+];
+
+// Optional CB band (channel 1 26.965 MHz to channel 40 27.405 MHz), off
+// by default - a per-browser display preference (Setup screen checkbox),
+// stored like the theme. When on, a segment or carrier inside this range
+// shows as "CB" with these edges instead of whatever amateur band the
+// amp files it under.
+const CB_EDGES_KHZ = [26965, 27405];
+const CB_STORAGE_KEY = "acom.showCbBand";
+
+function loadShowCbBand() {
+  try {
+    return localStorage.getItem(CB_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveShowCbBand(on) {
+  try {
+    localStorage.setItem(CB_STORAGE_KEY, on ? "1" : "0");
+  } catch {
+    // Display preference only - fine to lose it.
+  }
+}
 const ANTENNA_TYPES = ["Sharp", "Regular", "Wide", "Fixed"];
 
 // Mirrors protocol.py's CAT_*_NAMES dicts exactly - these are fixed,
@@ -517,21 +553,63 @@ function renderFreqReadout(state) {
   const high = b.high_border_khz;
   setText("band-atu-label", b.atu_label_name && b.atu_label_name !== "No Label" ? b.atu_label_name : "");
   setText("band-range", `${(low / 1000).toFixed(3)} - ${(high / 1000).toFixed(3)} MHz`);
-  setText("band-name", BAND_NAMES[b.band_number - 1] || `Band ${b.band_number}`);
+  const overlaps = (lo, hi) => lo < CB_EDGES_KHZ[1] && hi > CB_EDGES_KHZ[0];
+  const onCb = loadShowCbBand() && (overlaps(low, high) || (khz && overlaps(khz, khz + 0.001)));
+  setText("band-name", onCb ? "CB" : BAND_NAMES[b.band_number - 1] || `Band ${b.band_number}`);
   // Same shorthand as the amp's own display: "A1R" = antenna 1, Regular.
   const typeLetter = (ANTENNA_TYPES[b.antenna_type] || "?").charAt(0);
   setText("band-antenna", `A${b.antenna_number}${typeLetter}`);
 
   if (!scale) return;
-  scale.hidden = !(high > low);
-  setText("band-scale-low", String(low));
-  setText("band-scale-high", String(high));
+  // Like the amp's own display: the scale spans the whole band, with the
+  // current segment highlighted on it - clipped to the band, since the
+  // amp's segments can run past the band edges. A segment entirely
+  // outside the table's band (or a band missing from it) falls back to
+  // scaling to the segment itself.
+  let edges = onCb ? CB_EDGES_KHZ : BAND_EDGES_KHZ[b.band_number - 1];
+  if (edges && !(low < edges[1] && high > edges[0])) edges = null;
+  const scaleLow = edges ? edges[0] : low;
+  const scaleHigh = edges ? edges[1] : high;
+  scale.hidden = !(scaleHigh > scaleLow);
+  if (scale.hidden) return;
+  const pct = (f) => `${((f - scaleLow) / (scaleHigh - scaleLow)) * 100}%`;
+
+  const segment = document.getElementById("band-scale-segment");
+  if (segment) {
+    const segLow = Math.max(low, scaleLow);
+    const segHigh = Math.min(high, scaleHigh);
+    segment.style.left = pct(segLow);
+    segment.style.width = `${((segHigh - segLow) / (scaleHigh - scaleLow)) * 100}%`;
+  }
+  renderBandTicks(scaleLow, scaleHigh, pct);
+
   const marker = document.getElementById("band-scale-marker");
   if (marker) {
-    const inBand = khz && high > low && khz >= low && khz <= high;
+    const inBand = khz && khz >= scaleLow && khz <= scaleHigh;
     marker.hidden = !inBand;
-    if (inBand) marker.style.left = `${((khz - low) / (high - low)) * 100}%`;
+    if (inBand) marker.style.left = pct(khz);
   }
+}
+
+// Round-number tick labels across the band, like the amp's 14000 / 14100
+// / ... / 14400 - the smallest step that keeps it to about five labels,
+// plus both band edges when they aren't round themselves.
+const BAND_TICK_STEPS_KHZ = [10, 25, 50, 100, 200, 250, 500, 1000];
+
+function renderBandTicks(lo, hi, pct) {
+  const el = document.getElementById("band-scale-ticks");
+  if (!el) return;
+  const span = hi - lo;
+  const step = BAND_TICK_STEPS_KHZ.find((s) => span / s <= 5) || 1000;
+  const ticks = new Set([lo, hi]);
+  for (let f = Math.ceil(lo / step) * step; f < hi; f += step) {
+    // Skip round ticks crowding a non-round edge label.
+    if (f - lo >= span * 0.1 && hi - f >= span * 0.1) ticks.add(f);
+  }
+  el.innerHTML = [...ticks].sort((a, b) => a - b).map((f) => {
+    const edge = f === lo ? "start" : f === hi ? "end" : "";
+    return `<span class="band-tick" data-edge="${edge}" style="left:${pct(f)}">${f}</span>`;
+  }).join("");
 }
 
 function setText(id, text) {
@@ -639,6 +717,15 @@ function wireControls() {
   document.getElementById("btn-update-close")?.addEventListener("click", closeUpdateScreen);
   document.getElementById("btn-update-now")?.addEventListener("click", withErrorBanner(applyUpdateNow));
   document.getElementById("update-beta-toggle")?.addEventListener("change", setBetaUpdates);
+  const cbCheckbox = document.getElementById("setup-show-cb-band");
+  if (cbCheckbox) {
+    cbCheckbox.checked = loadShowCbBand();
+    // Applies immediately, like the theme switcher - no Save needed.
+    cbCheckbox.addEventListener("change", () => {
+      saveShowCbBand(cbCheckbox.checked);
+      if (appState.lastStatus) renderFreqReadout(appState.lastStatus);
+    });
+  }
   document.getElementById("btn-update-check")?.addEventListener("click", checkForUpdateNow);
   document.getElementById("btn-clear-logs")?.addEventListener("click", withErrorBanner(async () => {
     if (!window.confirm("Clear the log view? Downloaded logs will only include entries from this point forward - nothing is deleted from the system log itself.")) return;

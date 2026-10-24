@@ -63,8 +63,9 @@
 
     <!-- Band panel, modeled on the middle of the amp's own Basic Screen:
          ATU status, current band/segment edges, band name and antenna
-         from 0x27, and a scale across those edges with a marker at the
-         carrier frequency from 0x2F - see renderFreqReadout() in app.js. -->
+         from 0x27, and a scale across the whole band with the current
+         segment highlighted and a marker at the carrier frequency from
+         0x2F - see renderFreqReadout() in app.js. -->
     <div id="freq-readout" class="freq-readout">
       <div class="band-header">
         <span id="band-atu-label" class="band-atu-label"></span>
@@ -73,9 +74,11 @@
         <span id="band-antenna" class="band-antenna"></span>
       </div>
       <div id="band-scale" class="band-scale" hidden>
-        <span id="band-scale-low" class="band-scale-edge"></span>
-        <div class="band-scale-track"><div id="band-scale-marker" class="band-scale-marker" hidden></div></div>
-        <span id="band-scale-high" class="band-scale-edge"></span>
+        <div id="band-scale-ticks" class="band-scale-ticks"></div>
+        <div class="band-scale-track">
+          <div id="band-scale-segment" class="band-scale-segment"></div>
+          <div id="band-scale-marker" class="band-scale-marker" hidden></div>
+        </div>
       </div>
     </div>
 
@@ -138,6 +141,10 @@
       <label>
         <input type="checkbox" id="setup-debug-logging" />
         Debug logging (verbose serial capture)
+      </label>
+      <label>
+        <input type="checkbox" id="setup-show-cb-band" />
+        Show CB band (26.965 - 27.405 MHz) on the band panel - this browser only
       </label>
     </details>
 
