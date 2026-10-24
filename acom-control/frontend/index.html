@@ -100,8 +100,10 @@
   </section>
 
   <section id="setup-screen" hidden>
-    <div class="setup-section">
-      <h2>Amplifier &amp; Tuner</h2>
+    <!-- Each top-level section is a native <details>, collapsed by default -
+         the Setup screen is long, so only the section being worked on opens. -->
+    <details class="setup-section collapsible">
+      <summary><h2>Amplifier &amp; Tuner</h2></summary>
       <label>
         Amp model:
         <select id="setup-amp-select" class="theme-select"></select>
@@ -123,10 +125,10 @@
         <input type="checkbox" id="setup-debug-logging" />
         Debug logging (verbose serial capture)
       </label>
-    </div>
+    </details>
 
-    <div class="setup-section">
-      <h2>CAT / Rig Control</h2>
+    <details class="setup-section collapsible">
+      <summary><h2>CAT / Rig Control</h2></summary>
       <p class="danger-warning">
         Settings for the amp's own rear-panel CAT port (separate from
         this Pi's RS-232 link) - same options as the amp's own front-
@@ -156,17 +158,17 @@
       </label>
       <button id="btn-cat-settings-save" class="acom-button" type="button">Save CAT Settings</button>
       <p id="cat-settings-status" class="danger-warning" hidden></p>
-    </div>
+    </details>
 
-    <div class="setup-section">
-      <h2>Logs</h2>
+    <details class="setup-section collapsible">
+      <summary><h2>Logs</h2></summary>
       <button id="btn-download-logs" class="acom-button" type="button">Download Logs</button>
       <button id="btn-clear-logs" class="acom-button" type="button">Clear Log</button>
       <p id="setup-log-marker-note" class="danger-warning" hidden></p>
-    </div>
+    </details>
 
-    <div id="antenna-setup-section" class="setup-section" hidden>
-      <h2>Antenna Setup</h2>
+    <details id="antenna-setup-section" class="setup-section collapsible" hidden>
+      <summary><h2>Antenna Setup</h2></summary>
       <table class="antenna-matrix">
         <thead>
           <tr>
@@ -218,7 +220,7 @@
           <button id="btn-segment-delete" class="acom-button danger" type="button">Delete This Segment's Tuning&hellip;</button>
         </div>
       </details>
-    </div>
+    </details>
 
     <div class="button-bar">
       <button id="btn-setup-refresh" class="acom-button" type="button">Refresh from Amp</button>
