@@ -1275,7 +1275,11 @@ async def request_atu_tuning_record(req: AtuTuningRecordRequest) -> dict:
     protocol.parse_atu_segment_tuning), not an OK/ERR, so it stays
     fire-and-forget like build_request_message."""
     link = _require_serial_link()
-    await link.enqueue(protocol.build_request_atu_tuning_record(req.antenna_number, req.band_number, req.record_number))
+    try:
+        frame = protocol.build_request_atu_tuning_record(req.antenna_number, req.band_number, req.record_number)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await link.enqueue(frame)
     return {"ok": True}
 
 
@@ -1293,13 +1297,15 @@ async def delete_segment_tuning(req: DeleteSegmentTuningRequest) -> dict:
     link = _require_serial_link()
     if not req.confirm:
         raise HTTPException(400, "must set confirm=true to delete a tuning entry")
+    try:
+        frame = protocol.build_delete_segment_tuning(req.antenna_number, req.band_number, req.record_number)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     backend_logger.warning(
         "Deleting segment tuning: antenna=%d band=%d record=%d",
         req.antenna_number, req.band_number, req.record_number,
     )
-    result = await link.send_command(
-        protocol.build_delete_segment_tuning(req.antenna_number, req.band_number, req.record_number)
-    )
+    result = await link.send_command(frame)
     return _require_confirmed(result)
 
 
@@ -1331,8 +1337,12 @@ async def erase_atu_memory(req: AtuEraseMemoryRequest) -> dict:
         raise HTTPException(400, f"unknown selection {req.selection!r}; expected one of {sorted(ATU_ERASE_NAME_TO_VALUE)}")
     if req.selection == "specific" and not req.antenna_number:
         raise HTTPException(400, "antenna_number is required when selection='specific'")
+    try:
+        frame = protocol.build_atu_erase_memory(value, req.antenna_number or 0)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     backend_logger.warning("Destructive ATU memory erase requested: %s (antenna=%s)", req.selection, req.antenna_number)
-    result = await link.send_command(protocol.build_atu_erase_memory(value, req.antenna_number or 0))
+    result = await link.send_command(frame)
     return _require_confirmed(result)
 
 

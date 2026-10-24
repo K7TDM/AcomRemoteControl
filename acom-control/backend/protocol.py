@@ -203,13 +203,39 @@ def build_atu_full_tune() -> bytes:
     return build_amp_command(CMD_ATU_MANAGEMENT, param_lw=ATU_FULL_TUNE)
 
 
+# Antenna numbering: everything above this module (AmpState, the API, the
+# UI) uses 1-based numbers matching the amp's own display ("A1".."A4").
+# On the wire, this firmware counts antennas from 0, despite the doc's
+# "[1..10]" - confirmed on a real 1200S: a 0x27 antenna byte of 3 while
+# the front panel showed "A4R", and a byte of 0 (impossible under the
+# doc's range) in another capture. The doc's own 0x18/0xA0 tables label
+# the slots "Ant0".."Ant3", consistent with this. Commands that take an
+# antenna number are assumed to use the same 0-based convention (per
+# Tyler's direction) - NEEDS REAL-HARDWARE VERIFICATION for the command
+# direction specifically. Band numbers are NOT shifted: 0x27 reports band
+# 6 for 20m, which is 1-based per the doc's band list.
+MAX_ANTENNA_NUMBER = 10  # protocol field width (10AS selector), not this build's 4 ports
+
+
+def antenna_to_wire(antenna_number: int) -> int:
+    """1-based antenna number (as shown on the amp) -> 0-based wire value."""
+    if not 1 <= antenna_number <= MAX_ANTENNA_NUMBER:
+        raise ValueError(f"antenna number must be 1..{MAX_ANTENNA_NUMBER}, got {antenna_number}")
+    return antenna_number - 1
+
+
+def antenna_from_wire(raw: int) -> int:
+    """0-based wire value -> 1-based antenna number (as shown on the amp)."""
+    return raw + 1
+
+
 def build_atu_bypass(antenna_number: int) -> bytes:
     """0x0E/0x02 "Bypass Command (Number of Antenna)" - switches directly to
-    the given antenna but bypasses ATU tuning. This is the closest thing to
-    a direct antenna-select command in this protocol version; see
-    CLAUDE.md open question 3.
+    the given antenna (1-based, as shown on the amp) but bypasses ATU
+    tuning. This is the closest thing to a direct antenna-select command
+    in this protocol version; see CLAUDE.md open question 3.
     """
-    return build_amp_command(CMD_ATU_MANAGEMENT, param_hw=antenna_number, param_lw=ATU_BYPASS)
+    return build_amp_command(CMD_ATU_MANAGEMENT, param_hw=antenna_to_wire(antenna_number), param_lw=ATU_BYPASS)
 
 
 def build_atu_activate_cyclic_display(message_address: int) -> bytes:
@@ -259,8 +285,9 @@ def build_user_flags(flags: int) -> bytes:
 
 def _pack_antenna_band(antenna_number: int, band_number: int) -> int:
     """Byte4 bit-packing shared by Cmd 0x0F and Cmd 0x12: Bits7..4 = Antenna
-    Number [1..10], Bits3..0 = Band Number [1..11]."""
-    return ((antenna_number & 0x0F) << 4) | (band_number & 0x0F)
+    Number (1-based in, 0-based on the wire - see antenna_to_wire()),
+    Bits3..0 = Band Number [1..11]."""
+    return ((antenna_to_wire(antenna_number) & 0x0F) << 4) | (band_number & 0x0F)
 
 
 def build_request_atu_tuning_record(antenna_number: int, band_number: int, record_number: int = 0) -> bytes:
@@ -288,10 +315,12 @@ def build_delete_segment_tuning(antenna_number: int, band_number: int, record_nu
 
 def build_atu_erase_memory(selection: int, antenna_number: int = 0) -> bytes:
     """0x81 Cmd 0x10 - ATU Service erase commands (erase current/specific/
-    all tunings, or the whole ATU memory). Byte5 (antenna_number) is only
-    meaningful for ATU_ERASE_SPECIFIC_ANTENNA. Destructive and rarely used
-    by design - gate behind explicit confirmation."""
-    return build_amp_command(CMD_ATU_SERVICE, param_hw=selection, param_lw=antenna_number)
+    all tunings, or the whole ATU memory). Byte5 (antenna_number, 1-based)
+    is only meaningful for ATU_ERASE_SPECIFIC_ANTENNA - 0 means "not
+    applicable" and is sent as 0. Destructive and rarely used by design -
+    gate behind explicit confirmation."""
+    wire_antenna = antenna_to_wire(antenna_number) if antenna_number else 0
+    return build_amp_command(CMD_ATU_SERVICE, param_hw=selection, param_lw=wire_antenna)
 
 
 # =============================================================================
@@ -708,7 +737,7 @@ def parse_antenna_band_status(frame: Frame) -> AntennaBandStatus:
     data = frame.data  # bytes 3..19 inclusive (17 bytes)
     ant_type_byte = data[1]
     return AntennaBandStatus(
-        antenna_number=data[0],
+        antenna_number=antenna_from_wire(data[0]),
         antenna_type=ant_type_byte & 0x7F,
         is_default_antenna=bool(ant_type_byte & 0x80),
         band_number=data[2],
@@ -1075,7 +1104,7 @@ def parse_atu_segment_tuning(frame: Frame) -> AtuSegmentTuning:
         high_freq_khz=u16(3),
         segment_count=data[5],
         current_segment=data[6],
-        antenna_number=data[7],
+        antenna_number=antenna_from_wire(data[7]),
         antenna_type=data[8],
         segment_low_freq_khz=u16(9),
         segment_high_freq_khz=u16(11),
