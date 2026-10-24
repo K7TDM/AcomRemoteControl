@@ -390,17 +390,24 @@ function updateTxEdgeState(state) {
 // Colors the merged OPR/STB button from the amp's own reported mode rather
 // than click-tracked UI state - see data-opr-state in components.css for
 // the color mapping, and the button's click handler in wireControls() for
-// the toggle direction this same mode name drives. Per Tyler: just two
-// looks - green covers "Operate" broadly (OPR/RX or OPR/TX), red is
-// Standby. No separate tx/rx distinction.
+// the toggle direction this same mode name drives. Per Tyler: the label
+// names what a click will do - "Standby" (green) while in Operate (OPR/RX
+// or OPR/TX, no distinction), "Operate" (yellow) while in Standby.
 function renderOprToggle(state) {
   const btn = document.getElementById("btn-opr-toggle");
   if (!btn) return;
   const modeName = state.telemetry ? state.telemetry.mode_name : null;
   let oprState = "unknown";
-  if (modeName === MODE_NAME_STB) oprState = "stb";
-  else if (modeName === MODE_NAME_OPR_RX || modeName === MODE_NAME_OPR_TX) oprState = "operate";
+  let text = "OPR/STB";
+  if (modeName === MODE_NAME_STB) {
+    oprState = "stb";
+    text = "Operate";
+  } else if (modeName === MODE_NAME_OPR_RX || modeName === MODE_NAME_OPR_TX) {
+    oprState = "operate";
+    text = "Standby";
+  }
   btn.dataset.oprState = oprState;
+  if (btn.textContent !== text) btn.textContent = text;
 }
 
 // Hides the main button-bar's Power On button once the amp is confirmed

@@ -19,6 +19,10 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Changed
+- The OPR/STB button now says what it will do: "Standby" (green) while
+  in Operate, "Operate" (yellow, was red) while in Standby.
+
 ## [0.1.6] - 2026-10-23
 
 ### Added
