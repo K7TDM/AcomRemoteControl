@@ -163,7 +163,7 @@ cat <<EOF
   updates once a day on its own and shows an icon in the top bar when
   one's available - click it, then "Update Now" to pull and restart
   from there. (It works by granting the acom-control service account
-  passwordless sudo for exactly two fixed invocations of one script,
+  passwordless sudo for exactly four fixed invocations of one script,
   /usr/local/bin/acom-update-apply - see
   acom-control/setup/acom-control-update.sudoers if you want to review
   or revoke that.) The manual fallback is: sudo acom-update-apply

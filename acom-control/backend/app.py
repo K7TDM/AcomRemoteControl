@@ -865,6 +865,7 @@ update_status: dict = {
     "checked_at": None,
     "error": None,
     "changes": [],
+    "beta": False,
 }
 
 _update_check_task: Optional[asyncio.Task] = None
@@ -922,6 +923,22 @@ async def _read_changelog_at_ref(ref: str) -> str:
     return stdout.decode(errors="replace")
 
 
+async def _read_commit_subjects(ref: str) -> list[str]:
+    """Beta-channel stand-in for changelog entries: untagged commits on
+    main usually have no CHANGELOG.md section yet, so list the commit
+    subjects between HEAD and `ref` instead (newest first). Local-only,
+    same as _read_changelog_at_ref() - the helper's check already
+    fetched the objects."""
+    proc = await asyncio.create_subprocess_exec(
+        "git", "-C", str(REPO_ROOT), "log", "--format=%s", f"HEAD..{ref}",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(stderr.decode(errors="replace").strip() or "git log failed")
+    return [line for line in stdout.decode(errors="replace").splitlines() if line.strip()]
+
+
 async def _run_update_helper(*args: str, timeout: float) -> tuple[int, str, str]:
     proc = await asyncio.create_subprocess_exec(
         "sudo", UPDATE_APPLY_SCRIPT, *args,
@@ -938,9 +955,13 @@ async def _check_for_update() -> None:
     network, auth broken, etc.) are logged and recorded but never raised
     - this runs unattended on a timer, so there's no one to show an
     exception to."""
+    beta = config.update.beta
     update_status["changes"] = []
+    update_status["beta"] = beta
     try:
-        returncode, stdout, stderr = await _run_update_helper("check", timeout=UPDATE_CHECK_TIMEOUT_S)
+        returncode, stdout, stderr = await _run_update_helper(
+            "check-beta" if beta else "check", timeout=UPDATE_CHECK_TIMEOUT_S
+        )
         if returncode != 0:
             raise RuntimeError(stderr.strip() or f"exited {returncode}")
         fields = dict(line.split("=", 1) for line in stdout.splitlines() if "=" in line)
@@ -951,16 +972,24 @@ async def _check_for_update() -> None:
         update_status["error"] = None
         if update_status["available"]:
             backend_logger.info(
-                "Update available: %s -> %s", update_status["current_version"], update_status["latest_version"]
+                "Update available%s: %s -> %s", " (beta)" if beta else "",
+                update_status["current_version"], update_status["latest_version"],
             )
             try:
-                changelog_text = await _read_changelog_at_ref(update_status["latest_version"])
-                current_v = _version_tuple(update_status["current_version"])
-                latest_v = _version_tuple(update_status["latest_version"])
-                update_status["changes"] = [
-                    entry for entry in _parse_changelog_entries(changelog_text)
-                    if current_v < _version_tuple(entry["version"]) <= latest_v
-                ]
+                if beta:
+                    subjects = await _read_commit_subjects(fields.get("latest_ref", "origin/main"))
+                    update_status["changes"] = [{
+                        "title": f"{len(subjects)} new commit{'s' if len(subjects) != 1 else ''} on main",
+                        "body": "\n".join(f"- {s}" for s in subjects),
+                    }]
+                else:
+                    changelog_text = await _read_changelog_at_ref(update_status["latest_version"])
+                    current_v = _version_tuple(update_status["current_version"])
+                    latest_v = _version_tuple(update_status["latest_version"])
+                    update_status["changes"] = [
+                        entry for entry in _parse_changelog_entries(changelog_text)
+                        if current_v < _version_tuple(entry["version"]) <= latest_v
+                    ]
             except Exception as exc:
                 # Not fatal to the check itself - "update available" is
                 # still correct even if we can't show what's in it.
@@ -987,6 +1016,7 @@ async def get_update_status() -> dict:
     path. Drives the header icon's highlighted/bouncing vs. plain state
     between popover opens, so the icon can get your attention on its
     own instead of requiring a click first."""
+    update_status["beta"] = config.update.beta  # correct even before the first check runs
     return dict(update_status)
 
 
@@ -1002,6 +1032,23 @@ async def check_for_update_now() -> dict:
     return dict(update_status)
 
 
+class UpdateBetaRequest(BaseModel):
+    beta: bool
+
+
+@app.post("/api/update/beta")
+async def set_update_beta(req: UpdateBetaRequest) -> dict:
+    """Update screen's "beta updates" toggle - persists the choice, then
+    re-runs the check right away so the screen reflects the new channel
+    without a second round-trip."""
+    if req.beta != config.update.beta:
+        config.update.beta = req.beta
+        config.save()
+        backend_logger.info("Beta updates %s", "enabled" if req.beta else "disabled")
+    await _check_for_update()
+    return dict(update_status)
+
+
 @app.post("/api/update/apply")
 async def apply_update() -> dict:
     """Launches the helper's default (no-arg) mode - pulls, reinstalls
@@ -1011,14 +1058,16 @@ async def apply_update() -> dict:
     the update is *launched*, not once it's finished. The frontend
     should watch /api/config's git_commit for the restart actually
     landing, not expect this request to stay alive for it."""
+    beta = config.update.beta
     try:
         subprocess.Popen(
-            ["sudo", UPDATE_APPLY_SCRIPT],
+            ["sudo", UPDATE_APPLY_SCRIPT, *(["beta"] if beta else [])],
             stdin=subprocess.DEVNULL, start_new_session=True,
         )
     except Exception as exc:
         raise HTTPException(500, f"failed to launch update: {exc}") from exc
-    backend_logger.info("Update requested from the dashboard (currently at commit %s)", GIT_COMMIT)
+    backend_logger.info("Update requested from the dashboard%s (currently at commit %s)",
+                        " (beta)" if beta else "", GIT_COMMIT)
     return {"ok": True, "launched": True, "current_commit": GIT_COMMIT}
 
 

@@ -596,6 +596,8 @@ function wireControls() {
   document.getElementById("btn-update-available")?.addEventListener("click", openUpdateScreen);
   document.getElementById("btn-update-close")?.addEventListener("click", closeUpdateScreen);
   document.getElementById("btn-update-now")?.addEventListener("click", withErrorBanner(applyUpdateNow));
+  document.getElementById("update-beta-toggle")?.addEventListener("change", setBetaUpdates);
+  document.getElementById("btn-update-check")?.addEventListener("click", checkForUpdateNow);
   document.getElementById("btn-clear-logs")?.addEventListener("click", withErrorBanner(async () => {
     if (!window.confirm("Clear the log view? Downloaded logs will only include entries from this point forward - nothing is deleted from the system log itself.")) return;
     await apiFetch("/api/logs/clear", { method: "POST" });
@@ -1046,13 +1048,31 @@ function renderUpdateChanges() {
   section.hidden = changes.length === 0;
   if (changes.length === 0) return;
   body.innerHTML = changes.map((entry) => {
-    const heading = `v${entry.version}${entry.date ? ` - ${entry.date}` : ""}`;
+    // Beta-channel entries carry a ready-made title (commit count) instead
+    // of a changelog version/date - see app.py's _read_commit_subjects().
+    const heading = entry.title || `v${entry.version}${entry.date ? ` - ${entry.date}` : ""}`;
     return `<h3 class="changelog-version">${escapeHtml(heading)}</h3>${renderChangelogMarkdown(entry.body)}`;
   }).join("");
 }
 
 async function checkForUpdateNow() {
+  await runUpdateCheck(() => apiFetch("/api/update/check", { method: "POST" }));
+}
+
+/** Beta toggle: saves the choice server-side and returns a fresh check
+ * against the newly selected channel, so this reuses the same rendering. */
+async function setBetaUpdates(event) {
+  const beta = event.target.checked;
+  await runUpdateCheck(() => apiFetch("/api/update/beta", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ beta }),
+  }));
+}
+
+async function runUpdateCheck(request) {
   const headline = document.getElementById("update-headline");
+  const betaToggle = document.getElementById("update-beta-toggle");
   const currentEl = document.getElementById("update-current-version");
   const latestEl = document.getElementById("update-latest-version");
   const updateNowButton = document.getElementById("btn-update-now");
@@ -1065,10 +1085,14 @@ async function checkForUpdateNow() {
   // nothing to click/no reason to restart the service otherwise.
   if (updateNowButton) { updateNowButton.hidden = true; updateNowButton.disabled = false; }
   document.getElementById("update-changes-section")?.setAttribute("hidden", "");
+  if (betaToggle) betaToggle.disabled = true;
+  const checkButton = document.getElementById("btn-update-check");
+  if (checkButton) checkButton.disabled = true;
 
   try {
-    const resp = await apiFetch("/api/update/check", { method: "POST" });
+    const resp = await request();
     updateStatus = await resp.json();
+    if (betaToggle) betaToggle.checked = !!updateStatus.beta;
     if (currentEl) currentEl.textContent = updateStatus.current_version || "unknown";
     if (latestEl) latestEl.textContent = updateStatus.latest_version || "no tagged release yet";
     if (headline) {
@@ -1081,6 +1105,9 @@ async function checkForUpdateNow() {
     renderUpdateButtonHighlight();
   } catch (err) {
     if (headline) headline.textContent = `Check failed: ${err.message}`;
+  } finally {
+    if (betaToggle) betaToggle.disabled = false;
+    if (checkButton) checkButton.disabled = false;
   }
 }
 

@@ -69,6 +69,14 @@ class LoggingConfig:
 
 
 @dataclass
+class UpdateConfig:
+    # Update screen's "beta updates" toggle - when true, self-update tracks
+    # the tip of origin/main instead of the latest vX.Y.Z tag (see
+    # setup/acom-update-apply.sh's check-beta/beta modes).
+    beta: bool = False
+
+
+@dataclass
 class AppConfig:
     amp: AmpConfig
     tuner: TunerConfig
@@ -76,6 +84,7 @@ class AppConfig:
     modbus: ModbusConfig
     logging: LoggingConfig
     path: Path = field(repr=False)
+    update: UpdateConfig = field(default_factory=UpdateConfig)
 
     def save(self) -> None:
         payload = {
@@ -84,6 +93,7 @@ class AppConfig:
             "web": asdict(self.web),
             "modbus": asdict(self.modbus),
             "logging": asdict(self.logging),
+            "update": asdict(self.update),
         }
         self.path.write_text(json.dumps(payload, indent=2) + "\n")
         logger.info("Saved config to %s", self.path)
@@ -99,6 +109,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     web = WebConfig(**data.get("web", {}))
     modbus = ModbusConfig(**data.get("modbus", {}))
     logging_cfg = LoggingConfig(**data.get("logging", {}))
+    update = UpdateConfig(**data.get("update", {}))
 
     validate_config(amp.model, tuner.model)
 
@@ -117,4 +128,4 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
             amp.serial_device,
         )
 
-    return AppConfig(amp=amp, tuner=tuner, web=web, modbus=modbus, logging=logging_cfg, path=path)
+    return AppConfig(amp=amp, tuner=tuner, web=web, modbus=modbus, logging=logging_cfg, path=path, update=update)
