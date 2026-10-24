@@ -73,8 +73,8 @@
 }
 
 /* Header-bar look (amber bar, label left / digit right, same row) only
-   applies to the bargraph widget - matches the real screen, where the
-   plain readouts (Input Power, PA DC Current) have no amber bar at all.
+   applies to the bargraph widget - a `plain` readout (none currently;
+   see GAUGE_DEFS in app.js) gets no amber bar at all.
    The container's own padding is zeroed and pushed onto each child
    instead of relying on negative margins, so this works whether the
    container is .gauge-wrapper or the differently-padded .gauge-hero. */
@@ -124,8 +124,11 @@
   background: #000;
 }
 
-[data-theme="acom"] .freq-readout .value {
-  font-weight: 700;
+/* Band panel header in the same amber as the gauge header bars. */
+[data-theme="acom"] .band-range,
+[data-theme="acom"] .band-name,
+[data-theme="acom"] .band-antenna {
+  color: var(--accent-label);
 }
 
 /* Status strip: edge-to-edge amber cells (no gaps/border, like the real
