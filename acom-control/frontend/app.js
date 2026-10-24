@@ -37,20 +37,22 @@ const ATU_LABEL_NAME_BYPASS = "ATU In Bypass";
 // #power-out-hero in index.html) rather than inside the regular grid.
 const HERO_GAUGE_DEF = { id: "forward_power_w", label: "Forward Power", unit: "W", min: 0, max: () => appState.maxPowerW || 1500 };
 
-// Ordered and flagged to match the real Basic Screen's own layout (PA Temp +
-// Reflected Power as metered bargraphs; Input Power + PA DC Current as bare
-// digit readouts with no bargraph - see Figure 3-2 in the 1200S manual).
+// Ordered to match the real Basic Screen's own layout (see Figure 3-2 in
+// the 1200S manual). The real screen shows Input Power + PA DC Current as
+// bare digits with no bargraph, but per Tyler all four get the same
+// metered bargraph (amber header bar in the ACOM theme) here - the `plain`
+// flag is still supported by gauges.js if a bare readout is wanted again.
 // swr_calc has no real-screen counterpart (it's computed, not read from the
 // amp - see computeSwr()) so it gets its own full-width row in the grid.
 const GAUGE_DEFS = [
   { id: "temp_pam1_c", label: "PA Temperature", unit: "°C", min: 0, max: () => 100 },
   { id: "reflected_power_w", label: "Reflected Power", unit: "W", min: 0, max: () => Math.max(50, (appState.maxPowerW || 1500) * 0.2) },
-  { id: "input_power_w", label: "Input Power", unit: "W", min: 0, max: () => 100, plain: true },
+  { id: "input_power_w", label: "Input Power", unit: "W", min: 0, max: () => 100 },
   // Shown in A, not raw mA, to match the manual's own spec and the amp's own
   // front panel ("PA DC CURRENT must be between 32 and 36 A" at 1000W) - see
   // id1_a derived in renderGauges(). A max of 40A gives headroom above the
   // documented 32-36A full-power range.
-  { id: "id1_a", label: "PA DC Current", unit: "A", min: 0, max: () => 40, plain: true },
+  { id: "id1_a", label: "PA DC Current", unit: "A", min: 0, max: () => 40 },
   { id: "swr_calc", label: "SWR", unit: ":1", min: 1, max: () => 5 },
 ];
 
@@ -489,12 +491,52 @@ document.addEventListener("acom-theme-change", (event) => {
   remountAllGauges();
 });
 
+// Band panel - mirrors the middle of the amp's own Basic Screen, e.g.
+// "Memory Settings   18.049 - 18.200 MHz   A1R" over a scale between the
+// same two edges. Band/edges/antenna/ATU label all come from 0x27 (only
+// sent on a band or segment change, so this reflects the last change);
+// the marker is the live carrier frequency from 0x2F, which reads 0
+// until the amp has actually seen RF. Per Tyler, this replaced the old
+// big-digit carrier frequency readout entirely.
 function renderFreqReadout(state) {
   const el = document.getElementById("freq-readout");
   if (!el) return;
   const khz = state.telemetry ? state.telemetry.carrier_freq_khz : null;
-  const mhz = khz ? (khz / 1000).toFixed(3) : "--.---";
-  el.innerHTML = `<span class="value">${mhz}</span><span class="unit">MHz</span>`;
+
+  const b = state.antenna_band_status;
+  const scale = document.getElementById("band-scale");
+  if (!b) {
+    setText("band-atu-label", "");
+    setText("band-range", "Band: unknown");
+    setText("band-name", "");
+    setText("band-antenna", "");
+    if (scale) scale.hidden = true;
+    return;
+  }
+  const low = b.low_border_khz;
+  const high = b.high_border_khz;
+  setText("band-atu-label", b.atu_label_name && b.atu_label_name !== "No Label" ? b.atu_label_name : "");
+  setText("band-range", `${(low / 1000).toFixed(3)} - ${(high / 1000).toFixed(3)} MHz`);
+  setText("band-name", BAND_NAMES[b.band_number - 1] || `Band ${b.band_number}`);
+  // Same shorthand as the amp's own display: "A1R" = antenna 1, Regular.
+  const typeLetter = (ANTENNA_TYPES[b.antenna_type] || "?").charAt(0);
+  setText("band-antenna", `A${b.antenna_number}${typeLetter}`);
+
+  if (!scale) return;
+  scale.hidden = !(high > low);
+  setText("band-scale-low", String(low));
+  setText("band-scale-high", String(high));
+  const marker = document.getElementById("band-scale-marker");
+  if (marker) {
+    const inBand = khz && high > low && khz >= low && khz <= high;
+    marker.hidden = !inBand;
+    if (inBand) marker.style.left = `${((khz - low) / (high - low)) * 100}%`;
+  }
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
 }
 
 // Cycling state for the warning banner - module-level rather than inside

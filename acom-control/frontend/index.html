@@ -61,8 +61,22 @@
 
     <div id="gauge-grid" class="gauge-grid"></div>
 
+    <!-- Band panel, modeled on the middle of the amp's own Basic Screen:
+         ATU status, current band/segment edges, band name and antenna
+         from 0x27, and a scale across those edges with a marker at the
+         carrier frequency from 0x2F - see renderFreqReadout() in app.js. -->
     <div id="freq-readout" class="freq-readout">
-      <span class="value">--.---</span><span class="unit">MHz</span>
+      <div class="band-header">
+        <span id="band-atu-label" class="band-atu-label"></span>
+        <span id="band-range" class="band-range"></span>
+        <span id="band-name" class="band-name"></span>
+        <span id="band-antenna" class="band-antenna"></span>
+      </div>
+      <div id="band-scale" class="band-scale" hidden>
+        <span id="band-scale-low" class="band-scale-edge"></span>
+        <div class="band-scale-track"><div id="band-scale-marker" class="band-scale-marker" hidden></div></div>
+        <span id="band-scale-high" class="band-scale-edge"></span>
+      </div>
     </div>
 
     <div id="warning-banner" class="warning-banner" hidden></div>

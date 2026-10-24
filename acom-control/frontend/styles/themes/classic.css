@@ -126,11 +126,3 @@
 [data-theme="classic"] .app-header {
   border-bottom: 3px solid var(--accent-label);
 }
-
-/* The frequency readout is the one "digital-ish" number on an otherwise
-   all-analog panel - give it a nixie-tube glow instead of a flat color. */
-[data-theme="classic"] .freq-readout .value {
-  font-family: var(--font-family-display);
-  letter-spacing: 0.03em;
-  text-shadow: 0 0 8px color-mix(in srgb, var(--readout-freq) 65%, transparent);
-}
