@@ -36,6 +36,17 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 backend_logger = logging.getLogger("acom.backend")
 frontend_logger = logging.getLogger("acom.frontend")
 
+# Prefix for every git command this (unprivileged) process runs itself.
+# The repo is owned by whoever ran install.sh, but the service runs as
+# the acom-control user, and git refuses to work in a repo owned by
+# someone else ("detected dubious ownership") - which made every call
+# below fail on the real Pi, so GIT_VERSION was stuck at "unknown" and
+# the ?v= asset cache-busting never changed between updates (browsers
+# needed a hard refresh). safe.directory is honored when passed on the
+# command line, so this trusts exactly this one repo, for these calls
+# only, without touching any user's or the system's git config.
+GIT_CMD = ["git", "-c", f"safe.directory={REPO_ROOT}", "-C", str(REPO_ROOT)]
+
 
 def _read_git_commit() -> str:
     """Short commit hash this process was started from - computed once at
@@ -46,12 +57,20 @@ def _read_git_commit() -> str:
     actually landed, rather than guessing from connectivity blips alone."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "rev-parse", "--short", "HEAD"],
+            [*GIT_CMD, "rev-parse", "--short", "HEAD"],
             capture_output=True, text=True, timeout=5, check=True,
         )
         return result.stdout.strip()
-    except Exception:
+    except Exception as exc:
+        backend_logger.warning("Could not read git commit: %s", _git_error(exc))
         return "unknown"
+
+
+def _git_error(exc: Exception) -> str:
+    """git's own stderr when there is one (e.g. "dubious ownership"),
+    rather than just the exit status."""
+    stderr = getattr(exc, "stderr", None)
+    return stderr.strip() if stderr else str(exc)
 
 
 GIT_COMMIT = _read_git_commit()
@@ -68,11 +87,12 @@ def _read_git_version() -> str:
     releases specifically."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "describe", "--tags", "--always"],
+            [*GIT_CMD, "describe", "--tags", "--always"],
             capture_output=True, text=True, timeout=5, check=True,
         )
         return result.stdout.strip()
-    except Exception:
+    except Exception as exc:
+        backend_logger.warning("Could not read git version: %s", _git_error(exc))
         return "unknown"
 
 
@@ -914,7 +934,7 @@ async def _read_changelog_at_ref(ref: str) -> str:
     as this unprivileged process - no sudo needed, unlike the fetch/pull/
     restart steps that need REPO_OWNER's network credentials or root."""
     proc = await asyncio.create_subprocess_exec(
-        "git", "-C", str(REPO_ROOT), "show", f"{ref}:CHANGELOG.md",
+        *GIT_CMD, "show", f"{ref}:CHANGELOG.md",
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await proc.communicate()
@@ -930,7 +950,7 @@ async def _read_commit_subjects(ref: str) -> list[str]:
     same as _read_changelog_at_ref() - the helper's check already
     fetched the objects."""
     proc = await asyncio.create_subprocess_exec(
-        "git", "-C", str(REPO_ROOT), "log", "--format=%s", f"HEAD..{ref}",
+        *GIT_CMD, "log", "--format=%s", f"HEAD..{ref}",
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await proc.communicate()
