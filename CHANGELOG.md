@@ -32,8 +32,48 @@ first, then get moved under a version heading below when tagged.
   includes the full per-antenna/per-band ATU tuning matrix (44 combos)
   and all four Hard Fault event records, neither of which existed
   before - see `CLAUDE.md` open question 15.
+- "Beta updates" toggle on the update screen: when on, the updater
+  offers any new commit on `main`, not just tagged releases, and
+  "What's new" lists the new commits instead of changelog entries.
+  **Needs `install.sh` re-run once on the Pi** to install the updater's
+  new modes and their sudo permission.
+- "Check for Updates" button on the update screen, to re-run the check
+  on demand.
+- Band panel on the dashboard, modeled on the amp's own Basic Screen:
+  ATU status, current band/segment edges, band name and antenna (e.g.
+  "A1R"), over a scale across the whole band with the amp's current
+  tuning segment highlighted, and a marker at the carrier frequency
+  when it falls inside the band. Band edges follow the ARRL US amateur
+  band chart. An optional CB band (26.965 - 27.405 MHz) can be turned
+  on per browser from the Setup screen.
+
+### Changed
+- Setup screen sections are collapsible and start closed.
+- Input Power and PA DC Current now have the same metered bargraph
+  (amber header bar in the ACOM theme) as the other gauges, instead of
+  bare numbers.
+- The big carrier-frequency readout is replaced by the band panel above.
 
 ### Fixed
+- Restarting the service (e.g. re-running `install.sh`, or a
+  self-update) could leave the amp locked up. Linux turns on DTR/RTS -
+  the amp's "Remote Power On" lines - every time the serial port is
+  opened, and nothing turned them back off. They're now released right
+  after every open, at the end of every power pulse (even an
+  interrupted one), and at shutdown.
+- After an update the browser could keep showing the old dashboard
+  until a hard refresh. On the Pi, every git command the service ran
+  failed (the repo belongs to a different user than the service, which
+  git refuses by default), so the version stamped on the dashboard's
+  file URLs was always "unknown" and never changed between updates.
+  The service's git calls now trust just this one repo explicitly.
+  The same failure also hid the version on the update screen and
+  stopped "What's new" from loading.
+- The dashboard's antenna number was one lower than the amp's own
+  display (showed 3 for "A4"): the amp counts antennas from 0 on the
+  wire, contrary to the protocol doc. Antenna numbers now match the
+  amp's display, and commands that take an antenna number send the
+  0-based value.
 - Header update icon rendered as Apple's own colorful emoji glyph on
   iOS ("an arrow with a blue box") instead of the plain styleable
   glyph the `.has-update` amber highlight/bounce assumed, since a bare
