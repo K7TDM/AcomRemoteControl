@@ -38,6 +38,8 @@ first, then get moved under a version heading below when tagged.
   is waiting for RF.
 - Peak and average now cover the whole transmission: TX drops shorter
   than 1.5s (pauses within one over) no longer reset them.
+- Removed the "◀ Band" / "Band ▶" buttons from the dashboard - the
+  radio's CAT link already sets the band.
 
 ### Fixed
 - After an update or service restart the dashboard could look
