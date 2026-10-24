@@ -135,6 +135,26 @@ the "10AS" model name) — see the discrepancy noted below.
   and an `ATU_Label` status enum (Init/Recalling/Full Tune/Mem Transfer/
   Completed/Bypass/Matched/Coarse Match/No Match/Outdated/Memory Settings).
 
+**Antenna numbers are 0-based on the wire (confirmed 2026-10-23, contradicts
+the doc).** The doc says `[1..10]` for the `0x27` antenna byte, but a real
+1200S sent `03` while its front panel showed `A4R` (type byte `01` =
+Regular matched the "R"), and an amp snapshot captured a raw `0` - impossible
+under a 1-based range. The doc's own `0x18`/`0xA0` tables already label the
+slots `Ant0`-`Ant3`. `protocol.py` now converts at the wire boundary
+(`antenna_to_wire()`/`antenna_from_wire()`): everything above it - AmpState,
+the API, the UI - uses 1-4 matching the amp's own display. Applied to both
+directions: parsing `0x27` and `0x1A`, and building Bypass (`0x0E`/`0x02`),
+tuning-record request (`0x0F`), delete-segment (`0x12`) and erase-specific-
+antenna (`0x10`). **The command direction is an assumption (per Tyler), NEEDS
+REAL-HARDWARE VERIFICATION** - e.g. Bypass while on A2 should stay on A2.
+Band numbers are *not* shifted: `0x27` reported band `6` with 14200-14300 kHz
+borders, i.e. 20m, which is 1-based per the doc's band list. Open clue: before
+this fix, an amp-snapshot tuning-matrix run came back empty and its last
+`0x1A` reply was exactly one less than the last request on *both* antenna
+(3 vs 4) and band (10 vs 11) - the antenna half is explained by this fix;
+whether `0x1A`'s band field is also 0-based is unresolved (one sample, and
+that record's frequencies didn't match either reading).
+
 **Note on antenna numbering range:** antenna *numbers* are referenced as
 `[1..10]` all over the ATU-management/tuning-record commands (`0x0E`/
 `0x0F`/`0x10`/`0x12`) and in the `0x27` status message — that's just the
