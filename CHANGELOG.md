@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.6] - 2026-10-23
+
 ### Added
 - Setup screen "Display" section: show/hide each dashboard gauge and the
   band panel, set each to quarter, half or full width (the band panel is
@@ -40,9 +42,6 @@ first, then get moved under a version heading below when tagged.
   than 1.5s (pauses within one over) no longer reset them.
 - Removed the "◀ Band" / "Band ▶" buttons from the dashboard - the
   radio's CAT link already sets the band.
-- After a successful tune the warning banner now reads "TUNED SWR < 1.3",
-  matching the amp's own screen (amp code `0x8E`), instead of an
-  "undocumented" notice.
 
 ### Fixed
 - After an update or service restart the dashboard could look
@@ -55,9 +54,10 @@ first, then get moved under a version heading below when tagged.
 - The warning banner kept showing a fault ("Unknown fault 0x8E") long
   after the amp had cleared it from its own screen. The banner now
   shows the alarm the amp is displaying right now.
-- `0x8E` and `0x14` - undocumented codes the amp shows for a few
-  seconds while running a tune - are now labeled as ATU tune notices
-  instead of "Unknown fault".
+- After a successful tune the banner showed "Unknown fault 0x8E". Code
+  `0x8E` (not in ACOM's protocol doc) is now named "TUNED SWR < 1.3",
+  matching the amp's own screen. `0x14`, seen once on a low-drive tune,
+  reads "ATU TUNING NOTICE".
 
 ## [0.1.5] - 2026-10-23
 
