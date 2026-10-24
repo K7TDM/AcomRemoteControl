@@ -59,9 +59,6 @@
 }
 
 .band-scale {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   margin-top: 0.6rem;
   font-size: 0.8rem;
   color: var(--text-secondary);
@@ -71,12 +68,39 @@
   display: none;
 }
 
+.band-scale-ticks {
+  position: relative;
+  height: 1.2rem;
+}
+
+.band-tick {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.band-tick[data-edge="start"] {
+  transform: none;
+}
+
+.band-tick[data-edge="end"] {
+  transform: translateX(-100%);
+}
+
 .band-scale-track {
   position: relative;
-  flex: 1;
   height: 0.6rem;
   border-radius: 0.3rem;
   background: var(--border-color);
+}
+
+/* The amp's current tuning segment, highlighted on the whole-band scale. */
+.band-scale-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-label, var(--readout-freq));
+  opacity: 0.75;
 }
 
 .band-scale-marker {
