@@ -86,12 +86,15 @@ Known `Cmd` (Byte 3) values:
   Command (Number of Antenna)**, `0x2E`/`0x2F` activate cyclic display
   messages, `0xFF` assign/unassign ATU. **These four are the entire
   command set** (confirmed directly from the doc's own §5.1 table, re-read
-  on request) - there is no fifth "resume normal tuned operation without
-  a fresh tuning cycle" command. So exiting Bypass only has one option
-  (Full Tune), and it will always visibly retune - not a bug in
-  `acom-control`'s `/api/atu/bypass` endpoint, just what the protocol
-  allows. `/api/atu/tune` exposes Full Tune standalone for when the
-  operator wants to tune on demand without touching Bypass state at all.
+  on request) - there is no documented "resume normal tuned operation
+  without a fresh tuning cycle" command. But the amp's own front panel
+  (hold TUNE 1s, a toggle) leaves Bypass by *recalling* stored tuning
+  (logged 2026-10-23: Recalling -> Memory Settings, no Matching Cycle),
+  so `/api/atu/bypass` now re-sends Bypass (`0x02`) as the remote
+  equivalent of that toggle, instead of Full Tune, and reports
+  `still_bypassed` if the amp ignores it. NEEDS REAL-HARDWARE
+  VERIFICATION. `/api/atu/tune` exposes Full Tune standalone (and is the
+  fallback for leaving Bypass).
 - `0x0F` Request specific ATU tuning record (by antenna/band lookup index)
 - `0x10` ATU Service commands: erase current/specific/all tunings, erase
   whole ATU memory, memory dump-to-file / load-from-file, exit service menu
@@ -193,11 +196,15 @@ frame. Key ones:
   `0xA0`-`0xAF`) and only disagrees here. `FAULT_CODE_NAMES` uses the
   mathematically-correct `0x90`-`0x9F`, not the doc's typo. Also:
   `0x8C`-`0x8F` (same byte as `0x8A`/`0x8B`) are genuinely blank/undescribed
-  in the doc - not a transcription gap - so a user-visible "Unknown fault
-  0x8E" is expected and correct as of protocol doc v1.3; it may be a
-  spare/reserved bit, or a fault added on newer firmware/the 06AT that
-  this 2018 doc revision was never updated to describe (see open question
-  1/2 on 06AT/20AT vs. 04AT/10AS protocol differences).
+  in the doc - not a transcription gap. **Update (2026-10-23 logs):** the
+  amp shows `0x8E` on its own screen (0x2F alarm byte) for ~5s while
+  running a tune cycle (mode `0x8X`, ATAC) with RF present, then clears
+  it itself; `0x14` (also undocumented) did the same on a low-drive tune.
+  Both are now named as ATU tune notices in `FAULT_CODE_NAMES`. Key
+  behavior: the `0x21` bit for `0x8E` **stays set for minutes** after the
+  screen clears it, so `0x21` is not a "what's wrong right now" signal -
+  the dashboard's warning banner now uses 0x2F's live alarm code
+  (`protocol.alarm_name()`, `0xFF` = none) instead.
 - `0x2A` "ATU Service" menu parameters (model, versions, working hours,
   tune % for C/L/CA, serial number)
 - `0x2E`/`0x2F` **main cyclic telemetry** — the one to poll/stream for a

@@ -94,15 +94,15 @@
       <button id="btn-opr-toggle" class="acom-button" type="button" data-opr-state="unknown">OPR/STB</button>
       <!-- Toggle mirroring the amp's own last-reported atu_label (0x27),
            same pattern as OPR/STB above - see renderAtuBypassToggle() in
-           app.js. Sends 0x0E/0x02 "Bypass" (bypasses ATU tuning for the
-           current antenna) or 0x0E/0x01 "Full Tune" (re-engages it) via
-           POST /api/atu/bypass depending on current state. -->
+           app.js. Sends 0x0E/0x02 "Bypass" via POST /api/atu/bypass in
+           both directions - into Bypass, and again as a toggle back out
+           (like the amp's own hold-TUNE), which recalls stored tuning
+           instead of retuning. -->
       <button id="btn-atu-bypass" class="acom-button" type="button" data-bypass-state="unknown">ATU Bypass</button>
       <!-- Standalone 0x0E/0x01 Full Tune, independent of the Bypass toggle
-           above (which also sends this same command when exiting Bypass -
-           see POST /api/atu/bypass's docstring - there's no other way to
-           resume normal operation per the protocol doc). This button lets
-           a tune be started on demand without touching Bypass state. -->
+           above - lets a tune be started on demand without touching Bypass
+           state, and is the fallback for leaving Bypass if the toggle
+           doesn't (see POST /api/atu/bypass's docstring). -->
       <button id="btn-atu-tune" class="acom-button" type="button">Tune</button>
       <button id="btn-band-prev" class="acom-button" type="button">◀ Band</button>
       <button id="btn-band-next" class="acom-button" type="button">Band ▶</button>
