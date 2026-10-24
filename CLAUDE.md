@@ -207,7 +207,9 @@ frame. Key ones:
   amp shows `0x8E` on its own screen (0x2F alarm byte) for ~5s while
   running a tune cycle (mode `0x8X`, ATAC) with RF present, then clears
   it itself; `0x14` (also undocumented) did the same on a low-drive tune.
-  Both are now named as ATU tune notices in `FAULT_CODE_NAMES`. Key
+  Named in `FAULT_CODE_NAMES` as "ATU TUNING IN PROGRESS" (`0x8E` - seen
+  on 4 tunes, always from RF arriving until "Matched") and "ATU TUNING
+  NOTICE" (`0x14`, one sighting). Key
   behavior: the `0x21` bit for `0x8E` **stays set for minutes** after the
   screen clears it, so `0x21` is not a "what's wrong right now" signal -
   the dashboard's warning banner now uses 0x2F's live alarm code

@@ -808,7 +808,7 @@ FAULT_CODE_NAMES: dict[int, str] = {
     0x11: "5V TOO HIGH",
     0x12: "26V TOO LOW",
     0x13: "26V TOO HIGH",
-    0x14: "ATU TUNE NOTICE (0x14, UNDOCUMENTED)",
+    0x14: "ATU TUNING NOTICE",
     0x15: "PAM1 FAN SPEED TOO LOW",
     0x16: "PAM2 FAN SPEED TOO LOW",
     0x17: "LPF FAN SPEED TOO LOW",
@@ -907,13 +907,13 @@ FAULT_CODE_NAMES: dict[int, str] = {
     0x89: "ANTENNA CAN NOT BE CHANGED UNTIL RF POWER IS PRESENT",
     0x8A: "ATU TUNING CYCLE UNSUCCESSFUL",
     0x8B: "ATU MEMORY FAIL",
-    # Not in the doc. Observed on a real 1200S + 06AT (2026-10-23): the amp
-    # shows 0x8E on its own screen for ~5s while running a tune cycle (mode
-    # 0x8X, ATAC) with RF present, then clears it on its own as the tune
-    # finishes; 0x14 behaved the same way on another tune at low drive. So
-    # these read as tune-procedure prompts, not faults - exact wording on
-    # the amp's screen unknown.
-    0x8E: "ATU TUNE NOTICE (0x8E, UNDOCUMENTED)",
+    # Not in the doc. Observed on a real 1200S + 06AT (2026-10-23, 4 tunes):
+    # the amp shows 0x8E from the moment RF arrives during a tune cycle
+    # (mode 0x82, ATAC) until the ATU reports "Matched" (~5s), then clears
+    # it itself - i.e. "tuning in progress", not a fault. 0x14 behaved the
+    # same way once, on a tune at very low drive (2W); its exact meaning is
+    # less certain. Exact wording on the amp's own screen unknown.
+    0x8E: "ATU TUNING IN PROGRESS",
     # Error Codes 9 (0x90-0x9F) - see the correction note above this dict
     0x90: "BIAS_1A SHOULD BE BETWEEN LOW/HIGH THRESHOLD",
     0x91: "BIAS_1B SHOULD BE BETWEEN LOW/HIGH THRESHOLD",
