@@ -57,27 +57,31 @@
   <main id="dashboard">
     <div id="status-row" class="status-row"></div>
 
-    <div id="power-out-hero" class="gauge-hero"></div>
+    <!-- Every movable/hideable dashboard panel lives in this one grid - the
+         Forward Power bar, the other gauges (created by renderGauges() in
+         app.js) and the band panel. Order, width and visibility come from
+         the Setup screen's Display section (applyDisplayLayout()). -->
+    <div id="panel-grid" class="panel-grid">
+      <div id="power-out-hero" class="gauge-hero" data-panel-id="forward_power_w"></div>
 
-    <div id="gauge-grid" class="gauge-grid"></div>
-
-    <!-- Band panel, modeled on the middle of the amp's own Basic Screen:
-         ATU status, current band/segment edges, band name and antenna
-         from 0x27, and a scale across the whole band with the current
-         segment highlighted and a marker at the carrier frequency from
-         0x2F - see renderFreqReadout() in app.js. -->
-    <div id="freq-readout" class="freq-readout">
-      <div class="band-header">
-        <span id="band-atu-label" class="band-atu-label"></span>
-        <span id="band-range" class="band-range"></span>
-        <span id="band-name" class="band-name"></span>
-        <span id="band-antenna" class="band-antenna"></span>
-      </div>
-      <div id="band-scale" class="band-scale" hidden>
-        <div id="band-scale-ticks" class="band-scale-ticks"></div>
-        <div class="band-scale-track">
-          <div id="band-scale-segment" class="band-scale-segment"></div>
-          <div id="band-scale-marker" class="band-scale-marker" hidden></div>
+      <!-- Band panel, modeled on the middle of the amp's own Basic Screen:
+           ATU status, current band/segment edges, band name and antenna
+           from 0x27, and a scale across the whole band with the current
+           segment highlighted and a marker at the carrier frequency from
+           0x2F - see renderFreqReadout() in app.js. -->
+      <div id="freq-readout" class="freq-readout" data-panel-id="band_panel">
+        <div class="band-header">
+          <span id="band-atu-label" class="band-atu-label"></span>
+          <span id="band-range" class="band-range"></span>
+          <span id="band-name" class="band-name"></span>
+          <span id="band-antenna" class="band-antenna"></span>
+        </div>
+        <div id="band-scale" class="band-scale" hidden>
+          <div id="band-scale-ticks" class="band-scale-ticks"></div>
+          <div class="band-scale-track">
+            <div id="band-scale-segment" class="band-scale-segment"></div>
+            <div id="band-scale-marker" class="band-scale-marker" hidden></div>
+          </div>
         </div>
       </div>
     </div>
@@ -146,6 +150,17 @@
         <input type="checkbox" id="setup-show-cb-band" />
         Show CB band (26.965 - 27.405 MHz) on the band panel - this browser only
       </label>
+    </details>
+
+    <details class="setup-section collapsible">
+      <summary><h2>Display</h2></summary>
+      <p class="danger-warning">
+        Show, size and reorder the dashboard's gauges (drag the &#x283F;
+        handle). Changes apply right away and are saved on the Pi, so every
+        device shows the same layout.
+      </p>
+      <ul id="display-panel-list" class="display-panel-list"></ul>
+      <button id="btn-display-reset" class="acom-button" type="button">Reset to Default</button>
     </details>
 
     <details class="setup-section collapsible">

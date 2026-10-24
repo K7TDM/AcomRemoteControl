@@ -41,6 +41,21 @@
   z-index: 2;
 }
 
+/* Average-over-last-transmission mark (forward power) - see gauges.js's
+   appendAvgMarker(). Same shape as the peak marker, yellow, one layer
+   below it. */
+.gauge-bargraph .avg-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1.5px;
+  background: var(--warn-bg, #f5e050);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* Default (ACOM-style segmented) look; Modern overrides .fill to a single
    smooth gradient block instead of discrete .segment elements - see
    gauges.js, which renders a single .fill div when data-style="smooth". */

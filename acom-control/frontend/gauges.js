@@ -82,11 +82,12 @@ export function mountGauge(el, themeStyle, opts, forceWidget) {
   mountedWidgets.set(el, { widget, opts, bodyEl, valueEl });
 }
 
-export function updateGauge(el, value, peak) {
+export function updateGauge(el, value, peak, avg) {
   const mounted = mountedWidgets.get(el);
   if (!mounted) return;
   mounted.opts.value = value;
   if (peak !== undefined) mounted.opts.peak = peak;
+  if (avg !== undefined) mounted.opts.avg = avg;
   mounted.valueEl.textContent = formatValue(value, mounted.opts.unit);
   mounted.valueEl.dataset.zone = zoneForFraction(fraction(mounted.opts));
   if (mounted.widget === "needle") {
@@ -140,7 +141,19 @@ function buildBargraphFill(track, opts, style) {
       track.appendChild(seg);
     }
   }
+  appendAvgMarker(track, opts);
   appendPeakMarker(track, opts);
+}
+
+// Yellow mark at the average over the last transmission (forward power
+// only - see TX_AVERAGE_IDS in app.js, the same value as the "Avg:" badge).
+// Drawn before the peak marker so the red peak stays on top if they meet.
+function appendAvgMarker(track, opts) {
+  if (opts.avg === null || opts.avg === undefined || Number.isNaN(opts.avg)) return;
+  const marker = document.createElement("div");
+  marker.className = "avg-marker";
+  marker.style.left = `${fraction({ ...opts, value: opts.avg }) * 100}%`;
+  track.appendChild(marker);
 }
 
 // Thin red high-water mark at the gauge's current peak - a classic analog

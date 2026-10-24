@@ -326,16 +326,14 @@ class SerialLink:
         await asyncio.sleep(INTER_MESSAGE_PACING_S)
         await self.enqueue(protocol.build_enable_auto_telemetry())
         await asyncio.sleep(INTER_MESSAGE_PACING_S)
-        # Documented (doc section 5.1's ATU Management table / CLAUDE.md's
-        # protocol facts) but never actually sent until now - distinct
-        # from build_enable_auto_telemetry()'s blanket "enable automatic
-        # telemetry", which only confirmed-covers 0x2F. Candidate unlock
-        # for CLAUDE.md open question 6 (0x18/0x1B/0x2A staying silent) -
-        # see build_atu_activate_cyclic_display()'s docstring. Harmless if
-        # it turns out unrelated: these two values only ever mean "turn on
-        # this specific cyclic display message," nothing else.
-        await self.enqueue(protocol.build_atu_activate_cyclic_display(protocol.ATU_ACTIVATE_CYCLIC_2E))
-        await asyncio.sleep(INTER_MESSAGE_PACING_S)
+        # Ask for the normal 0x2F cyclic telemetry explicitly. NOT 0x2E:
+        # an earlier version also sent "activate cyclic 0x2E" here (a
+        # speculative try at CLAUDE.md open question 6), and on real
+        # hardware that switched the amp to streaming 0x2E "ATU Measure"
+        # frames *instead of* 0x2F after every restart - the dashboard got
+        # no mode/power/alarm updates and looked disconnected until a mode
+        # change put the amp back. See app.py's _maybe_restore_main_telemetry()
+        # for recovering an amp that's already in that state.
         await self.enqueue(protocol.build_atu_activate_cyclic_display(protocol.ATU_ACTIVATE_CYCLIC_2F))
         await asyncio.sleep(INTER_MESSAGE_PACING_S)
         for message_address in STARTUP_REQUEST_MESSAGES:
