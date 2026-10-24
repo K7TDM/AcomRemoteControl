@@ -40,8 +40,9 @@ first, then get moved under a version heading below when tagged.
   than 1.5s (pauses within one over) no longer reset them.
 - Removed the "◀ Band" / "Band ▶" buttons from the dashboard - the
   radio's CAT link already sets the band.
-- During a tune the warning banner now reads "ATU TUNING IN PROGRESS"
-  (amp code `0x8E`) instead of an "undocumented" notice.
+- After a successful tune the warning banner now reads "TUNED SWR < 1.3",
+  matching the amp's own screen (amp code `0x8E`), instead of an
+  "undocumented" notice.
 
 ### Fixed
 - After an update or service restart the dashboard could look

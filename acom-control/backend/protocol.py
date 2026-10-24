@@ -907,13 +907,13 @@ FAULT_CODE_NAMES: dict[int, str] = {
     0x89: "ANTENNA CAN NOT BE CHANGED UNTIL RF POWER IS PRESENT",
     0x8A: "ATU TUNING CYCLE UNSUCCESSFUL",
     0x8B: "ATU MEMORY FAIL",
-    # Not in the doc. Observed on a real 1200S + 06AT (2026-10-23, 4 tunes):
-    # the amp shows 0x8E from the moment RF arrives during a tune cycle
-    # (mode 0x82, ATAC) until the ATU reports "Matched" (~5s), then clears
-    # it itself - i.e. "tuning in progress", not a fault. 0x14 behaved the
-    # same way once, on a tune at very low drive (2W); its exact meaning is
-    # less certain. Exact wording on the amp's own screen unknown.
-    0x8E: "ATU TUNING IN PROGRESS",
+    # Not in the doc. Confirmed on a real 1200S + 06AT (2026-10-23): the
+    # amp's own screen shows "TUNED SWR < 1.3" while this code is set. It
+    # is the tune *result*: the 06AT tunes in ~0.5s of RF, 0x8E appears as
+    # the RF drops, and stays ~5s (the 0x27 "Matched" label lags it by
+    # ~4s). 0x14 appeared once, the same way, on a tune at very low drive
+    # (2W) - probably another tune-result message; exact wording unknown.
+    0x8E: "TUNED SWR < 1.3",
     # Error Codes 9 (0x90-0x9F) - see the correction note above this dict
     0x90: "BIAS_1A SHOULD BE BETWEEN LOW/HIGH THRESHOLD",
     0x91: "BIAS_1B SHOULD BE BETWEEN LOW/HIGH THRESHOLD",
