@@ -136,6 +136,39 @@ main#dashboard[hidden],
   font-size: 1rem;
 }
 
+/* Collapsible Setup sections: the whole header row is the click target,
+   with a chevron that rotates when open. The h2 sits inline inside the
+   summary so the native marker can be replaced. */
+.setup-section.collapsible > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.setup-section.collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.setup-section.collapsible > summary::before {
+  content: "\25B8";
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.setup-section.collapsible[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.setup-section.collapsible > summary h2 {
+  margin: 0;
+}
+
+.setup-section.collapsible[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
 .atu-status-panel {
   margin-top: 0.75rem;
   padding: 0.75rem;
