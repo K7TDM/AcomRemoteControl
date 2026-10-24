@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.5] - 2026-10-23
+
 ### Added
 - Setup screen's new "CAT / Rig Control" section shows and lets you
   change the amp's own rear-panel CAT port config (interface type,
@@ -68,7 +70,9 @@ first, then get moved under a version heading below when tagged.
   file URLs was always "unknown" and never changed between updates.
   The service's git calls now trust just this one repo explicitly.
   The same failure also hid the version on the update screen and
-  stopped "What's new" from loading.
+  stopped "What's new" from loading. **This release itself still needs
+  one hard refresh** (the version running before it can't stamp new
+  URLs) - later updates should refresh on their own.
 - The dashboard's antenna number was one lower than the amp's own
   display (showed 3 for "A4"): the amp counts antennas from 0 on the
   wire, contrary to the protocol doc. Antenna numbers now match the
