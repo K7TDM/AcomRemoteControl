@@ -19,14 +19,34 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Added
+- Setup screen "Display" section: show/hide each dashboard gauge and the
+  band panel, set each to quarter, half or full width (the band panel is
+  always full), and drag them into any order with the grab handle (works
+  on a phone too). Saved on the Pi, so every device shows the same
+  layout. "Reset to Default" restores the original layout.
+- Forward Power shows a yellow marker at the average of the last
+  transmission, next to the red peak marker.
+
 ### Changed
 - ATU Bypass button: leaving Bypass now re-sends the Bypass command as
   a toggle (like holding TUNE on the amp's front panel), which recalls
   the stored tuning, instead of always running a full tune. If the amp
   stays in Bypass, the dashboard says so - use Tune to re-engage.
-  Needs confirming on the amp.
+- The ATU button now says what it will do: "ATU Enable" (yellow) while
+  bypassed, "ATU Bypass" (green) otherwise, and "Tuning…" while a tune
+  is waiting for RF.
+- Peak and average now cover the whole transmission: TX drops shorter
+  than 1.5s (pauses within one over) no longer reset them.
 
 ### Fixed
+- After an update or service restart the dashboard could look
+  disconnected (no mode, power or alarms) even though the amp was
+  talking, and power-cycling didn't help. The startup sequence was
+  switching the amp to its "ATU Measure" data stream; it now asks for
+  the normal one, and switches the amp back if it's found in that state.
+- Buzzer Test reported an error even though the buzzer sounded (and
+  could beep several times) - the amp never acknowledges it.
 - The warning banner kept showing a fault ("Unknown fault 0x8E") long
   after the amp had cleared it from its own screen. The banner now
   shows the alarm the amp is displaying right now.

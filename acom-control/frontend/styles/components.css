@@ -232,6 +232,69 @@
   color: var(--warn-text, #1a1200);
 }
 
+/* A tune is waiting for RF ("Matching Cycle") - neutral, with the same
+   gentle pulse as other "in progress" states, since neither green nor
+   yellow is true yet. */
+.acom-button[data-bypass-state="tuning"] {
+  border-color: var(--warn-bg, #f5e050);
+  animation: atu-tuning-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes atu-tuning-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* Setup -> Display: one row per dashboard panel - grab handle, name,
+   Show toggle, width selector. */
+.display-panel-list {
+  list-style: none;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.display-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-page, transparent);
+}
+
+.display-panel-row.dragging {
+  border-color: var(--accent-label, var(--readout-freq));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.drag-handle {
+  cursor: grab;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.2rem 0.3rem;
+  color: var(--text-secondary);
+  /* Pointer drag on touch screens - see wireDragHandle() in app.js. */
+  touch-action: none;
+  user-select: none;
+}
+
+.display-panel-row.dragging .drag-handle {
+  cursor: grabbing;
+}
+
+.display-panel-name {
+  flex: 1;
+  font-weight: bold;
+}
+
+.display-panel-show {
+  white-space: nowrap;
+}
+
 .icon-button {
   background: transparent;
   border: 1px solid var(--border-color);

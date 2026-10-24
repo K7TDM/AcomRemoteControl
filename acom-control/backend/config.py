@@ -76,6 +76,60 @@ class UpdateConfig:
     beta: bool = False
 
 
+# Dashboard panels the Setup screen's "Display" section can show/hide,
+# resize and reorder (the status row and button bar are fixed, not listed).
+# Order here is the default layout, which reproduces the dashboard as it
+# was before this was configurable.
+DISPLAY_PANEL_DEFAULTS: tuple[tuple[str, str], ...] = (
+    ("forward_power_w", "full"),
+    ("temp_pam1_c", "half"),
+    ("reflected_power_w", "half"),
+    ("input_power_w", "half"),
+    ("id1_a", "half"),
+    ("swr_calc", "full"),
+    ("band_panel", "full"),
+)
+DISPLAY_WIDTHS = ("quarter", "half", "full")
+DISPLAY_FULL_WIDTH_ONLY = {"band_panel"}
+
+
+def default_display_panels() -> list[dict]:
+    return [{"id": pid, "visible": True, "width": width} for pid, width in DISPLAY_PANEL_DEFAULTS]
+
+
+def normalize_display_panels(panels: Optional[list]) -> list[dict]:
+    """Cleans a saved/submitted panel list into a complete, valid one: keeps
+    the given order for known ids, drops unknown/duplicate ids, appends any
+    missing panels with their defaults (so a panel added in a later version
+    shows up instead of vanishing), fixes bad widths, and locks full-width-
+    only panels to "full". Never raises - bad input degrades to defaults."""
+    defaults = {pid: width for pid, width in DISPLAY_PANEL_DEFAULTS}
+    result: list[dict] = []
+    seen: set[str] = set()
+    for p in panels or []:
+        if not isinstance(p, dict):
+            continue
+        pid = p.get("id")
+        if pid not in defaults or pid in seen:
+            continue
+        seen.add(pid)
+        width = p.get("width")
+        if pid in DISPLAY_FULL_WIDTH_ONLY or width not in DISPLAY_WIDTHS:
+            width = "full" if pid in DISPLAY_FULL_WIDTH_ONLY else defaults[pid]
+        result.append({"id": pid, "visible": bool(p.get("visible", True)), "width": width})
+    for pid, width in DISPLAY_PANEL_DEFAULTS:
+        if pid not in seen:
+            result.append({"id": pid, "visible": True, "width": width})
+    return result
+
+
+@dataclass
+class DisplayConfig:
+    # Setup screen's "Display" section - one layout shared by every device
+    # (per Tyler), unlike the theme/CB preferences which are per browser.
+    panels: list = field(default_factory=default_display_panels)
+
+
 @dataclass
 class AppConfig:
     amp: AmpConfig
@@ -85,6 +139,7 @@ class AppConfig:
     logging: LoggingConfig
     path: Path = field(repr=False)
     update: UpdateConfig = field(default_factory=UpdateConfig)
+    display: DisplayConfig = field(default_factory=DisplayConfig)
 
     def save(self) -> None:
         payload = {
@@ -94,6 +149,7 @@ class AppConfig:
             "modbus": asdict(self.modbus),
             "logging": asdict(self.logging),
             "update": asdict(self.update),
+            "display": asdict(self.display),
         }
         self.path.write_text(json.dumps(payload, indent=2) + "\n")
         logger.info("Saved config to %s", self.path)
@@ -110,6 +166,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     modbus = ModbusConfig(**data.get("modbus", {}))
     logging_cfg = LoggingConfig(**data.get("logging", {}))
     update = UpdateConfig(**data.get("update", {}))
+    display = DisplayConfig(panels=normalize_display_panels(data.get("display", {}).get("panels")))
 
     validate_config(amp.model, tuner.model)
 
@@ -128,4 +185,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
             amp.serial_device,
         )
 
-    return AppConfig(amp=amp, tuner=tuner, web=web, modbus=modbus, logging=logging_cfg, path=path, update=update)
+    return AppConfig(
+        amp=amp, tuner=tuner, web=web, modbus=modbus, logging=logging_cfg, path=path,
+        update=update, display=display,
+    )

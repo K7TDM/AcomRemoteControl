@@ -26,7 +26,13 @@ from pydantic import BaseModel
 from . import protocol
 from .amp_profiles import AMP_PROFILES, AMP_TYPE_CODE_TO_MODEL, TUNER_MODELS, get_amp_profile
 from .amp_state import AmpState
-from .config import AppConfig, load_config, validate_config
+from .config import (
+    DISPLAY_PANEL_DEFAULTS,
+    AppConfig,
+    load_config,
+    normalize_display_panels,
+    validate_config,
+)
 from .modbus_server import ModbusServer
 from .serial_link import SerialLink, list_serial_ports
 
@@ -166,15 +172,44 @@ class ConnectionManager:
 
 ws_manager = ConnectionManager()
 
+# Recovery for an amp streaming 0x2E ("ATU Measure" display telemetry)
+# instead of 0x2F main telemetry - seen on real hardware after every
+# restart while the startup handshake still sent "activate cyclic 0x2E"
+# (see serial_link._startup_handshake()). The dashboard looks dead in that
+# state even though comms are fine. Asking for 0x2F again is the
+# documented switch back (0x0E/0x2F); an STB/OPR mode change is also
+# confirmed to restore it. NEEDS REAL-HARDWARE VERIFICATION that the 0x2F
+# activation alone is enough.
+MAIN_TELEMETRY_STALE_S = 5.0
+MAIN_TELEMETRY_RESTORE_INTERVAL_S = 10.0
+_last_main_telemetry_monotonic = 0.0
+_last_main_telemetry_restore_monotonic = 0.0
+
+
+def _maybe_restore_main_telemetry() -> None:
+    global _last_main_telemetry_restore_monotonic
+    if serial_link is None:
+        return
+    now = time.monotonic()
+    if now - _last_main_telemetry_monotonic < MAIN_TELEMETRY_STALE_S:
+        return
+    if now - _last_main_telemetry_restore_monotonic < MAIN_TELEMETRY_RESTORE_INTERVAL_S:
+        return
+    _last_main_telemetry_restore_monotonic = now
+    backend_logger.info("Amp is streaming ATU Measure (0x2E) instead of main telemetry (0x2F) - asking for 0x2F")
+    _spawn(serial_link.enqueue(protocol.build_atu_activate_cyclic_display(protocol.ATU_ACTIVATE_CYCLIC_2F)))
+
 
 def _on_frame(frame: protocol.Frame) -> None:
     """Dispatches a decoded frame onto AmpState and schedules a WebSocket
     broadcast. Runs synchronously from SerialLink's asyncio read-loop task
     (same event loop, not a separate thread), so asyncio.create_task here
     is safe."""
+    global _last_main_telemetry_monotonic
     try:
         handled = True
         if frame.address == 0x2F:
+            _last_main_telemetry_monotonic = time.monotonic()
             amp_state.update_telemetry(protocol.parse_telemetry(frame, amp_state.profile))
         elif frame.address == 0x11:
             identity = protocol.parse_amplifier_identity(frame)
@@ -198,6 +233,7 @@ def _on_frame(frame: protocol.Frame) -> None:
             amp_state.update_atu_service_info(protocol.parse_atu_service_info(frame))
         elif frame.address == 0x2E:
             amp_state.update_atu_measure(protocol.parse_atu_measure_telemetry(frame))
+            _maybe_restore_main_telemetry()
         elif frame.address == 0x31:
             amp_state.update_hard_fault_record_1(protocol.parse_hard_fault_record_1(frame))
         elif frame.address == 0x32:
@@ -751,6 +787,7 @@ def _config_response() -> dict:
         "comms_ok": amp_state.comms_ok,
         "available_amp_models": sorted(AMP_PROFILES),
         "available_tuner_models": list(TUNER_MODELS),
+        "display": config.display.panels,
     }
 
 
@@ -810,6 +847,35 @@ async def set_config(req: ConfigRequest) -> dict:
         new_amp_model, new_tuner_model, config.amp.serial_device, new_logging_level,
     )
     return _config_response()
+
+
+# =============================================================================
+# Setup Wizard: dashboard Display layout (shared by every device)
+# =============================================================================
+
+
+class DisplayPanelRequest(BaseModel):
+    id: str
+    visible: bool = True
+    width: str = "half"
+
+
+class DisplayRequest(BaseModel):
+    panels: list[DisplayPanelRequest]
+
+
+@app.post("/api/display")
+async def set_display(req: DisplayRequest) -> dict:
+    """Saves the Setup screen's Display layout (panel order, visibility,
+    width). Unknown ids are rejected outright; anything else odd (missing
+    panels, a bad width, the band panel set to less than full width) is
+    normalized rather than refused - see config.normalize_display_panels()."""
+    unknown = [p.id for p in req.panels if p.id not in {pid for pid, _ in DISPLAY_PANEL_DEFAULTS}]
+    if unknown:
+        raise HTTPException(400, f"unknown display panel id(s): {unknown}")
+    config.display.panels = normalize_display_panels([p.model_dump() for p in req.panels])
+    config.save()
+    return {"display": config.display.panels}
 
 
 # =============================================================================
@@ -1237,9 +1303,10 @@ class BuzzerRequest(BaseModel):
 
 @app.post("/api/buzzer")
 async def test_buzzer(req: BuzzerRequest) -> dict:
+    # Button-style: the amp beeps but never ACKs it, so the retrying
+    # send_command() path beeped up to 5 times and then returned 502.
     link = _require_serial_link()
-    result = await link.send_command(protocol.build_buzzer(req.signal, req.volume))
-    return _require_confirmed(result)
+    return await _send_pulse_command(link, protocol.build_buzzer(req.signal, req.volume))
 
 
 class FrontendLogRequest(BaseModel):

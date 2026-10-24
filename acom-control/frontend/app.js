@@ -68,6 +68,7 @@ const MODE_NAME_OPR_TX = "OPR/TX Mode";
 // Bypass button and status chip key off this, same pattern as the mode
 // names above.
 const ATU_LABEL_NAME_BYPASS = "ATU In Bypass";
+const ATU_LABEL_NAME_MATCHING = "Matching Cycle";
 
 // Forward power is rendered separately as a full-width "hero" bar (see
 // #power-out-hero in index.html) rather than inside the regular grid.
@@ -184,6 +185,10 @@ const appState = {
   prevModeName: null,
   inTx: false,
   justEnteredTx: false,
+  lastTxEndMs: 0,
+  // Display layout (Setup -> Display), replaced by the Pi's saved layout
+  // from /api/config at boot - see applyDisplayLayout().
+  display: null,
   // Settings (the gear icon) can be opened from either the normal dashboard
   // or the power-off screen - see updateScreenVisibility().
   setupOpen: false,
@@ -362,10 +367,23 @@ function updateScreenVisibility() {
 // above - both reset on the same rising edge of mode_name becoming
 // "OPR/TX Mode", so this runs once per telemetry update rather than each
 // of them independently comparing against the previous mode.
+//
+// "Transmission" spans short drops out of TX: real-hardware logs showed the
+// amp going OPR/TX -> OPR/RX -> OPR/TX every couple of seconds within a
+// single over, which used to reset the peak and average on each burst so
+// "last transmission" was really "last burst". A new transmission now only
+// starts when TX resumes more than TX_HANG_MS after it last ended (1.5s,
+// per Tyler).
+const TX_HANG_MS = 1500;
+
 function updateTxEdgeState(state) {
   const modeName = state.telemetry ? state.telemetry.mode_name : null;
+  const now = Date.now();
+  const wasInTx = appState.prevModeName === MODE_NAME_OPR_TX;
   appState.inTx = modeName === MODE_NAME_OPR_TX;
-  appState.justEnteredTx = appState.inTx && appState.prevModeName !== MODE_NAME_OPR_TX;
+  if (wasInTx && !appState.inTx) appState.lastTxEndMs = now;
+  const enteringTx = appState.inTx && !wasInTx;
+  appState.justEnteredTx = enteringTx && !(appState.lastTxEndMs && now - appState.lastTxEndMs <= TX_HANG_MS);
   appState.prevModeName = modeName;
 }
 
@@ -405,11 +423,27 @@ function renderPowerOnButton(state) {
 // in components.css for the color mapping, and the button's click handler
 // in wireControls() for the direction this same label drives). Per Tyler:
 // bypass isn't the "good"/default state, so it shouldn't read as green.
+//
+// The label also names what a click will do: "ATU Enable" while bypassed.
+// While a tune is waiting for RF ("Matching Cycle" - the amp re-sends that
+// 0x27 about once a second until it gets a carrier), it reads "Tuning..."
+// instead: a Bypass click is ignored by the amp in that state, which is
+// what made the button look stuck on green.
 function renderAtuBypassToggle(state) {
   const btn = document.getElementById("btn-atu-bypass");
   if (!btn) return;
   const labelName = state.antenna_band_status ? state.antenna_band_status.atu_label_name : null;
-  btn.dataset.bypassState = labelName === ATU_LABEL_NAME_BYPASS ? "bypass" : "active";
+  let bypassState = "active";
+  let text = "ATU Bypass";
+  if (labelName === ATU_LABEL_NAME_BYPASS) {
+    bypassState = "bypass";
+    text = "ATU Enable";
+  } else if (labelName === ATU_LABEL_NAME_MATCHING) {
+    bypassState = "tuning";
+    text = "Tuning…";
+  }
+  btn.dataset.bypassState = bypassState;
+  if (btn.textContent !== text) btn.textContent = text;
 }
 
 function renderStatusRow(state) {
@@ -469,27 +503,203 @@ function chip(label, on, text) {
 
 function renderGauges(state) {
   const heroEl = document.getElementById("power-out-hero");
-  const grid = document.getElementById("gauge-grid");
-  if (!grid && !heroEl) return;
+  const grid = document.getElementById("panel-grid");
+  if (!grid) return;
+  ensureGaugePanels(grid);
   const theme = appState.theme.style;
   const t = { ...(state.telemetry || {}) };
   t.swr_calc = computeSwr(t.forward_power_w, t.reflected_power_w);
   t.id1_a = t.id1_ma != null ? t.id1_ma / 1000 : null;
 
   // The hero bar is always a bargraph, regardless of theme - a full-width
-  // needle sweep doesn't make sense here.
-  mountOrUpdateGauge(heroEl, HERO_GAUGE_DEF, t, theme, "bargraph");
+  // needle sweep doesn't make sense here. Hidden panels (Display settings)
+  // aren't rendered at all.
+  if (heroEl && !heroEl.hidden) mountOrUpdateGauge(heroEl, HERO_GAUGE_DEF, t, theme, "bargraph");
 
-  if (!grid) return;
   GAUGE_DEFS.forEach((def) => {
-    let el = grid.querySelector(`[data-gauge-id="${def.id}"]`);
-    if (!el) {
-      el = document.createElement("div");
-      el.className = "gauge-wrapper";
-      el.dataset.gaugeId = def.id;
-      grid.appendChild(el);
+    const el = grid.querySelector(`[data-gauge-id="${def.id}"]`);
+    if (el && !el.hidden) mountOrUpdateGauge(el, def, t, theme, null);
+  });
+}
+
+// Creates any missing gauge panels inside #panel-grid, then re-applies the
+// Display layout so they land in their configured position/width.
+function ensureGaugePanels(grid) {
+  let created = false;
+  GAUGE_DEFS.forEach((def) => {
+    if (grid.querySelector(`[data-gauge-id="${def.id}"]`)) return;
+    const el = document.createElement("div");
+    el.className = "gauge-wrapper";
+    el.dataset.gaugeId = def.id;
+    el.dataset.panelId = def.id;
+    grid.appendChild(el);
+    created = true;
+  });
+  if (created) applyDisplayLayout(appState.display);
+}
+
+// =============================================================================
+// Display layout (Setup screen's "Display" section) - order, width and
+// visibility of every #panel-grid panel. One layout for every device, saved
+// on the Pi (config.json "display", POST /api/display) per Tyler.
+// =============================================================================
+
+const PANEL_LABELS = {
+  forward_power_w: "Forward Power",
+  temp_pam1_c: "PA Temperature",
+  reflected_power_w: "Reflected Power",
+  input_power_w: "Input Power",
+  id1_a: "PA DC Current",
+  swr_calc: "SWR",
+  band_panel: "Band / Frequency",
+};
+// Mirrors config.py's DISPLAY_FULL_WIDTH_ONLY / DISPLAY_PANEL_DEFAULTS.
+const PANEL_FULL_WIDTH_ONLY = new Set(["band_panel"]);
+const DEFAULT_DISPLAY_PANELS = [
+  { id: "forward_power_w", visible: true, width: "full" },
+  { id: "temp_pam1_c", visible: true, width: "half" },
+  { id: "reflected_power_w", visible: true, width: "half" },
+  { id: "input_power_w", visible: true, width: "half" },
+  { id: "id1_a", visible: true, width: "half" },
+  { id: "swr_calc", visible: true, width: "full" },
+  { id: "band_panel", visible: true, width: "full" },
+];
+const PANEL_WIDTH_OPTIONS = [["quarter", "¼"], ["half", "½"], ["full", "Full"]];
+const DISPLAY_SAVE_DEBOUNCE_MS = 400;
+let displaySaveTimer = null;
+
+function applyDisplayLayout(panels) {
+  const grid = document.getElementById("panel-grid");
+  if (!grid || !panels) return;
+  let unhid = false;
+  panels.forEach((p) => {
+    const el = grid.querySelector(`[data-panel-id="${p.id}"]`);
+    if (!el) return;
+    grid.appendChild(el); // appending in list order is the reorder
+    el.dataset.width = PANEL_FULL_WIDTH_ONLY.has(p.id) ? "full" : p.width;
+    if (el.hidden && p.visible) unhid = true;
+    el.hidden = !p.visible;
+  });
+  // A panel that was hidden skipped rendering - draw it now rather than
+  // waiting for the next telemetry tick.
+  if (unhid && appState.lastStatus) renderGauges(appState.lastStatus);
+}
+
+function setDisplayPanels(panels) {
+  appState.display = panels;
+  applyDisplayLayout(panels);
+  renderDisplaySettings();
+  if (displaySaveTimer) clearTimeout(displaySaveTimer);
+  displaySaveTimer = setTimeout(saveDisplayPanels, DISPLAY_SAVE_DEBOUNCE_MS);
+}
+
+async function saveDisplayPanels() {
+  displaySaveTimer = null;
+  try {
+    const resp = await apiFetch("/api/display", postJson({ panels: appState.display }));
+    const saved = (await resp.json()).display;
+    if (saved) {
+      appState.display = saved;
+      applyDisplayLayout(saved);
     }
-    mountOrUpdateGauge(el, def, t, theme, null);
+  } catch (err) {
+    showActionError(`Couldn't save the Display layout: ${err.message}`);
+  }
+}
+
+function renderDisplaySettings() {
+  const list = document.getElementById("display-panel-list");
+  if (!list) return;
+  list.innerHTML = "";
+  appState.display.forEach((p, index) => {
+    const li = document.createElement("li");
+    li.className = "display-panel-row";
+    li.dataset.panelId = p.id;
+
+    const handle = document.createElement("span");
+    handle.className = "drag-handle";
+    handle.textContent = "⠿";
+    handle.tabIndex = 0;
+    handle.title = "Drag to reorder (or use the arrow keys)";
+    handle.setAttribute("aria-label", `Move ${PANEL_LABELS[p.id] || p.id}`);
+    wireDragHandle(handle, li, list);
+    handle.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      e.preventDefault();
+      const to = index + (e.key === "ArrowUp" ? -1 : 1);
+      if (to < 0 || to >= appState.display.length) return;
+      const next = [...appState.display];
+      [next[index], next[to]] = [next[to], next[index]];
+      setDisplayPanels(next);
+      list.querySelector(`[data-panel-id="${p.id}"] .drag-handle`)?.focus();
+    });
+
+    const name = document.createElement("span");
+    name.className = "display-panel-name";
+    name.textContent = PANEL_LABELS[p.id] || p.id;
+
+    const showLabel = document.createElement("label");
+    showLabel.className = "display-panel-show";
+    const show = document.createElement("input");
+    show.type = "checkbox";
+    show.checked = p.visible;
+    show.addEventListener("change", () => {
+      setDisplayPanels(appState.display.map((q) => (q.id === p.id ? { ...q, visible: show.checked } : q)));
+    });
+    showLabel.append(show, " Show");
+
+    const width = document.createElement("select");
+    width.className = "theme-select display-panel-width";
+    width.setAttribute("aria-label", `${PANEL_LABELS[p.id] || p.id} width`);
+    width.innerHTML = PANEL_WIDTH_OPTIONS.map(([v, label]) => `<option value="${v}">${label}</option>`).join("");
+    width.value = PANEL_FULL_WIDTH_ONLY.has(p.id) ? "full" : p.width;
+    width.disabled = PANEL_FULL_WIDTH_ONLY.has(p.id);
+    if (width.disabled) width.title = "This panel is always full width";
+    width.addEventListener("change", () => {
+      setDisplayPanels(appState.display.map((q) => (q.id === p.id ? { ...q, width: width.value } : q)));
+    });
+
+    li.append(handle, name, showLabel, width);
+    list.appendChild(li);
+  });
+}
+
+// Pointer Events rather than HTML5 drag-and-drop, which doesn't fire on
+// touch screens (this gets used from a phone). The row follows the pointer
+// by moving in the DOM; the new order is committed on release.
+function wireDragHandle(handle, li, list) {
+  handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    // Listeners go on window (below), so capture is only a nicety - some
+    // pointers (e.g. synthetic ones) refuse it, which must not abort the drag.
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch {
+      // fine - window listeners still see every move
+    }
+    li.classList.add("dragging");
+    const onMove = (ev) => {
+      const after = [...list.children].find((row) => {
+        if (row === li) return false;
+        const r = row.getBoundingClientRect();
+        return ev.clientY < r.top + r.height / 2;
+      });
+      if (after) list.insertBefore(li, after);
+      else list.appendChild(li);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      li.classList.remove("dragging");
+      const order = [...list.children].map((row) => row.dataset.panelId);
+      const byId = Object.fromEntries(appState.display.map((q) => [q.id, q]));
+      const next = order.map((id) => byId[id]).filter(Boolean);
+      if (next.some((q, i) => q.id !== appState.display[i].id)) setDisplayPanels(next);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   });
 }
 
@@ -501,24 +711,27 @@ function mountOrUpdateGauge(el, def, telemetry, theme, forceWidget) {
   // in the same pass that updates the badge below it.
   const peak = updatePeak(def.id, value);
   const avg = updateTxAverage(def.id, value);
-  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain, peak };
+  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain, peak, avg };
   const widget = resolveWidget(theme, opts, forceWidget);
 
   if (el.dataset.mountedWidget !== widget) {
     el.dataset.mountedWidget = widget;
     mountGauge(el, theme, opts, forceWidget);
   } else {
-    updateGauge(el, value, peak);
+    updateGauge(el, value, peak, avg);
   }
 
   const badge = ensurePeakBadge(el, def.id);
   badge.textContent = formatPeakBadge(def.id, peak, avg);
 }
 
+// Forces every gauge to re-mount (new theme = possibly a new widget/style)
+// without removing the panels themselves - #panel-grid also holds the band
+// panel, and the panels' Display-layout order must survive a theme change.
 function remountAllGauges() {
-  const grid = document.getElementById("gauge-grid");
-  if (!grid) return;
-  grid.innerHTML = "";
+  document.querySelectorAll("#panel-grid [data-mounted-widget]").forEach((el) => {
+    delete el.dataset.mountedWidget;
+  });
   if (appState.lastStatus) renderGauges(appState.lastStatus);
 }
 
@@ -730,6 +943,7 @@ function wireControls() {
   document.getElementById("btn-update-close")?.addEventListener("click", closeUpdateScreen);
   document.getElementById("btn-update-now")?.addEventListener("click", withErrorBanner(applyUpdateNow));
   document.getElementById("update-beta-toggle")?.addEventListener("change", setBetaUpdates);
+  document.getElementById("btn-display-reset")?.addEventListener("click", () => setDisplayPanels(DEFAULT_DISPLAY_PANELS));
   const cbCheckbox = document.getElementById("setup-show-cb-band");
   if (cbCheckbox) {
     cbCheckbox.checked = loadShowCbBand();
@@ -793,6 +1007,13 @@ async function loadSetup() {
     apiFetch("/api/serial-ports").then((r) => r.json()),
   ]);
   populateConfigForm(configResp);
+  // Not while a save is pending - that would snap the list back to the
+  // previous layout mid-edit.
+  if (Array.isArray(configResp.display) && !displaySaveTimer) {
+    appState.display = configResp.display;
+    applyDisplayLayout(appState.display);
+  }
+  renderDisplaySettings();
   populateSerialPortOptions(portsResp, configResp.serial_device);
   populateAntennaMatrix(antennaResp.antennas);
   populateSegmentDeleteBandOptions();
@@ -1323,7 +1544,15 @@ async function waitForUpdateRestart(beforeCommit, statusEl, button) {
 
 async function boot() {
   initThemeSwitcher();
+  appState.display = DEFAULT_DISPLAY_PANELS;
   wireControls();
+  try {
+    const cfg = await (await apiFetch("/api/config")).json();
+    if (Array.isArray(cfg.display)) appState.display = cfg.display;
+  } catch {
+    // Keep the default layout - the dashboard still works.
+  }
+  applyDisplayLayout(appState.display);
   try {
     const resp = await apiFetch("/api/status");
     render(await resp.json());

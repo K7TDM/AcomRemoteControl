@@ -92,9 +92,16 @@ Known `Cmd` (Byte 3) values:
   (logged 2026-10-23: Recalling -> Memory Settings, no Matching Cycle),
   so `/api/atu/bypass` now re-sends Bypass (`0x02`) as the remote
   equivalent of that toggle, instead of Full Tune, and reports
-  `still_bypassed` if the amp ignores it. NEEDS REAL-HARDWARE
-  VERIFICATION. `/api/atu/tune` exposes Full Tune standalone (and is the
-  fallback for leaving Bypass).
+  `still_bypassed` if the amp ignores it. **Confirmed working on real
+  hardware** (Tyler, 2026-10-23). `/api/atu/tune` exposes Full Tune
+  standalone (and is the fallback for leaving Bypass). After a Full Tune
+  with no RF, the amp sits in `0x27` label 3 "Matching Cycle" and
+  re-sends that same `0x27` about once a second until it gets a carrier;
+  Bypass clicks in that state don't change anything (the dashboard's
+  button reads "Tuning…" then).
+- Buzzer (`0x0A`), like the band/antenna/mode commands, is never ACKed
+  by the amp - it goes through `_send_pulse_command()` (one send, no
+  retry); the retrying path beeped up to 5 times and returned 502.
 - `0x0F` Request specific ATU tuning record (by antenna/band lookup index)
 - `0x10` ATU Service commands: erase current/specific/all tunings, erase
   whole ATU memory, memory dump-to-file / load-from-file, exit service menu
@@ -444,6 +451,21 @@ frame. Key ones:
    only `0x2E`'s own note mentions a menu-display flag with similar
    "to the Display" phrasing as `0x1B`'s section title. NEEDS REAL-
    HARDWARE VERIFICATION - untested live as of this write-up.
+
+   **Result (2026-10-23 logs): harmful, removed.** "Activate cyclic 0x2E"
+   does exactly what it says - the amp switches its cyclic telemetry to
+   `0x2E` ("ATU Measure") and stops sending `0x2F`. After every service
+   restart (including self-updates) the amp streamed only `0x2E` + `0x2A`
+   with zero `0x2F`, so the dashboard had no mode/power/alarm data and
+   looked disconnected even though comms were fine; it stayed that way
+   until an STB/OPR mode change (power-cycling didn't help - the next
+   handshake re-sent it). That is also the *only* reason `0x2A` ever
+   "replied": ATU-Measure mode streams it on its own, so it doesn't
+   answer open question 6 for `0x18`/`0x1B`. The handshake now sends only
+   "activate cyclic 0x2F", and `app.py`'s `_maybe_restore_main_telemetry()`
+   re-sends that if `0x2E` frames arrive with no `0x2F` for 5s. NEEDS
+   REAL-HARDWARE VERIFICATION that the `0x2F` activation alone switches
+   the stream back (a mode change is confirmed to).
 
    Still unconfirmed: whether `0x18`/`0x1B`/`0x2A` have some other
    precondition (e.g. requiring the ATU to be fully assigned, or a menu

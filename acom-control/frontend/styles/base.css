@@ -52,17 +52,31 @@ main#dashboard {
   padding: 0.75rem 1rem;
 }
 
-.gauge-grid {
+/* All movable dashboard panels share one 4-column grid; each panel's
+   data-width (Setup -> Display, see app.js's applyDisplayLayout()) picks
+   how many columns it spans. */
+.panel-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
-/* SWR has no counterpart on the real Basic Screen (it's computed, not read
-   from the amp - see app.js's computeSwr()), so it gets its own full-width
-   row instead of sharing a 2-column slot like the amp's own readings. */
-.gauge-grid [data-gauge-id="swr_calc"] {
-  grid-column: 1 / -1;
+.panel-grid > [data-width="quarter"] { grid-column: span 1; }
+.panel-grid > [data-width="half"] { grid-column: span 2; }
+.panel-grid > [data-width="full"],
+.panel-grid > :not([data-width]) { grid-column: 1 / -1; }
+
+/* Some panels set their own display (e.g. the bargraph layout's
+   display:grid), which would otherwise beat the hidden attribute. */
+.panel-grid > [hidden] {
+  display: none !important;
+}
+
+/* On a phone a quarter-width gauge is too narrow to read - step every
+   width up one size instead. */
+@media (max-width: 600px) {
+  .panel-grid > [data-width="quarter"] { grid-column: span 2; }
+  .panel-grid > [data-width="half"] { grid-column: 1 / -1; }
 }
 
 .freq-readout {
