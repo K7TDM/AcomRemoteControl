@@ -45,9 +45,9 @@ COMMS_HEALTHY_WINDOW_S = 3.0
 
 # DTR/RTS "Remote Power On" pulse: confirmed on real hardware that a 1.5s
 # pulse on both lines, then release, toggles the amp's power state (on<->
-# off) - see pulse_power_toggle(). _open_port() deliberately never drives
-# these lines itself (see its own comment) - only a deliberate, explicit
-# call to pulse_power_toggle() should ever do so.
+# off) - see pulse_power_toggle(). Outside of that deliberate pulse, both
+# lines are always held released (LOW) - see _release_control_lines() for
+# why that has to be done explicitly rather than by leaving them alone.
 POWER_PULSE_SECONDS = 1.5
 
 # send_command() confirmation-wait tuning - see module docstring.
@@ -121,6 +121,10 @@ class SerialLink:
             if task is not None:
                 task.cancel()
         if self._serial is not None:
+            # HUPCL is cleared (see _open_port()), so close() leaves the
+            # lines wherever they are - make sure that's released, in case
+            # a pulse was cut off mid-way by this very shutdown.
+            self._release_control_lines("shutdown")
             try:
                 self._serial.close()
             except Exception:
@@ -188,12 +192,38 @@ class SerialLink:
         """
         assert self._serial is not None
         logger.info("Pulsing DTR+RTS for %.1fs to toggle amp power", POWER_PULSE_SECONDS)
-        self._serial.dtr = True
-        self._serial.rts = True
-        await asyncio.sleep(POWER_PULSE_SECONDS)
-        self._serial.dtr = False
-        self._serial.rts = False
+        try:
+            self._serial.dtr = True
+            self._serial.rts = True
+            await asyncio.sleep(POWER_PULSE_SECONDS)
+        finally:
+            # finally, not just the happy path: if this task is cancelled
+            # mid-sleep (service stopping, request aborted) the lines would
+            # otherwise stay asserted - continuously held DTR+RTS leaves
+            # the amp stuck mid power-sequence (CLAUDE.md open question 4).
+            self._release_control_lines("end of power pulse")
         logger.info("Released DTR+RTS after %.1fs pulse", POWER_PULSE_SECONDS)
+
+    def _release_control_lines(self, reason: str) -> None:
+        """Drives DTR and RTS both LOW (released). Best-effort - never
+        raises, since it runs on cleanup paths (shutdown, a cancelled
+        pulse) where an exception would only hide the original problem.
+
+        Has to be done explicitly: the Linux tty layer itself asserts
+        DTR+RTS on *every* open() of the port, before pyserial or this
+        code gets a say, so "don't touch the lines" actually means
+        "leave them asserted" - and with HUPCL cleared they then stay
+        asserted indefinitely, across close() and even a crash. That's
+        what a service restart (install.sh, a self-update) used to leave
+        behind."""
+        if self._serial is None:
+            return
+        try:
+            self._serial.dtr = False
+            self._serial.rts = False
+            logger.info("DTR/RTS released (%s)", reason)
+        except Exception as exc:
+            logger.warning("Could not release DTR/RTS (%s): %s", reason, exc)
 
     async def send_command(
         self,
@@ -247,17 +277,15 @@ class SerialLink:
     def _open_port(self) -> None:
         logger.info("Opening serial port %s @ %d 8N1", self.device, self.baudrate)
         # DB9 pins 6 (DSR) / 8 (CTS) are wired to the amp's "Remote Power
-        # On" input (CLAUDE.md open question 4). Driving DTR/RTS HIGH on
-        # open (pyserial's default) hung the amp on a real port reopen;
-        # driving them explicitly LOW instead (commit 2ec2387) was tried
-        # next and *also* hung it on power-down, and separately, plugging
-        # the cable back in while off still powered the amp on even with
-        # that fix in place - real-hardware testing showed any explicit
-        # level change on these lines, not just a HIGH pulse, can read as
-        # a toggle. So this now avoids driving DTR/RTS at all, in either
-        # direction, on open OR close - leaving them in whatever idle
-        # state the USB-serial chip already sits in before we touch the
-        # fd, per Tyler's direction after that test.
+        # On" input (CLAUDE.md open question 4). An earlier version tried
+        # to leave DTR/RTS untouched here, but the kernel asserts both on
+        # every open() regardless (see _release_control_lines()), so
+        # "untouched" really meant "held asserted from then on" - which is
+        # how a plain service restart left the amp locked up. So: suppress
+        # pyserial's own open()-time ioctls (below), then release both
+        # lines immediately after open, keeping the unavoidable kernel
+        # assertion down to a few milliseconds - far short of the ~1.5s
+        # hold the amp treats as a deliberate power pulse.
         self._serial = serial.Serial()
         self._serial.port = self.device
         self._serial.baudrate = self.baudrate
@@ -289,6 +317,7 @@ class SerialLink:
             termios.tcsetattr(self._serial.fd, termios.TCSANOW, attrs)
         except (termios.error, AttributeError):
             logger.warning("Could not clear HUPCL on %s - close() may still drop DTR/RTS", self.device)
+        self._release_control_lines("after port open")
 
     async def _startup_handshake(self) -> None:
         logger.info("Running startup handshake (force HEX mode, enable telemetry, pull ATU/antenna config)")

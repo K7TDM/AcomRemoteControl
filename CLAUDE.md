@@ -256,6 +256,23 @@ frame. Key ones:
      switching) could stand in for a true unplug/replug as an alternative
      recovery action — raised as an option, not pursued, now lower
      priority given the pulse itself works.
+
+   **Correction (2026-10-23): "untouched" was never actually untouched.**
+   The Linux tty layer asserts DTR+RTS on *every* open() of the port,
+   before pyserial runs, so `_open_port()`'s old "avoid driving the lines
+   at all" behavior really meant "leave both asserted from open onward" -
+   and with HUPCL cleared they stayed asserted across close() and
+   restarts too. A service restart from `install.sh` (logs: only event on
+   the lines was the port open at restart, no pulse) was followed by the
+   amp locking up, consistent with this item's own "holding both
+   continuously asserted leaves the amp stuck" finding. Fixed in
+   `serial_link.py`: `_release_control_lines()` now drives both LOW right
+   after every open (kernel assertion shrinks to a few ms), in a `finally`
+   at the end of `pulse_power_toggle()` (so a cancelled pulse can't leave
+   them held), and in `stop()` before close. Invariant: outside a
+   deliberate pulse, DTR/RTS are always released. NEEDS REAL-HARDWARE
+   VERIFICATION that the few-ms kernel blip on open isn't itself read as a
+   toggle, and that a service restart no longer locks the amp.
 5. The amp also supports a documented software-driven power-off
    (`FLAG_PwrOff_Request`/`FLAG_Soft_PwrOff` in `0x2F` telemetry flags,
    and mode category `0xAX` "Turn OFF Procedure"), separate from the
