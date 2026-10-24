@@ -643,8 +643,13 @@ function stopWarningRotation() {
 function renderWarningBanner(state) {
   const el = document.getElementById("warning-banner");
   if (!el) return;
-  const errors = state.error_flags;
-  const names = errors && errors.active_names ? errors.active_names : [];
+  // The alarm the amp's own screen is showing right now (0x2F), not the
+  // 0x21 error bitfield: 0x21 bits can stay set long after the amp has
+  // cleared them from its screen (seen with 0x8E, still set minutes after
+  // a tune), which left the banner showing stale faults. 0x21's full list
+  // is still in /api/status and the amp snapshot.
+  const alarm = state.telemetry ? state.telemetry.alarm_name : null;
+  const names = alarm ? [alarm] : [];
 
   if (names.length === 0) {
     el.hidden = true;
@@ -698,7 +703,15 @@ function wireControls() {
     const nextMode = modeName === MODE_NAME_STB ? "opr_rx" : "stb";
     return apiFetch("/api/mode", postJson({ mode: nextMode }));
   }));
-  document.getElementById("btn-atu-bypass")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/atu/bypass", { method: "POST" })));
+  document.getElementById("btn-atu-bypass")?.addEventListener("click", withErrorBanner(async () => {
+    const result = await (await apiFetch("/api/atu/bypass", { method: "POST" })).json();
+    // Leaving Bypass re-sends the Bypass command as a toggle (like the
+    // amp's own hold-TUNE) - see /api/atu/bypass. If the amp ignored it,
+    // say so rather than leaving the click looking like it did nothing.
+    if (result.still_bypassed) {
+      showActionError("The amp stayed in ATU Bypass. Use Tune to re-engage the ATU (runs a full tune).", "info");
+    }
+  }));
   document.getElementById("btn-atu-tune")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/atu/tune", { method: "POST" })));
   document.getElementById("btn-band-next")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/band", postJson({ direction: "next" }))));
   document.getElementById("btn-band-prev")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/band", postJson({ direction: "prev" }))));

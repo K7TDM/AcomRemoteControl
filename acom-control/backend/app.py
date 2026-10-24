@@ -654,37 +654,50 @@ async def change_antenna(req: AntennaActionRequest) -> dict:
 async def toggle_atu_bypass() -> dict:
     """Toggles ATU Bypass off the amp's own last-reported atu_label (0x27),
     same pattern as the OPR/STB toggle keying off mode_name - not
-    click-tracked UI state. Bypass -> re-engage ATU via Full Tune for the
-    currently selected antenna; anything else -> Bypass that same antenna
-    (see protocol.build_atu_bypass's own note: this is the closest thing to
-    a direct antenna-select command, not a "select antenna N for normal
-    tuned operation" command - CLAUDE.md open question 3).
+    click-tracked UI state. Either direction sends the same Bypass command
+    (0x0E/0x02) for the currently selected antenna (see
+    protocol.build_atu_bypass's own note: this is the closest thing to a
+    direct antenna-select command - CLAUDE.md open question 3).
 
-    Confirmed from the protocol doc (section 5.1's ATU Management table):
-    exiting Bypass via Full Tune ALWAYS runs a real tuning cycle - there is
-    no "just resume normal operation without retuning" command. That's not
-    a bug here, it's the only documented option. See /api/atu/tune for a
-    standalone way to run a tune cycle without going through Bypass."""
+    Exiting Bypass used to send Full Tune instead, the only "leave Bypass"
+    the protocol doc offers - but that always runs a real tuning cycle.
+    The amp's own front panel (hold TUNE 1s, a toggle) leaves Bypass by
+    recalling the stored tuning instead (logged 2026-10-23: Recalling ->
+    Memory Settings, no Matching Cycle). Re-sending Bypass is tried as the
+    remote equivalent of that toggle. NEEDS REAL-HARDWARE VERIFICATION -
+    so after exiting, this waits briefly and reports `still_bypassed` if
+    the amp didn't leave Bypass, for the frontend to say so (Tune is the
+    fallback; see /api/atu/tune)."""
     link = _require_serial_link()
     status = amp_state.antenna_band_status
     if status is None:
         raise HTTPException(409, "no antenna/band status received from the amplifier yet")
-    if status.atu_label == protocol.ATU_LABEL_BYPASS:
-        frame = protocol.build_atu_full_tune()
-    else:
-        frame = protocol.build_atu_bypass(status.antenna_number)
-    return await _send_pulse_command(link, frame)
+    exiting = status.atu_label == protocol.ATU_LABEL_BYPASS
+    result = await _send_pulse_command(link, protocol.build_atu_bypass(status.antenna_number))
+    if not exiting:
+        return result
+    await asyncio.sleep(BYPASS_EXIT_CHECK_S)
+    now = amp_state.antenna_band_status
+    still_bypassed = now is not None and now.atu_label == protocol.ATU_LABEL_BYPASS
+    if still_bypassed:
+        backend_logger.warning("Re-sending Bypass did not take the amp out of ATU Bypass")
+    return {**result, "still_bypassed": still_bypassed}
+
+
+# How long to wait for a 0x27 showing the amp left Bypass. The front panel's
+# own exit took ~4s end to end (Recalling -> Memory Settings), but the
+# label leaves "ATU In Bypass" (for "Recalling") almost immediately.
+BYPASS_EXIT_CHECK_S = 2.5
 
 
 @app.post("/api/atu/tune")
 async def tune() -> dict:
     """Explicit, deliberate Full Tune (0x0E/0x01) - a separate action from
     /api/atu/bypass. Per the protocol doc (section 5.1's ATU Management
-    table), Full Tune is also the *only* documented way to exit Bypass -
-    there's no "resume last tuning without a fresh cycle" command - so
-    toggle_atu_bypass() above already sends this same frame when exiting
-    Bypass. This endpoint exists so a tune can be started on demand without
-    going through the Bypass toggle at all (e.g. while already active)."""
+    table), Full Tune is the only *documented* way to exit Bypass, so it's
+    also the fallback if re-sending Bypass doesn't toggle it off (see
+    toggle_atu_bypass()). This endpoint lets a tune be started on demand
+    without going through the Bypass toggle at all."""
     link = _require_serial_link()
     return await _send_pulse_command(link, protocol.build_atu_full_tune())
 

@@ -773,7 +773,8 @@ class ErrorFlags:
 # Complete table from protocol doc section 3.7.1 (bits with no description
 # in the doc - mostly spare/reserved - are omitted; those still show up as
 # a raw hex code to the frontend, e.g. 0x8C-0x8F are genuinely undocumented
-# in the doc itself, not a gap in this transcription).
+# in the doc itself, not a gap in this transcription). Exceptions: 0x14 and
+# 0x8E are named from real-hardware observation - see the note at 0x8E.
 #
 # CORRECTED vs. the doc's own printed labels for the "Error Codes 9" group
 # (Byte 21/22, i.e. 0x90-0x9F): the doc mistakenly reprints "Error Codes 8"
@@ -801,11 +802,13 @@ FAULT_CODE_NAMES: dict[int, str] = {
     0x0D: "PA LOAD SWR TOO HIGH",
     0x0E: "STOP TRANSMISSION FIRST",
     0x0F: "REMOVE DRIVE POWER IMMEDIATELY",
-    # Error Codes 1 (0x10-0x1F) - 0x14 undocumented
+    # Error Codes 1 (0x10-0x1F) - 0x14 undocumented in the doc; see the
+    # 0x8E note below for why it's named here anyway.
     0x10: "5V TOO LOW",
     0x11: "5V TOO HIGH",
     0x12: "26V TOO LOW",
     0x13: "26V TOO HIGH",
+    0x14: "ATU TUNE NOTICE (0x14, UNDOCUMENTED)",
     0x15: "PAM1 FAN SPEED TOO LOW",
     0x16: "PAM2 FAN SPEED TOO LOW",
     0x17: "LPF FAN SPEED TOO LOW",
@@ -890,7 +893,8 @@ FAULT_CODE_NAMES: dict[int, str] = {
     0x6F: "LOSS OF EEPROM DATA",
     # Error Codes 7 (0x70-0x7F) - only 0x70 documented
     0x70: "CAT ERROR",
-    # Error Codes 8 (0x80-0x8F) - 0x8C-0x8F undocumented (incl. 0x8E)
+    # Error Codes 8 (0x80-0x8F) - 0x8C-0x8F undocumented; 0x8E named from
+    # real-hardware observation (below)
     0x80: "ATU NOT RESPONDING",
     0x81: "ATU-AMP COMMUNICATION ERROR",
     0x82: "AMP-ATU COMMUNICATION ERROR",
@@ -903,6 +907,13 @@ FAULT_CODE_NAMES: dict[int, str] = {
     0x89: "ANTENNA CAN NOT BE CHANGED UNTIL RF POWER IS PRESENT",
     0x8A: "ATU TUNING CYCLE UNSUCCESSFUL",
     0x8B: "ATU MEMORY FAIL",
+    # Not in the doc. Observed on a real 1200S + 06AT (2026-10-23): the amp
+    # shows 0x8E on its own screen for ~5s while running a tune cycle (mode
+    # 0x8X, ATAC) with RF present, then clears it on its own as the tune
+    # finishes; 0x14 behaved the same way on another tune at low drive. So
+    # these read as tune-procedure prompts, not faults - exact wording on
+    # the amp's screen unknown.
+    0x8E: "ATU TUNE NOTICE (0x8E, UNDOCUMENTED)",
     # Error Codes 9 (0x90-0x9F) - see the correction note above this dict
     0x90: "BIAS_1A SHOULD BE BETWEEN LOW/HIGH THRESHOLD",
     0x91: "BIAS_1B SHOULD BE BETWEEN LOW/HIGH THRESHOLD",
@@ -938,6 +949,20 @@ FAULT_CODE_NAMES: dict[int, str] = {
     0xAE: "ATU/ASEL TEMPERATURE TOO HIGH: TURNED OFF DUE TO DAMAGE RISK",
     0xAF: "ATU/ASEL TEMPERATURE TOO LOW: TURNED OFF DUE TO DAMAGE RISK",
 }
+
+
+ALARM_CODE_NONE = 0xFF  # 0x2F Byte66 value when the amp's screen shows no alarm
+
+
+def alarm_name(code: int) -> Optional[str]:
+    """Name for 0x2F's live "error code of the alarm condition displayed on
+    the amplifier's screen" (Byte66), or None when nothing is displayed.
+    Uses the same code space as the 0x21 bitfield. This is what the amp
+    is showing *right now*; 0x21's bits can stay set long after the
+    screen clears (seen with 0x8E: still set minutes after a tune)."""
+    if code == ALARM_CODE_NONE:
+        return None
+    return FAULT_CODE_NAMES.get(code, f"Unknown fault 0x{code:02X}")
 
 
 def parse_error_flags(frame: Frame) -> ErrorFlags:

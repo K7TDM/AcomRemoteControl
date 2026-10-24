@@ -19,6 +19,21 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Changed
+- ATU Bypass button: leaving Bypass now re-sends the Bypass command as
+  a toggle (like holding TUNE on the amp's front panel), which recalls
+  the stored tuning, instead of always running a full tune. If the amp
+  stays in Bypass, the dashboard says so - use Tune to re-engage.
+  Needs confirming on the amp.
+
+### Fixed
+- The warning banner kept showing a fault ("Unknown fault 0x8E") long
+  after the amp had cleared it from its own screen. The banner now
+  shows the alarm the amp is displaying right now.
+- `0x8E` and `0x14` - undocumented codes the amp shows for a few
+  seconds while running a tune - are now labeled as ATU tune notices
+  instead of "Unknown fault".
+
 ## [0.1.5] - 2026-10-23
 
 ### Added
