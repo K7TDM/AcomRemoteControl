@@ -22,6 +22,20 @@
     })();
   </script>
 
+  <!-- app.js imports gauges.js and theme.js as plain "./gauges.js" etc.,
+       which the ?v= stamp on app.js itself doesn't reach - after an update
+       a browser could run the new app.js against a cached old gauges.js.
+       This map gives those imports the same version stamp (filled in by
+       the backend's GET / route, like the other asset URLs). -->
+  <script type="importmap">
+    {
+      "imports": {
+        "/gauges.js": "/gauges.js?v={{ASSET_VERSION}}",
+        "/theme.js": "/theme.js?v={{ASSET_VERSION}}"
+      }
+    }
+  </script>
+
   <link rel="stylesheet" href="styles/base.css?v={{ASSET_VERSION}}" />
   <link rel="stylesheet" href="styles/components.css?v={{ASSET_VERSION}}" />
   <link rel="stylesheet" href="styles/gauges/bargraph.css?v={{ASSET_VERSION}}" />
