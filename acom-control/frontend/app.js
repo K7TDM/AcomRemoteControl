@@ -778,6 +778,76 @@ function renderDisplaySettings() {
   });
 }
 
+// --- Raspberry Pi display (kiosk) switch --------------------------------------
+// Turns the dashboard-on-the-Pi's-own-screen kiosk on/off (POST /api/kiosk,
+// which runs the updater's kiosk-on/kiosk-off). The first time it's turned
+// on the Pi downloads the browser, so this polls /api/config until the
+// switch settles rather than waiting on the request.
+
+const KIOSK_POLL_MS = 3000;
+const KIOSK_POLL_TIMEOUT_MS = 15 * 60 * 1000;
+let kioskPollTimer = null;
+
+function renderKioskSetting(kiosk) {
+  const toggle = document.getElementById("setup-kiosk-toggle");
+  if (!toggle || !kiosk) return;
+  const on = kiosk.busy && kiosk.wanted !== null ? kiosk.wanted : kiosk.enabled;
+  toggle.checked = !!on;
+  toggle.disabled = !!kiosk.busy;
+  const displays = kiosk.displays || [];
+  const screens = displays.length ? displays.map(friendlyDisplayName).join(" and ") : null;
+  let status;
+  if (kiosk.busy) {
+    status = kiosk.wanted
+      ? "Turning on… The first time, the Pi downloads the browser, which can take a few minutes."
+      : "Turning off…";
+  } else if (kiosk.failed) {
+    status = "That didn't work - download the log (Setup -> Logs) to see why.";
+  } else if (kiosk.enabled) {
+    status = screens
+      ? `On - showing on the ${screens}.`
+      : "On - no display connected right now; it will show as soon as one is plugged in.";
+  } else {
+    status = screens ? `Off. Display connected: ${screens}.` : "Off. No display connected right now.";
+  }
+  setText("setup-kiosk-status", status);
+}
+
+function friendlyDisplayName(name) {
+  if (name.startsWith("DSI")) return "touchscreen";
+  if (name.startsWith("HDMI")) return `HDMI monitor (${name})`;
+  return name;
+}
+
+async function setKioskEnabled(enabled) {
+  const toggle = document.getElementById("setup-kiosk-toggle");
+  if (toggle) toggle.disabled = true;
+  try {
+    const resp = await apiFetch("/api/kiosk", postJson({ enabled }));
+    renderKioskSetting((await resp.json()).kiosk);
+  } catch (err) {
+    if (toggle) { toggle.checked = !enabled; toggle.disabled = false; }
+    throw err;
+  }
+  pollKioskUntilSettled();
+}
+
+function pollKioskUntilSettled() {
+  clearTimeout(kioskPollTimer);
+  const deadline = Date.now() + KIOSK_POLL_TIMEOUT_MS;
+  const tick = async () => {
+    try {
+      const cfg = await (await fetch("/api/config")).json();
+      renderKioskSetting(cfg.kiosk);
+      if (!cfg.kiosk?.busy) return;
+    } catch {
+      // Keep trying until the deadline.
+    }
+    if (Date.now() < deadline) kioskPollTimer = setTimeout(tick, KIOSK_POLL_MS);
+  };
+  kioskPollTimer = setTimeout(tick, KIOSK_POLL_MS);
+}
+
 // Pointer Events rather than HTML5 drag-and-drop, which doesn't fire on
 // touch screens (this gets used from a phone). The row follows the pointer
 // by moving in the DOM; the new order is committed on release.
@@ -1063,6 +1133,7 @@ function wireControls() {
   document.getElementById("btn-update-now")?.addEventListener("click", withErrorBanner(applyUpdateNow));
   document.getElementById("update-beta-toggle")?.addEventListener("change", setBetaUpdates);
   document.getElementById("btn-display-reset")?.addEventListener("click", () => setDisplayPanels(DEFAULT_DISPLAY_PANELS));
+  document.getElementById("setup-kiosk-toggle")?.addEventListener("change", withErrorBanner((event) => setKioskEnabled(event.target.checked)));
   const cbCheckbox = document.getElementById("setup-show-cb-band");
   if (cbCheckbox) {
     cbCheckbox.checked = loadShowCbBand();
@@ -1134,6 +1205,9 @@ async function loadSetup() {
     applyDisplayLayout(appState.display);
   }
   renderDisplaySettings();
+  renderKioskSetting(configResp.kiosk);
+  // Reopening Setup while the Pi display is still switching: keep following it.
+  if (configResp.kiosk?.busy) pollKioskUntilSettled();
   populateSerialPortOptions(portsResp, configResp.serial_device);
   populateAntennaMatrix(antennaResp.antennas);
   populateSegmentDeleteBandOptions();

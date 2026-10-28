@@ -96,8 +96,11 @@ fallback, e.g. over SSH: `sudo acom-update-apply`.
 ## Kiosk display (the Pi's own screen)
 
 To also show the dashboard full screen on a screen plugged into the Pi -
-the official touchscreen or an HDMI monitor - run the installer with
-`--kiosk`:
+the official touchscreen or an HDMI monitor - turn on **Setup -> Display
+-> Raspberry Pi display** in the dashboard (from any device). The first
+time, the Pi downloads the browser, which takes a few minutes; the
+switch shows progress and which displays are connected. Or from the
+command line:
 
     bash install.sh --kiosk
 
@@ -117,7 +120,7 @@ dashboard backend is answering. A Pi 4 or newer is recommended.
 - **Two screens:** with the touchscreen and an HDMI monitor connected at
   the same time, the dashboard shows on one of them.
 - **Get a console back:** plug in a keyboard and press Ctrl+Alt+F2, or
-  turn the kiosk off: `sudo systemctl disable --now acom-kiosk`.
+  turn the switch off (or `sudo acom-update-apply kiosk-off`).
 
 **Touch Display 2** (the 1280x720 7" or the 5"): add the overlay for your
 model to `/boot/firmware/config.txt` and reboot, e.g.
