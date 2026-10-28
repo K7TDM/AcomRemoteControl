@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.9] - 2026-10-27
+
 ### Changed
 - Updates (and rollbacks) now reinstall the updater and its sudo
   permission from the new code, so a release that changes them no longer
