@@ -14,7 +14,7 @@
 # push --tags` does), and so this never auto-deploys unreleased,
 # possibly-unfinished work just because it happened to land on main.
 #
-# Five modes, all invoked with a fixed, no-extra-argument command line so
+# Seven modes, all invoked with a fixed, no-extra-argument command line so
 # the sudoers rule can allow exactly these and nothing else:
 #   acom-update-apply check   - read-only: fetch tags + compare, never
 #                                pulls or restarts. Used by the daily
@@ -40,6 +40,14 @@
 #                                changes nothing) if a locally edited file
 #                                - e.g. the Pi's own config.json - would be
 #                                overwritten.
+#   acom-update-apply kiosk-on / kiosk-off
+#                             - turn the kiosk display (the dashboard full
+#                                screen on the Pi's own screen) on or off -
+#                                Setup -> Display's "Raspberry Pi display"
+#                                switch, and `install.sh --kiosk`. kiosk-on
+#                                installs cage and Chromium first if
+#                                they're missing (a few minutes the first
+#                                time). Neither touches git.
 #
 # apply, beta and rollback also reinstall this script and its sudoers rule
 # from the newly checked-out code (see the end of this file), so an update
@@ -72,8 +80,51 @@ case "$MODE" in
   check-beta) BETA=1; MODE=check ;;
   beta) BETA=1; MODE=apply ;;
   rollback) BETA=0 ;;
+  kiosk-on|kiosk-off) ;;
   *) echo "acom-update-apply: unknown mode '$MODE'" >&2; exit 2 ;;
 esac
+
+# --- Kiosk display on/off (no git involved) ---------------------------------
+if [[ "$MODE" == "kiosk-on" ]]; then
+  echo "acom-update-apply: turning the kiosk display on"
+  export DEBIAN_FRONTEND=noninteractive
+  # cage: a single-app Wayland display server, so Pi OS Lite needs no
+  # desktop. Chromium is "chromium" on current Raspberry Pi OS and
+  # "chromium-browser" on older releases.
+  if ! command -v cage >/dev/null || ! command -v curl >/dev/null \
+     || ! { command -v chromium || command -v chromium-browser; } >/dev/null; then
+    echo "acom-update-apply: installing cage and Chromium (a few minutes the first time)"
+    apt-get update
+    apt-get install -y cage curl
+    if ! apt-get install -y chromium; then
+      apt-get install -y chromium-browser
+    fi
+  fi
+  # Display, GPU and input-device access for the kiosk session.
+  for group in video render input; do
+    if getent group "$group" >/dev/null; then
+      usermod -aG "$group" "$REPO_OWNER"
+    fi
+  done
+  install -o root -g root -m 755 "$REPO_DIR/acom-control/setup/acom-kiosk.sh" /usr/local/bin/acom-kiosk
+  PH="__"  # see the self-refresh step at the end of this file for why
+  sed "s#${PH}KIOSK_USER${PH}#$REPO_OWNER#" "$REPO_DIR/acom-control/setup/acom-kiosk.service" \
+    > /etc/systemd/system/acom-kiosk.service
+  systemctl daemon-reload
+  systemctl enable acom-kiosk
+  systemctl restart acom-kiosk
+  echo "acom-update-apply: kiosk display on"
+  exit 0
+fi
+
+if [[ "$MODE" == "kiosk-off" ]]; then
+  echo "acom-update-apply: turning the kiosk display off"
+  systemctl disable --now acom-kiosk 2>/dev/null || true
+  # Give the console its login prompt back right away, not just next boot.
+  systemctl start getty@tty1 2>/dev/null || true
+  echo "acom-update-apply: kiosk display off"
+  exit 0
+fi
 
 echo "acom-update-apply: fetching tags"
 git_as_owner fetch --tags --quiet origin

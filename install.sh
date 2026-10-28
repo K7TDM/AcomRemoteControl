@@ -143,25 +143,9 @@ rm -f "$SUDOERS_TMP"
 
 if [[ "$KIOSK" -eq 1 ]]; then
   echo "==> Setting up the kiosk display (Chromium full screen on the attached screen)"
-  # cage: a single-app Wayland display server, so Pi OS Lite needs no
-  # desktop. Chromium is "chromium" on current Raspberry Pi OS and
-  # "chromium-browser" on older releases.
-  sudo apt-get install -y cage curl
-  if ! sudo apt-get install -y chromium; then
-    sudo apt-get install -y chromium-browser
-  fi
-  # Display, GPU and input-device access for the kiosk session.
-  for group in video render input; do
-    if getent group "$group" >/dev/null; then
-      sudo usermod -aG "$group" "$INSTALL_USER"
-    fi
-  done
-  sudo install -o root -g root -m 755 "$REPO_DIR/acom-control/setup/acom-kiosk.sh" /usr/local/bin/acom-kiosk
-  sed "s#__KIOSK_USER__#$INSTALL_USER#" "$REPO_DIR/acom-control/setup/acom-kiosk.service" \
-    | sudo tee /etc/systemd/system/acom-kiosk.service >/dev/null
-  sudo systemctl daemon-reload
-  sudo systemctl enable acom-kiosk
-  sudo systemctl restart acom-kiosk
+  # Same code path as Setup -> Display's "Raspberry Pi display" switch, so
+  # the two can't drift apart (see acom-update-apply.sh's kiosk-on mode).
+  sudo "$UPDATE_SCRIPT_DST" kiosk-on
 fi
 
 cat <<EOF
@@ -196,7 +180,7 @@ cat <<EOF
   updates once a day on its own and shows an icon in the top bar when
   one's available - click it, then "Update Now" to pull and restart
   from there. (It works by granting the acom-control service account
-  passwordless sudo for exactly five fixed invocations of one script,
+  passwordless sudo for exactly seven fixed invocations of one script,
   /usr/local/bin/acom-update-apply - see
   acom-control/setup/acom-control-update.sudoers if you want to review
   or revoke that.) The manual fallback is: sudo acom-update-apply

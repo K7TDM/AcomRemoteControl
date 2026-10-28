@@ -1,5 +1,5 @@
 # Grants the unprivileged acom-control service account passwordless sudo
-# for exactly five fixed invocations of one script, no other arguments -
+# for exactly seven fixed invocations of one script, no other arguments -
 # see install.sh and acom-update-apply.sh. This lets app.py's
 # /api/update/* endpoints (the header-icon popover's "Update Now" button,
 # plus a daily background check) read/pull/restart, without giving the
@@ -15,4 +15,4 @@
 #   sudo visudo -cf acom-control-update.sudoers
 #   sudo cp acom-control-update.sudoers /etc/sudoers.d/acom-control-update
 #   sudo chmod 440 /etc/sudoers.d/acom-control-update
-acom-control ALL=(root) NOPASSWD: /usr/local/bin/acom-update-apply "", /usr/local/bin/acom-update-apply check, /usr/local/bin/acom-update-apply beta, /usr/local/bin/acom-update-apply check-beta, /usr/local/bin/acom-update-apply rollback
+acom-control ALL=(root) NOPASSWD: /usr/local/bin/acom-update-apply "", /usr/local/bin/acom-update-apply check, /usr/local/bin/acom-update-apply beta, /usr/local/bin/acom-update-apply check-beta, /usr/local/bin/acom-update-apply rollback, /usr/local/bin/acom-update-apply kiosk-on, /usr/local/bin/acom-update-apply kiosk-off

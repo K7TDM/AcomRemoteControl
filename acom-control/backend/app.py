@@ -788,6 +788,7 @@ def _config_response() -> dict:
         "available_amp_models": sorted(AMP_PROFILES),
         "available_tuner_models": list(TUNER_MODELS),
         "display": config.display.panels,
+        "kiosk": _kiosk_status(),
     }
 
 
@@ -1192,6 +1193,84 @@ async def apply_update() -> dict:
     backend_logger.info("Update requested from the dashboard%s (currently at commit %s)",
                         " (beta)" if beta else "", GIT_COMMIT)
     return {"ok": True, "launched": True, "current_commit": GIT_COMMIT}
+
+
+# =============================================================================
+# Kiosk display: the dashboard full screen on the Pi's own screen (Setup ->
+# Display's "Raspberry Pi display" switch). Turning it on/off needs root -
+# installing cage/Chromium the first time, enabling the service - so, like
+# updates, it goes through the helper's fixed kiosk-on/kiosk-off modes (see
+# setup/acom-update-apply.sh). Status is read unprivileged from systemd and
+# /sys.
+# =============================================================================
+
+KIOSK_UNIT = "acom-kiosk.service"
+_kiosk_job: Optional[subprocess.Popen] = None  # the running/last kiosk-on/off helper run
+_kiosk_job_wanted: Optional[bool] = None
+
+
+def _systemctl_query(verb: str) -> str:
+    try:
+        result = subprocess.run(["systemctl", verb, KIOSK_UNIT], capture_output=True, text=True, timeout=3)
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
+def _connected_displays() -> list[str]:
+    """Names of the screens the Pi currently sees as plugged in (e.g.
+    "HDMI-A-1", "DSI-1" for the official touchscreen), from the kernel's
+    DRM connector status - so the Setup screen can say whether there's
+    anything to show the kiosk on."""
+    names = []
+    try:
+        for status in Path("/sys/class/drm").glob("card*-*/status"):
+            if status.read_text().strip() == "connected":
+                names.append(status.parent.name.split("-", 1)[1])
+    except OSError:
+        pass
+    return sorted(names)
+
+
+def _kiosk_status() -> dict:
+    enabled_state = _systemctl_query("is-enabled")  # "enabled"/"disabled"/"" when not installed
+    busy = _kiosk_job is not None and _kiosk_job.poll() is None
+    failed = _kiosk_job is not None and not busy and _kiosk_job.returncode != 0
+    return {
+        "installed": enabled_state in ("enabled", "disabled", "static", "indirect"),
+        "enabled": enabled_state == "enabled",
+        "active": _systemctl_query("is-active") == "active",
+        "displays": _connected_displays(),
+        "busy": busy,
+        # The last switch flip ended with an error (see the log download).
+        "failed": failed,
+        "wanted": _kiosk_job_wanted,
+    }
+
+
+class KioskRequest(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/kiosk")
+async def set_kiosk(req: KioskRequest) -> dict:
+    """Turns the kiosk display on or off via the helper. Detached - the
+    first kiosk-on installs cage and Chromium, which takes minutes; the
+    frontend polls GET /api/config's "kiosk" until it settles. Its output
+    goes to this service's journal (log download)."""
+    global _kiosk_job, _kiosk_job_wanted
+    if _kiosk_job is not None and _kiosk_job.poll() is None:
+        raise HTTPException(409, "the Pi display is still being switched - wait for it to finish")
+    try:
+        _kiosk_job = subprocess.Popen(
+            ["sudo", UPDATE_APPLY_SCRIPT, "kiosk-on" if req.enabled else "kiosk-off"],
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"failed to switch the Pi display: {exc}") from exc
+    _kiosk_job_wanted = req.enabled
+    backend_logger.info("Pi display (kiosk) turned %s from the dashboard", "on" if req.enabled else "off")
+    return {"ok": True, "kiosk": _kiosk_status()}
 
 
 @app.post("/api/update/rollback")

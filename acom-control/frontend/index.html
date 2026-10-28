@@ -189,6 +189,23 @@
 
     <details class="setup-section collapsible">
       <summary><h2>Display</h2></summary>
+      <!-- The kiosk display (setup/acom-kiosk.sh) - see app.js's
+           renderKioskSetting() and POST /api/kiosk. -->
+      <div class="kiosk-setting">
+        <h3>Raspberry Pi display</h3>
+        <p class="danger-warning">
+          Connect a display to the Pi - the official touchscreen or an HDMI
+          monitor - to show this dashboard on it, full screen, every time
+          the Pi starts.
+        </p>
+        <label>
+          <input type="checkbox" id="setup-kiosk-toggle" />
+          Show the dashboard on the Pi's display
+        </label>
+        <p id="setup-kiosk-status" class="danger-warning"></p>
+      </div>
+
+      <h3>Gauges</h3>
       <p class="danger-warning">
         Show, size and reorder the dashboard's gauges (drag the &#x283F;
         handle). Changes apply right away and are saved on the Pi, so every
