@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.12] - 2026-10-27
+
 ### Fixed
 - Antenna names (and the other settings read from the amp at startup)
   often never arrived: the amp drops most requests sent back to back.
