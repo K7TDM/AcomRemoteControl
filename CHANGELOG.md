@@ -19,11 +19,14 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.10] - 2026-10-27
+
 ### Added
-- Kiosk display: `bash install.sh --kiosk` shows the dashboard full
-  screen on a screen plugged into the Pi (official touchscreen or HDMI
-  monitor), starting at every boot - works on Pi OS Lite, no desktop
-  needed. The cursor stays hidden until a mouse is used; touch never
+- Kiosk display: show the dashboard full screen on a screen plugged into
+  the Pi (official touchscreen or HDMI monitor), starting at every boot -
+  works on Pi OS Lite, no desktop needed. Turn it on or off from Setup ->
+  Display -> "Raspberry Pi display" (which also shows whether a display
+  is connected), or with `bash install.sh --kiosk`. The cursor stays hidden until a mouse is used; touch never
   shows it. See "Kiosk display" in `acom-control/README.md`, including
   the setup line Touch Display 2 needs. Not yet tested on a real Pi.
 - Open dashboards (including the kiosk screen) reload themselves when
