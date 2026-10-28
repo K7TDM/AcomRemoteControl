@@ -99,6 +99,11 @@ Known `Cmd` (Byte 3) values:
   re-sends that same `0x27` about once a second until it gets a carrier;
   Bypass clicks in that state don't change anything (the dashboard's
   button reads "Tuning…" then).
+- Buzzer (`0x0A`) Byte4 can also be an ASCII character, which the amp
+  plays as Morse (doc §5.1 "BUZZER_LETTER"). `POST /api/buzzer/morse`
+  queues one command per character back to back, assuming the amp
+  buffers and times them itself (its startup "TEST" is ~15 WPM) - NEEDS
+  REAL-HARDWARE VERIFICATION, including whether a space is a word gap.
 - Buzzer (`0x0A`), like the band/antenna/mode commands, is never ACKed
   by the amp - it goes through `_send_pulse_command()` (one send, no
   retry); the retrying path beeped up to 5 times and returned 502.

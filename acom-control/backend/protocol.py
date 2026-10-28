@@ -162,6 +162,12 @@ BUZZER_PWROFF = 3
 BUZZER_SOFT_FAULT = 4
 BUZZER_HARD_FAULT = 5
 BUZZER_PWRON = 6
+# Any other Byte4 value is an ASCII character the amp plays as Morse (doc
+# §5.1: "BUZZER_LETTER (Morze code coresponding to the ASCII)"), one per
+# command. Kept to characters with a standard Morse code; the amp's own
+# table isn't documented. NEEDS REAL-HARDWARE VERIFICATION, including
+# whether a space plays as a word gap.
+MORSE_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 /?.,=-")
 
 # 0x81 Cmd 0x10 "ATU Service Commands" - Byte4 selection (doc section 5.1)
 ATU_ERASE_CURRENT = 0x01
@@ -257,6 +263,15 @@ def build_atu_activate_cyclic_display(message_address: int) -> bytes:
 
 def build_buzzer(signal: int, volume: int) -> bytes:
     return build_amp_command(CMD_BUZZER, param_hw=signal, param_lw=volume)
+
+
+def build_buzzer_morse(text: str, volume: int) -> list[bytes]:
+    """One buzzer command per character of `text` (see MORSE_CHARS)."""
+    text = text.upper()
+    bad = sorted(set(text) - MORSE_CHARS)
+    if bad:
+        raise ValueError(f"no Morse code for {''.join(bad)!r}")
+    return [build_buzzer(ord(ch), volume) for ch in text]
 
 
 def build_factory_reset(selection: int) -> bytes:
