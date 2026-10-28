@@ -131,6 +131,8 @@ html.fit-layout .panel-grid {
   min-height: 0;
   gap: 0.5rem;
   grid-template-rows: var(--panel-rows, none);
+  /* Only matters when rows are capped (bar themes on a big screen). */
+  align-content: center;
 }
 
 html.fit-layout .panel-grid > * {

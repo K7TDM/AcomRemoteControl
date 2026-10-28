@@ -636,7 +636,9 @@ function panelWeight(el, span, cols) {
     const aspect = WIDE_METER_WIDTHS.has(el.dataset.width) ? 5.55 : 2.05;
     return (span / cols / aspect) * 10 + 0.6;
   }
-  return el.id === "power-out-hero" ? 1.5 : 1.15;
+  // Bar panels scale their contents with their height (bargraph.css), so
+  // equal rows keep the text and bars the same size across rows.
+  return 1.15;
 }
 
 // Works out which panels share each grid row (CSS grid's own sparse
@@ -674,11 +676,24 @@ function updatePanelRows() {
   });
   // A row holding only the band dial gets exactly the height it needs
   // (it's fixed-size text and a scale); the meter rows share the rest.
+  // Bar themes (ACOM/Modern) cap their rows instead of filling: bars look
+  // right short and wide like the amp's own screen, and stretched to fill
+  // a big monitor they were far too tall (per Tyler). minmax(0, cap) rows
+  // still shrink to fit a small screen; leftover space on a big one is
+  // centered (base.css align-content).
+  const barTheme = appState.theme.style !== "classic";
   grid.style.setProperty(
     "--panel-rows",
-    rows.map((r) => (r.onlyBand ? "auto" : `minmax(0, ${Math.round(r.weight * 100) / 100}fr)`)).join(" "),
+    rows
+      .map((r) => {
+        if (r.onlyBand) return "auto";
+        return barTheme ? `minmax(0, ${BAR_ROW_MAX})` : `minmax(0, ${Math.round(r.weight * 100) / 100}fr)`;
+      })
+      .join(" "),
   );
 }
+
+const BAR_ROW_MAX = "12.5rem";
 
 window.matchMedia(FIT_QUERY).addEventListener("change", updateFitMode);
 window.matchMedia(FIT_WIDE_QUERY).addEventListener("change", updateFitMode);
