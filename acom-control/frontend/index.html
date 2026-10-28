@@ -305,7 +305,14 @@
       <h2>Software Update</h2>
       <p id="update-headline">Checking for updates...</p>
       <p>Current version: <span id="update-current-version"></span></p>
-      <p>New version: <span id="update-latest-version"></span></p>
+      <!-- Only shown when there's actually something newer to install. -->
+      <p id="update-latest-row" hidden>New version: <span id="update-latest-version"></span></p>
+      <!-- Shown with beta updates off while running a beta build (ahead of
+           the latest release) - see POST /api/update/rollback. -->
+      <div id="update-rollback" hidden>
+        <p id="update-rollback-note" class="danger-warning"></p>
+        <button id="btn-update-rollback" class="acom-button" type="button"></button>
+      </div>
       <p>
         <label>
           <input type="checkbox" id="update-beta-toggle" />
