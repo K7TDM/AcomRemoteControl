@@ -19,9 +19,25 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Added
+- Captions under the header controls: Theme, Light/Dark, Updates and
+  Settings.
+- A favicon (an "A" in ACOM amber), the same in every theme.
+
 ### Changed
 - The OPR/STB button now says what it will do: "Standby" (green) while
   in Operate, "Operate" (yellow, was red) while in Standby.
+- Classic theme redesigned as vintage station gear. Light mode is a
+  Heath-style gray-green panel with cream backlit meters; dark mode is
+  crinkle black with chrome-rimmed amber meters. Every gauge, including
+  Forward Power, is now a rectangular backlit panel meter with a printed
+  scale, red line, peak and average marks, and the reading on its face.
+  The band dial is a backlit slide-rule window, and state buttons show
+  a jewel lamp (green, amber or red) instead of a colored fill.
+
+### Fixed
+- Classic theme needles could swing off the dial and disappear: the
+  needle was rotated about two different pivots at once.
 
 ## [0.1.6] - 2026-10-23
 

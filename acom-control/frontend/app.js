@@ -518,10 +518,11 @@ function renderGauges(state) {
   t.swr_calc = computeSwr(t.forward_power_w, t.reflected_power_w);
   t.id1_a = t.id1_ma != null ? t.id1_ma / 1000 : null;
 
-  // The hero bar is always a bargraph, regardless of theme - a full-width
-  // needle sweep doesn't make sense here. Hidden panels (Display settings)
-  // aren't rendered at all.
-  if (heroEl && !heroEl.hidden) mountOrUpdateGauge(heroEl, HERO_GAUGE_DEF, t, theme, "bargraph");
+  // The hero is a bargraph in the ACOM/Modern themes; Classic uses its
+  // window meter here too (the big backlit meter is the centerpiece of that
+  // look). Hidden panels (Display settings) aren't rendered at all.
+  const heroWidget = theme === "classic" ? null : "bargraph";
+  if (heroEl && !heroEl.hidden) mountOrUpdateGauge(heroEl, HERO_GAUGE_DEF, t, theme, heroWidget);
 
   GAUGE_DEFS.forEach((def) => {
     const el = grid.querySelector(`[data-gauge-id="${def.id}"]`);
