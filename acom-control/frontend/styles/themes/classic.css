@@ -177,32 +177,37 @@
 [data-theme="classic"] #btn-power-off::before {
   content: "";
   display: inline-block;
-  width: 0.7em;
-  height: 0.7em;
+  width: 0.8em;
+  height: 0.8em;
   margin-right: 0.55em;
   border-radius: 50%;
-  vertical-align: -0.05em;
-  border: 1px solid var(--chrome);
-  background: radial-gradient(circle at 35% 30%, #fff6e0, var(--jewel, var(--led-off)) 65%);
-  box-shadow: 0 0 6px 1px var(--jewel-glow, transparent);
+  vertical-align: -0.1em;
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  /* Mostly solid lamp color with only a small specular glint, so green,
+     amber and red stay clearly distinct (a large white hotspot washed
+     them out toward the same pale tone). */
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.75) 0 10%, transparent 26%),
+    var(--jewel, var(--led-off));
+  box-shadow: 0 0 0 1px var(--chrome), 0 0 7px 2px var(--jewel-glow, transparent);
 }
 
 [data-theme="classic"] .acom-button[data-opr-state="operate"],
 [data-theme="classic"] .acom-button[data-bypass-state="active"] {
-  --jewel: #5fd35a;
-  --jewel-glow: rgba(95, 211, 90, 0.7);
+  --jewel: #2fc63a;
+  --jewel-glow: rgba(47, 198, 58, 0.75);
 }
 
 [data-theme="classic"] .acom-button[data-opr-state="stb"],
 [data-theme="classic"] .acom-button[data-bypass-state="bypass"],
 [data-theme="classic"] .acom-button[data-bypass-state="tuning"] {
-  --jewel: #ffb02e;
-  --jewel-glow: rgba(255, 176, 46, 0.7);
+  --jewel: #ffa20a;
+  --jewel-glow: rgba(255, 162, 10, 0.75);
 }
 
 [data-theme="classic"] #btn-power-off {
-  --jewel: #e0452f;
-  --jewel-glow: rgba(224, 69, 47, 0.6);
+  --jewel: #e5261a;
+  --jewel-glow: rgba(229, 38, 26, 0.7);
 }
 
 /* Band panel: a backlit slide-rule dial window in the meters' colors. */
