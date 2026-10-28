@@ -1052,7 +1052,21 @@ async def _run_update_helper(*args: str, timeout: float) -> tuple[int, str, str]
     return proc.returncode, stdout.decode(errors="replace"), stderr.decode(errors="replace")
 
 
+# One update check at a time. The dashboard can fire two at once (opening
+# the update screen while another check is still running), and two helper
+# runs doing `git fetch` on the same repo collide - seen on the Pi as
+# "cannot lock ref 'refs/remotes/origin/main'". A second request now waits
+# for the first, then runs its own check (so it still sees the current
+# beta setting).
+_update_check_lock = asyncio.Lock()
+
+
 async def _check_for_update() -> None:
+    async with _update_check_lock:
+        await _check_for_update_locked()
+
+
+async def _check_for_update_locked() -> None:
     """Runs the helper's read-only `check` mode (git fetch + compare,
     never pulls or restarts - see acom-update-apply.sh) and records the
     result in `update_status` for the dashboard to show. Failures (no

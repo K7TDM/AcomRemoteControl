@@ -19,6 +19,18 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Changed
+- Updates (and rollbacks) now reinstall the updater and its sudo
+  permission from the new code, so a release that changes them no longer
+  needs `install.sh` re-run. A new sudo rule that fails validation is
+  never installed - the old one stays. Takes effect from the first update
+  run by an updater that has this.
+
+### Fixed
+- Two update checks running at the same moment (e.g. opening the update
+  screen while another check is still going) could fail with "cannot
+  lock ref". Checks now run one at a time.
+
 ## [0.1.8] - 2026-10-27
 
 ### Added
