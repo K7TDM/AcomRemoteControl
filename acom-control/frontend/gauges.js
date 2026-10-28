@@ -203,100 +203,124 @@ function renderPlainGauge() {
   return el;
 }
 
-// --- Needle meter (Classic) --------------------------------------------------
+// --- Window meter (Classic) --------------------------------------------------
+// A rectangular, backlit edge meter like 50s-70s station gear (Heath SB,
+// Hallicrafters, FT-101): the scale is an arc whose pivot sits *below* the
+// window, so only the swept part of the needle shows. Colors all come from
+// --meter-* CSS variables (classic.css), so light/dark mode restyles a
+// mounted meter without re-rendering it.
+//
+// The needle, peak and average marks are drawn pointing straight up at the
+// pivot and rotated by a CSS transform about that one pivot (transform-box:
+// view-box; transform-origin in viewBox units). The previous dial combined
+// an SVG rotate(angle cx cy) with a CSS transform-origin, which applied two
+// pivots and could swing the needle off the visible face.
 
-const NEEDLE_SWEEP_START_DEG = -60;
-const NEEDLE_SWEEP_END_DEG = 60;
+const METER_W = 320;
+const METER_H = 156;
+const METER_SWEEP_DEG = 48; // each side of vertical
+const METER_R = 198;
+const METER_CX = METER_W / 2;
+const METER_CY = 22 + 0.97 * METER_R; // pivot, below the window
+
+// Printed on the meter face like the legend on a real panel meter.
+const METER_UNIT_WORDS = { W: "WATTS", A: "AMPS", "°C": "°C", ":1": "SWR" };
+
+let meterInstanceCounter = 0;
+
+function meterPolar(r, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  const round = (v) => Math.round(v * 10) / 10;
+  return [round(METER_CX + r * Math.sin(rad)), round(METER_CY - r * Math.cos(rad))];
+}
+
+function meterArc(r, a1, a2) {
+  const [x1, y1] = meterPolar(r, a1);
+  const [x2, y2] = meterPolar(r, a2);
+  return `M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`;
+}
+
+function meterAngle(opts, value) {
+  const frac = fraction({ ...opts, value });
+  return -METER_SWEEP_DEG + frac * 2 * METER_SWEEP_DEG;
+}
+
+function formatScaleNumber(v) {
+  return Math.abs(v) >= 10 || Number.isInteger(v) ? String(Math.round(v)) : String(Math.round(v * 10) / 10);
+}
 
 function renderNeedleGauge(opts) {
   const wrapper = document.createElement("div");
   wrapper.className = "gauge-needle";
-  wrapper.innerHTML = buildNeedleSvg(opts);
+  wrapper.innerHTML = buildMeterSvg(opts);
+  updateNeedleGauge(wrapper, opts);
   return wrapper;
 }
 
-// Classic theme only (bargraph is used by the other two themes), so this
-// SVG can carry rich skeuomorphic styling - bezel, dial-face gradient,
-// glass highlight, colored scale zones - without any [data-theme="..."]
-// guarding. Multiple needle gauges are mounted on the page at once, so
-// every <defs> id below gets a unique per-instance suffix to avoid SVG id
-// collisions between gauges.
-let needleInstanceCounter = 0;
+function buildMeterSvg(opts) {
+  const id = meterInstanceCounter++;
+  const clipId = `meter-clip-${id}`;
+  const glowId = `meter-glow-${id}`;
+  const { min = 0, max = 100 } = opts;
+  const danger = ZONE_DANGER_FRACTION;
 
-function needlePolar(cx, cy, r, angleDeg) {
-  const rad = (angleDeg * Math.PI) / 180;
-  return { x: cx + r * Math.sin(rad), y: cy - r * Math.cos(rad) };
-}
-
-function buildNeedleSvg(opts) {
-  const instanceId = needleInstanceCounter++;
-  const bezelGradId = `needle-bezel-grad-${instanceId}`;
-  const faceGradId = `needle-face-grad-${instanceId}`;
-  const glassGradId = `needle-glass-grad-${instanceId}`;
-
-  const ticks = [];
-  const tickCount = 8;
-  for (let i = 0; i <= tickCount; i++) {
-    const angle = NEEDLE_SWEEP_START_DEG + (i / tickCount) * (NEEDLE_SWEEP_END_DEG - NEEDLE_SWEEP_START_DEG);
-    const rad = (angle * Math.PI) / 180;
-    const x1 = 50 + 38 * Math.sin(rad);
-    const y1 = 50 - 38 * Math.cos(rad);
-    const x2 = 50 + 44 * Math.sin(rad);
-    const y2 = 50 - 44 * Math.cos(rad);
-    ticks.push(`<line class="needle-tick" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`);
+  let scale = `<path class="meter-scale" d="${meterArc(METER_R * 0.82, -METER_SWEEP_DEG, METER_SWEEP_DEG)}" />`;
+  scale += `<path class="meter-redline" d="${meterArc(METER_R * 0.86, -METER_SWEEP_DEG + danger * 2 * METER_SWEEP_DEG, METER_SWEEP_DEG)}" />`;
+  for (let k = 0; k <= 20; k++) {
+    const angle = -METER_SWEEP_DEG + (k / 20) * 2 * METER_SWEEP_DEG;
+    const major = k % 5 === 0;
+    const [x1, y1] = meterPolar(METER_R * 0.82, angle);
+    const [x2, y2] = meterPolar(METER_R * (major ? 0.92 : 0.88), angle);
+    scale += `<line class="meter-tick${major ? " major" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
+    if (major) {
+      const [tx, ty] = meterPolar(METER_R * 0.97, angle);
+      scale += `<text class="meter-number" x="${tx}" y="${ty}">${formatScaleNumber(min + (k / 20) * (max - min))}</text>`;
+    }
   }
 
-  // Green/yellow/red scale-zone arcs just inside the ticks, for the
-  // classic VU-meter look.
-  const zoneArc = (fromFrac, toFrac, colorVar) => {
-    const a1 = NEEDLE_SWEEP_START_DEG + fromFrac * (NEEDLE_SWEEP_END_DEG - NEEDLE_SWEEP_START_DEG);
-    const a2 = NEEDLE_SWEEP_START_DEG + toFrac * (NEEDLE_SWEEP_END_DEG - NEEDLE_SWEEP_START_DEG);
-    const p1 = needlePolar(50, 50, 36, a1);
-    const p2 = needlePolar(50, 50, 36, a2);
-    return `<path class="needle-zone" d="M ${p1.x} ${p1.y} A 36 36 0 0 1 ${p2.x} ${p2.y}" style="stroke:${colorVar}" />`;
-  };
-  const zones = [
-    zoneArc(0, 0.6, "var(--needle-zone-good, #5a8f3c)"),
-    zoneArc(0.6, 0.85, "var(--needle-zone-warn, #d9a53c)"),
-    zoneArc(0.85, 1, "var(--needle-zone-danger, #a3331a)"),
-  ].join("\n");
+  // Each pointer is a vertical line from the pivot; data-angle-of says which
+  // value it tracks, updateNeedleGauge() rotates it.
+  const pointer = (cls, from, to) =>
+    `<line class="${cls}" x1="${METER_CX}" y1="${METER_CY - METER_R * from}" x2="${METER_CX}" y2="${METER_CY - METER_R * to}"` +
+    ` style="transform-origin: ${METER_CX}px ${METER_CY}px" />`;
 
   return `
-    <svg viewBox="0 0 100 60">
+    <svg viewBox="0 0 ${METER_W} ${METER_H}" role="img" aria-label="${opts.label || "Meter"}">
       <defs>
-        <radialGradient id="${bezelGradId}" cx="50%" cy="30%" r="75%">
-          <stop offset="0%" stop-color="var(--needle-bezel-highlight, #d8d8d8)" />
-          <stop offset="55%" stop-color="var(--needle-bezel-mid, #8a8a7a)" />
-          <stop offset="100%" stop-color="var(--needle-bezel-shadow, #2a2a22)" />
-        </radialGradient>
-        <radialGradient id="${faceGradId}" cx="50%" cy="25%" r="80%">
-          <stop offset="0%" stop-color="var(--needle-face-highlight, var(--needle-face))" />
-          <stop offset="100%" stop-color="var(--needle-face)" />
-        </radialGradient>
-        <radialGradient id="${glassGradId}" cx="40%" cy="15%" r="55%">
-          <stop offset="0%" stop-color="rgba(255,255,255,0.35)" />
-          <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+        <clipPath id="${clipId}"><rect x="0" y="0" width="${METER_W}" height="${METER_H}" /></clipPath>
+        <radialGradient id="${glowId}" cx="50%" cy="62%" r="70%">
+          <stop offset="0%" class="meter-glow-hot" />
+          <stop offset="55%" class="meter-glow-warm" />
+          <stop offset="100%" class="meter-glow-edge" />
         </radialGradient>
       </defs>
-      <path class="needle-bezel" d="M 3 55 A 47 47 0 0 1 97 55 L 50 55 Z" style="fill:url(#${bezelGradId})" />
-      <path class="needle-face" d="M 8 55 A 42 42 0 0 1 92 55 L 50 55 Z" style="fill:url(#${faceGradId})" />
-      ${zones}
-      ${ticks.join("\n")}
-      <line class="needle-pointer" data-needle-pointer x1="50" y1="55" x2="50" y2="18"
-            transform="rotate(${needleAngle(opts)} 50 55)" />
-      <circle class="needle-hub" cx="50" cy="55" r="3" />
-      <ellipse class="needle-glass" cx="38" cy="28" rx="20" ry="12" style="fill:url(#${glassGradId})" />
+      <g clip-path="url(#${clipId})">
+        <rect class="meter-face" x="0" y="0" width="${METER_W}" height="${METER_H}" style="fill:url(#${glowId})" />
+        ${scale}
+        ${pointer("meter-avg", 0.72, 0.9)}
+        ${pointer("meter-peak", 0.5, 0.93)}
+        ${pointer("meter-needle", 0, 0.94)}
+        <text class="meter-unit" x="10" y="${METER_H - 10}">${METER_UNIT_WORDS[opts.unit] ?? opts.unit ?? ""}</text>
+        <text class="meter-value" x="${METER_W - 10}" y="${METER_H - 10}" data-meter-value></text>
+        <polygon class="meter-glass" points="${METER_W * 0.06},0 ${METER_W * 0.4},0 ${METER_W * 0.2},${METER_H} ${-METER_W * 0.14},${METER_H}" />
+      </g>
+      <rect class="meter-bezel" x="0" y="0" width="${METER_W}" height="${METER_H}" />
     </svg>`;
 }
 
-function needleAngle(opts) {
-  const frac = fraction(opts);
-  return NEEDLE_SWEEP_START_DEG + frac * (NEEDLE_SWEEP_END_DEG - NEEDLE_SWEEP_START_DEG);
+function setPointer(el, opts, value) {
+  if (!el) return;
+  const show = value !== null && value !== undefined && !Number.isNaN(value);
+  el.style.visibility = show ? "visible" : "hidden";
+  if (show) el.style.transform = `rotate(${meterAngle(opts, value)}deg)`;
 }
 
 function updateNeedleGauge(bodyEl, opts) {
-  const pointer = bodyEl.querySelector("[data-needle-pointer]");
-  if (pointer) {
-    pointer.setAttribute("transform", `rotate(${needleAngle(opts)} 50 55)`);
-  }
+  setPointer(bodyEl.querySelector(".meter-needle"), opts, opts.value ?? opts.min ?? 0);
+  setPointer(bodyEl.querySelector(".meter-peak"), opts, opts.peak);
+  setPointer(bodyEl.querySelector(".meter-avg"), opts, opts.avg);
+  const valueEl = bodyEl.querySelector("[data-meter-value]");
+  // The unit is already printed on the face (METER_UNIT_WORDS), so just the number.
+  if (valueEl) valueEl.textContent = formatValue(opts.value, "");
 }
+

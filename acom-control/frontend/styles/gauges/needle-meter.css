@@ -1,5 +1,6 @@
-/* Arc scale, needle, pilot-lamp glow - Classic theme's gauge widget.
-   Rendered as inline SVG by gauges.js's renderNeedleGauge(). */
+/* Classic theme's backlit window meter - rendered as inline SVG by
+   gauges.js's buildMeterSvg(). Every color is a --meter-* variable set per
+   light/dark mode in themes/classic.css. */
 
 .gauge-needle {
   display: flex;
@@ -7,51 +8,104 @@
 }
 
 .gauge-needle svg {
+  display: block;
   width: 100%;
-  max-width: 170px;
+  /* Big enough to be the centerpiece at full width, without a full-width
+     panel turning into a giant meter. */
+  max-width: 520px;
   height: auto;
+  border-radius: 3px;
+  box-shadow: 0 0 0 5px var(--meter-bezel), 0 3px 8px 5px rgba(0, 0, 0, 0.35);
+  margin: 6px 6px 2px;
 }
 
-/* Brushed-metal bezel ring behind the dial face. The gradient fill is set
-   inline per-SVG-instance in gauges.js (unique ids per mounted gauge avoid
-   collisions when several needle gauges are on the page); this rule just
-   supplies the rim stroke and a lift-off-the-panel shadow. */
-.gauge-needle .needle-bezel {
-  stroke: var(--border-color);
-  stroke-width: 1;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
+.gauge-needle .meter-glow-hot { stop-color: var(--meter-glow); }
+.gauge-needle .meter-glow-warm { stop-color: var(--meter-face); }
+.gauge-needle .meter-glow-edge { stop-color: var(--meter-face-edge, var(--meter-face)); }
+
+.gauge-needle .meter-scale {
+  fill: none;
+  stroke: var(--meter-ink);
+  stroke-width: 1.2;
 }
 
-.gauge-needle .needle-face {
-  stroke: var(--border-color);
-  stroke-width: 2;
+.gauge-needle .meter-redline {
+  fill: none;
+  stroke: var(--meter-red);
+  stroke-width: 6;
 }
 
-.gauge-needle .needle-glass {
+.gauge-needle .meter-tick {
+  stroke: var(--meter-ink);
+  stroke-width: 0.8;
+}
+
+.gauge-needle .meter-tick.major {
+  stroke-width: 1.6;
+}
+
+.gauge-needle .meter-number,
+.gauge-needle .meter-unit,
+.gauge-needle .meter-value {
+  fill: var(--meter-ink);
+  font-family: var(--meter-font, var(--font-family));
+}
+
+.gauge-needle .meter-number {
+  font-size: 12px;
+  text-anchor: middle;
+}
+
+.gauge-needle .meter-unit {
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+.gauge-needle .meter-value {
+  font-size: 18px;
+  text-anchor: end;
+}
+
+/* Pointers rotate about the pivot (set inline as transform-origin in
+   viewBox units) - see the note above buildMeterSvg(). */
+.gauge-needle .meter-needle,
+.gauge-needle .meter-peak,
+.gauge-needle .meter-avg {
+  transform-box: view-box;
+  transition: transform 0.25s ease-out;
+  stroke-linecap: round;
+}
+
+.gauge-needle .meter-needle {
+  stroke: var(--meter-needle);
+  stroke-width: 2.4;
+}
+
+.gauge-needle .meter-peak {
+  stroke: var(--meter-red);
+  stroke-width: 1.6;
+}
+
+.gauge-needle .meter-avg {
+  stroke: var(--meter-avg, #e0a21a);
+  stroke-width: 4;
+}
+
+.gauge-needle .meter-glass {
+  fill: #ffffff;
+  opacity: 0.09;
   pointer-events: none;
 }
 
-.gauge-needle .needle-zone {
+.gauge-needle .meter-bezel {
   fill: none;
-  stroke-width: 3;
-  opacity: 0.85;
+  stroke: rgba(0, 0, 0, 0.35);
+  stroke-width: 2;
 }
 
-.gauge-needle .needle-tick {
-  stroke: var(--needle-scale, var(--text-secondary));
-  stroke-width: 1.5;
-}
-
-.gauge-needle .needle-pointer {
-  stroke: var(--needle-pointer, #d9402a);
-  stroke-width: 3;
-  stroke-linecap: round;
-  transform-origin: 50% 50%;
-  transition: transform 0.3s ease;
-  filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, 0.5));
-}
-
-.gauge-needle .needle-hub {
-  fill: var(--needle-pointer, #d9402a);
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+/* The reading is printed on the meter face, so the separate value line
+   under it would just repeat it. */
+.gauge-wrapper[data-mounted-widget="needle"] .gauge-value,
+.gauge-hero[data-mounted-widget="needle"] .gauge-value {
+  display: none;
 }

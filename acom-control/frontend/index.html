@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ACOM Remote Control</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 
   <!-- Applies the saved theme before first paint, to avoid a flash of the
        wrong theme while styles/app.js load. See theme.js. -->
@@ -32,25 +33,40 @@
 <body>
   <header class="app-header">
     <h1>ACOM Remote Control</h1>
+    <!-- Each control is wrapped in a <label> with a small caption under it,
+         so the icon-only buttons say what they do (clicking the caption
+         works too - a label activates the control it wraps). -->
     <div class="header-controls">
-      <select id="theme-style-select" class="theme-select" aria-label="Theme">
-        <option value="acom">ACOM</option>
-        <option value="classic">Classic</option>
-        <option value="modern">Modern</option>
-      </select>
-      <button id="theme-mode-toggle" class="icon-button" type="button" aria-label="Toggle light/dark"></button>
+      <label class="header-control">
+        <select id="theme-style-select" class="theme-select">
+          <option value="acom">ACOM</option>
+          <option value="classic">Classic</option>
+          <option value="modern">Modern</option>
+        </select>
+        <span class="header-control-caption">Theme</span>
+      </label>
+      <label class="header-control">
+        <button id="theme-mode-toggle" class="icon-button" type="button" aria-label="Toggle light/dark"></button>
+        <span class="header-control-caption">Light/Dark</span>
+      </label>
       <!-- Inline SVG, not a Unicode arrow character - iOS rendered a bare
            "⬆" as Apple's own colorful emoji glyph, which ignores the
            .has-update CSS color entirely (see PI_CONTROL_PLAN.md
            Follow-ups). An inline shape has no OS-level presentation to
            override; fill="currentColor" picks up the button's own CSS
            color, so .has-update's amber highlight actually reaches it. -->
-      <button id="btn-update-available" class="icon-button" type="button" aria-label="Check for updates">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 2 L20 12 L15 12 L15 20 L9 20 L9 12 L4 12 Z" />
-        </svg>
-      </button>
-      <button id="btn-setup-open" class="icon-button" type="button" aria-label="Setup">⚙</button>
+      <label class="header-control">
+        <button id="btn-update-available" class="icon-button" type="button" aria-label="Check for updates">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2 L20 12 L15 12 L15 20 L9 20 L9 12 L4 12 Z" />
+          </svg>
+        </button>
+        <span class="header-control-caption">Updates</span>
+      </label>
+      <label class="header-control">
+        <button id="btn-setup-open" class="icon-button" type="button" aria-label="Settings">⚙</button>
+        <span class="header-control-caption">Settings</span>
+      </label>
     </div>
   </header>
 

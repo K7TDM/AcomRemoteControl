@@ -1,88 +1,146 @@
-/* Classic theme - 1950s tube-amplifier aesthetic. Needle-meter gauges
-   instead of bargraphs; see PI_CONTROL_PLAN.md "UI Design - Themes". */
-
-[data-theme="classic"][data-mode="dark"] {
-  --bg-page: #241a12;
-  --bg-panel: #3a2a1d;
-  --accent-label: #c97f2c;
-  --accent-label-text: #1a1200;
-  --text-primary: #f0dcc0;
-  --text-secondary: #c9ad87;
-  --readout-power: #ff9a3c;
-  --readout-freq: #ff9a3c;
-  --warn-bg: #e2b23c;
-  --warn-text: #241a12;
-  --led-on: #ffb347;
-  --led-off: #5a4530;
-  --radius: 6px;
-  --font-family: "Georgia", "Times New Roman", serif;
-  --border-color: #5a4530;
-  --button-bg: #4a3826;
-  --button-text: #f0dcc0;
-  --button-bg-active: #c97f2c;
-  --button-text-active: #241a12;
-  --needle-face: #2a1d14;
-  --needle-scale: #f0dcc0;
-  --needle-pointer: #ff5a3c;
-  --needle-face-highlight: #4a382a;
-  --needle-bezel-highlight: #cfcfc0;
-  --needle-bezel-mid: #7a7868;
-  --needle-bezel-shadow: #201e18;
-  --needle-zone-good: #5a8f3c;
-  --needle-zone-warn: #d9a53c;
-  --needle-zone-danger: #a3331a;
-  --lamp-glass-off: #4a3a28;
-  --lamp-glass-hotspot: #fff3d6;
-  --zone-good: var(--needle-zone-good);
-  --zone-warn: var(--needle-zone-warn);
-  --zone-danger: var(--needle-zone-danger);
-  --font-family-display: "Copperplate", "Rockwell", Georgia, serif;
-}
+/* Classic theme - 50s-70s station gear. Two looks, picked by Tyler from a
+   set of concepts: light mode is a Heath-style gray-green kit panel with
+   cream meters and black pointers; dark mode is a crinkle-black receiver
+   with chrome-rimmed amber backlit meters. Gauges use the backlit window
+   meter (gauges.js buildMeterSvg(), styles/gauges/needle-meter.css), whose
+   colors are the --meter-* variables below. */
 
 [data-theme="classic"][data-mode="light"] {
-  --bg-page: #e9ddc4;
-  --bg-panel: #f3e9d2;
-  --accent-label: #8a5a2b;
-  --accent-label-text: #f3e9d2;
-  --text-primary: #2a1d12;
-  --text-secondary: #5a4530;
-  --readout-power: #8a5a2b;
-  --readout-freq: #2a1d12;
-  --warn-bg: #e2b23c;
-  --warn-text: #2a1d12;
-  --led-on: #c97f2c;
-  --led-off: #cbb98f;
-  --radius: 6px;
-  --font-family: "Georgia", "Times New Roman", serif;
-  --border-color: #cbb98f;
-  --button-bg: #e3d4ad;
-  --button-text: #2a1d12;
-  --button-bg-active: #8a5a2b;
-  --button-text-active: #f3e9d2;
-  --needle-face: #f3e9d2;
-  --needle-scale: #2a1d12;
-  --needle-pointer: #a3331a;
-  --needle-face-highlight: #fffaf0;
-  --needle-bezel-highlight: #ffffff;
-  --needle-bezel-mid: #c0c0ac;
-  --needle-bezel-shadow: #6a6858;
-  --needle-zone-good: #5a8f3c;
-  --needle-zone-warn: #d9a53c;
-  --needle-zone-danger: #a3331a;
-  --lamp-glass-off: #cbb98f;
-  --lamp-glass-hotspot: #fffaf0;
-  --zone-good: var(--needle-zone-good);
-  --zone-warn: var(--needle-zone-warn);
-  --zone-danger: var(--needle-zone-danger);
-  --font-family-display: "Copperplate", "Rockwell", Georgia, serif;
+  --bg-page: #4c6457;
+  --bg-panel: #5d7869;
+  --panel-texture: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px);
+  --accent-label: #e8a33a;
+  --accent-label-text: #1b1b19;
+  --text-primary: #f1f2ea;
+  --text-secondary: #d3dad0;
+  --readout-power: #f2eee0;
+  --readout-freq: #f2eee0;
+  --warn-bg: #e8a33a;
+  --warn-text: #1b1b19;
+  --led-on: #ff9b2e;
+  --led-off: #3c4a41;
+  --lamp-glass-off: #4b5a51;
+  --lamp-glass-hotspot: #fff3d6;
+  --radius: 4px;
+  --font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-family-display: "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --border-color: #3c4f44;
+  --chrome: #c9ccc7;
+  --button-bg: #2a2f2c;
+  --button-text: #eef0e8;
+  --button-bg-active: #c9ccc7;
+  --button-text-active: #1b1b19;
+  --zone-good: #8fd37a;
+  --zone-warn: #f0b84a;
+  --zone-danger: #e8604a;
+  --meter-bezel: #1c211e;
+  --meter-face: #f2eee0;
+  --meter-face-edge: #d9d1b8;
+  --meter-glow: #fffbee;
+  --meter-ink: #1b1b19;
+  --meter-red: #b02a20;
+  --meter-needle: #121212;
+  --meter-avg: #d98a1a;
+  --meter-font: "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
 }
 
-/* Tube/pilot-lamp look: a bright off-center hotspot simulating a lit glass
-   envelope rather than a flat lit dot, kept inside a metal bezel ring.
-   Off state uses the same gradient shape but dim glass, no glow. */
+[data-theme="classic"][data-mode="dark"] {
+  --bg-page: #0f0c08;
+  --bg-panel: #1a1610;
+  /* Crinkle finish: two offset grids of fine dots, light and dark. */
+  --panel-texture:
+    radial-gradient(circle at 1px 1px, rgba(255, 240, 210, 0.06) 0.8px, transparent 1.2px),
+    radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.45) 0.8px, transparent 1.2px);
+  --panel-texture-size: 5px 5px, 7px 7px;
+  --accent-label: #ffb02e;
+  --accent-label-text: #1a1108;
+  --text-primary: #e6dbc0;
+  --text-secondary: #b8a888;
+  --readout-power: #ffcf73;
+  --readout-freq: #ffcf73;
+  --warn-bg: #ffb02e;
+  --warn-text: #1a1108;
+  --led-on: #ffb02e;
+  --led-off: #4a3a22;
+  --lamp-glass-off: #4a3a28;
+  --lamp-glass-hotspot: #fff3d6;
+  --radius: 4px;
+  --font-family: Georgia, "Times New Roman", serif;
+  --font-family-display: Georgia, "Times New Roman", serif;
+  --border-color: #3a3226;
+  --chrome: #cfc8b8;
+  --button-bg: #2c2620;
+  --button-text: #e6dbc0;
+  --button-bg-active: #cfc8b8;
+  --button-text-active: #1a1108;
+  --zone-good: #c9e08a;
+  --zone-warn: #ffcf73;
+  --zone-danger: #ff7a5a;
+  --meter-bezel: #cfc8b8;
+  --meter-face: #e2bd78;
+  --meter-face-edge: #b98f4c;
+  --meter-glow: #ffe6a8;
+  --meter-ink: #3a2812;
+  --meter-red: #b3321c;
+  --meter-needle: #1a1108;
+  --meter-avg: #8a4f08;
+  --meter-font: Georgia, "Times New Roman", serif;
+}
+
+/* Panel finish on every panel surface. */
+[data-theme="classic"] body,
+[data-theme="classic"] .app-header,
+[data-theme="classic"] .gauge-wrapper,
+[data-theme="classic"] .gauge-hero,
+[data-theme="classic"] .status-row,
+[data-theme="classic"] .button-bar,
+[data-theme="classic"] .freq-readout,
+[data-theme="classic"] .setup-section {
+  background-image: var(--panel-texture);
+  background-size: var(--panel-texture-size, auto);
+}
+
+[data-theme="classic"] .gauge-wrapper,
+[data-theme="classic"] .gauge-hero,
+[data-theme="classic"] .freq-readout,
+[data-theme="classic"] .button-bar,
+[data-theme="classic"] .status-row {
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Engraved panel lettering under each meter. */
+[data-theme="classic"] .gauge-label {
+  color: var(--text-primary);
+  font-family: var(--font-family-display);
+  letter-spacing: 0.18em;
+  font-size: 0.8rem;
+  margin: 0.15rem 0 0.35rem;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="classic"] .gauge-peak {
+  color: var(--text-secondary);
+  font-family: var(--font-family-display);
+  font-weight: normal;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="classic"] .app-header h1 {
+  font-family: var(--font-family-display);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="classic"] .app-header {
+  border-bottom: 3px solid var(--chrome);
+}
+
+/* Pilot lamps on the status row: a lit glass envelope in a metal ring. */
 [data-theme="classic"] .led-dot {
   background: radial-gradient(circle at 35% 30%, var(--lamp-glass-off), var(--led-off) 75%);
-  border: 2px solid var(--border-color);
+  border: 2px solid var(--chrome);
   box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.6);
 }
 
@@ -91,38 +149,104 @@
   box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5), 0 0 6px 2px var(--led-on);
 }
 
+/* Push buttons: dark caps with a chrome rim and engraved lettering. */
 [data-theme="classic"] .acom-button {
+  background: var(--button-bg);
+  color: var(--button-text);
+  border: 2px solid var(--chrome);
   border-radius: var(--radius);
-  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.15), inset 0 -2px 0 rgba(0, 0, 0, 0.35);
-}
-
-/* Walnut-cabinet texture: a faint diagonal grain plus a top sheen, on every
-   panel surface - cheap to fake with gradients, no image assets needed. */
-[data-theme="classic"] .app-header,
-[data-theme="classic"] .gauge-wrapper,
-[data-theme="classic"] .gauge-hero,
-[data-theme="classic"] .status-row,
-[data-theme="classic"] .button-bar,
-[data-theme="classic"] .freq-readout,
-[data-theme="classic"] .setup-section {
-  background-image:
-    repeating-linear-gradient(115deg, rgba(0, 0, 0, 0.08) 0px, rgba(0, 0, 0, 0.08) 1px, transparent 1px, transparent 5px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 40%);
-}
-
-/* Engraved-plate labels: a thin light underline mimics a routed-and-filled
-   nameplate letter rather than flat print. */
-[data-theme="classic"] .gauge-label,
-[data-theme="classic"] .status-chip-label,
-[data-theme="classic"] .app-header h1 {
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.18);
-  letter-spacing: 0.03em;
-}
-
-[data-theme="classic"] .app-header h1 {
   font-family: var(--font-family-display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.12), inset 0 -2px 0 rgba(0, 0, 0, 0.45), 0 2px 3px rgba(0, 0, 0, 0.35);
 }
 
-[data-theme="classic"] .app-header {
-  border-bottom: 3px solid var(--accent-label);
+/* State buttons keep the dark cap and show their state with a jewel lamp
+   instead of a colored fill: green = operating / ATU engaged, amber =
+   standby / bypassed / tuning, red = power. */
+[data-theme="classic"] .acom-button[data-opr-state],
+[data-theme="classic"] .acom-button[data-bypass-state],
+[data-theme="classic"] #btn-power-off {
+  background: var(--button-bg);
+  border-color: var(--chrome);
+  color: var(--button-text);
+}
+
+[data-theme="classic"] .acom-button[data-opr-state]::before,
+[data-theme="classic"] .acom-button[data-bypass-state]::before,
+[data-theme="classic"] #btn-power-off::before {
+  content: "";
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 0.55em;
+  border-radius: 50%;
+  vertical-align: -0.05em;
+  border: 1px solid var(--chrome);
+  background: radial-gradient(circle at 35% 30%, #fff6e0, var(--jewel, var(--led-off)) 65%);
+  box-shadow: 0 0 6px 1px var(--jewel-glow, transparent);
+}
+
+[data-theme="classic"] .acom-button[data-opr-state="operate"],
+[data-theme="classic"] .acom-button[data-bypass-state="active"] {
+  --jewel: #5fd35a;
+  --jewel-glow: rgba(95, 211, 90, 0.7);
+}
+
+[data-theme="classic"] .acom-button[data-opr-state="stb"],
+[data-theme="classic"] .acom-button[data-bypass-state="bypass"],
+[data-theme="classic"] .acom-button[data-bypass-state="tuning"] {
+  --jewel: #ffb02e;
+  --jewel-glow: rgba(255, 176, 46, 0.7);
+}
+
+[data-theme="classic"] #btn-power-off {
+  --jewel: #e0452f;
+  --jewel-glow: rgba(224, 69, 47, 0.6);
+}
+
+/* Band panel: a backlit slide-rule dial window in the meters' colors. */
+[data-theme="classic"] .band-header {
+  font-family: var(--font-family-display);
+  letter-spacing: 0.08em;
+}
+
+[data-theme="classic"] .band-atu-label,
+[data-theme="classic"] .band-range,
+[data-theme="classic"] .band-name,
+[data-theme="classic"] .band-antenna {
+  color: var(--text-primary);
+}
+
+[data-theme="classic"] .band-scale {
+  margin-top: 0.5rem;
+  padding: 6px 12px 8px;
+  border-radius: 3px;
+  color: var(--meter-ink);
+  font-family: var(--meter-font);
+  background: radial-gradient(ellipse at 50% 85%, var(--meter-glow), var(--meter-face) 55%, var(--meter-face-edge) 100%);
+  box-shadow: 0 0 0 5px var(--meter-bezel), 0 3px 8px 5px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="classic"] .band-scale-ticks {
+  font-size: 0.85rem;
+}
+
+[data-theme="classic"] .band-scale-track {
+  height: 1.1rem;
+  border-radius: 0;
+  background: transparent;
+  border-top: 1px solid var(--meter-ink);
+  background-image: repeating-linear-gradient(90deg, var(--meter-ink) 0 1px, transparent 1px 2.5%);
+  background-size: 100% 40%;
+  background-repeat: no-repeat;
+}
+
+[data-theme="classic"] .band-scale-segment {
+  background: var(--meter-avg);
+  opacity: 0.5;
+}
+
+[data-theme="classic"] .band-scale-marker {
+  background: var(--meter-red);
 }
