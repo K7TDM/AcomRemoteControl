@@ -901,7 +901,11 @@ FAULT_CODE_NAMES: dict[int, str] = {
     # real-hardware observation (below)
     0x80: "ATU NOT RESPONDING",
     0x81: "ATU-AMP COMMUNICATION ERROR",
-    0x82: "AMP-ATU COMMUNICATION ERROR",
+    # The doc says "AMP-ATU COMMUNICATION ERROR", but on a real 1200S +
+    # 06AT (2026-10-27) the amp raises 0x82 for ~5s every time the 0x27
+    # ATU label turns "Settings Outdated", and its screen reads "ATU
+    # tuning outdated - you may refresh it" - same kind of reuse as 0x8E.
+    0x82: "ATU TUNING OUTDATED - YOU MAY REFRESH IT",
     0x83: "ASEL NOT RESPONDING",
     0x84: "ASEL-AMP COMMUNICATION ERROR",
     0x85: "AMP-ASEL COMMUNICATION ERROR",

@@ -19,6 +19,16 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Fixed
+- Antenna names (and the other settings read from the amp at startup)
+  often never arrived: the amp drops most requests sent back to back.
+  They're now asked for one at a time, waiting for each answer and
+  retrying. "Refresh from Amp" shows "Refreshing…" while it runs (a few
+  seconds) and then shows what came back.
+- The warning banner said "AMP-ATU COMMUNICATION ERROR" when the amp was
+  showing "ATU tuning outdated - you may refresh it". That alarm code
+  means "tuning outdated" on this amp, and is now named that.
+
 ## [0.1.11] - 2026-10-27
 
 ### Added

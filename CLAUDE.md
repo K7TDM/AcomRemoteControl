@@ -141,6 +141,13 @@ the "10AS" model name) — see the discrepancy noted below.
   Before this, Save sent the names 5 times, returned 502, and never sent
   the `0xA0` assignments. `0xA0` is assumed to answer with `0x18` the same
   way (an OK also counts) - NEEDS REAL-HARDWARE VERIFICATION.
+- **Reading them back: requests must go one at a time (2026-10-27).** The
+  handshake used to fire its six "request specific message" frames 10ms
+  apart; across all logs the amp answered `0x12` 18/27 times, `0x16`/`0x18`
+  2/27, `0x1B` and `0x11` never (once a `0x01` "malformed" came back).
+  `serial_link._pull_config()` now sends each request, waits up to 0.5s
+  for that message, retries 3x, then moves on; `/api/resync` waits for
+  it. NEEDS REAL-HARDWARE VERIFICATION that `0x1B` then answers at all.
 - **Antenna switching (cycle only):** `0x81` Cmd `0x09` Byte5=`0x30`
   "Next Antenna" — confirmed there is no "Previous Antenna" counterpart,
   only Next Band/Previous Band/Next Segment/Previous Segment/Next Antenna.
@@ -219,7 +226,10 @@ frame. Key ones:
   running a tune cycle (mode `0x8X`, ATAC) with RF present, then clears
   it itself; `0x14` (also undocumented) did the same on a low-drive tune.
   **`0x8E` = "TUNED SWR < 1.3"** - confirmed by Tyler reading the amp's
-  own screen while it was set. It's the tune *result*, not "in progress":
+  own screen while it was set. **`0x82`** is likewise reused: the doc says
+  "AMP-ATU COMMUNICATION ERROR", but the amp raises it for ~5s every time
+  `0x27`'s label turns "Settings Outdated" while its screen reads "ATU
+  tuning outdated - you may refresh it" (2026-10-27), so it's named that. It's the tune *result*, not "in progress":
   the 06AT tunes in ~0.5s of RF, `0x8E` appears as the RF drops and lasts
   ~5s, while the `0x27` "Matched" label lags ~4s behind. `0x14` (one
   sighting, 2W drive) is named "ATU TUNING NOTICE" - likely another

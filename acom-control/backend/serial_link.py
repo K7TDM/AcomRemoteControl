@@ -67,6 +67,13 @@ COMMAND_MAX_ATTEMPTS = 5
 # first; harmless no-op either way if they don't.
 STARTUP_REQUEST_MESSAGES = (0x11, 0x12, 0x16, 0x18, 0x1B, 0x2A)
 
+# These are asked for one at a time, waiting for each reply, because the
+# amp drops most requests sent back to back: across the logs to
+# 2026-10-27, six requests fired 10ms apart got 0x12 back 18/27 times,
+# 0x16/0x18 2/27, and 0x1B never (and once a "malformed" 0x01 reply).
+CONFIG_REQUEST_TIMEOUT_S = 0.5
+CONFIG_REQUEST_ATTEMPTS = 3
+
 # Stable udev symlink from setup/99-acom-amp.rules - always surfaced in
 # list_serial_ports() alongside raw enumerated devices, even though pyserial
 # itself won't discover it as a distinct comport (see README.md on why the
@@ -112,6 +119,10 @@ class SerialLink:
         # read-back message that also counts as the amp's confirmation,
         # plus the payload we wrote, to log a mismatch against.
         self._pending_echo: Optional[tuple[int, bytes]] = None
+        # _pull_config() state: the running pull, and the address it's
+        # waiting on plus the event a frame at that address sets.
+        self._config_pull_task: Optional[asyncio.Task] = None
+        self._awaited_reply: Optional[tuple[int, asyncio.Event]] = None
 
     async def start(self) -> None:
         self._open_port()
@@ -121,7 +132,7 @@ class SerialLink:
         await self._startup_handshake()
 
     async def stop(self) -> None:
-        for task in (self._reader_task, self._writer_task, self._watchdog_task):
+        for task in (self._reader_task, self._writer_task, self._watchdog_task, self._config_pull_task):
             if task is not None:
                 task.cancel()
         if self._serial is not None:
@@ -141,7 +152,7 @@ class SerialLink:
         failure (bad/nonexistent port) rather than leaving the link
         half-torn-down; the caller (app.py) decides what to tell the user
         and must not persist new_device if this raises."""
-        for task in (self._reader_task, self._writer_task, self._watchdog_task):
+        for task in (self._reader_task, self._writer_task, self._watchdog_task, self._config_pull_task):
             if task is not None:
                 task.cancel()
         self._reader_task = self._writer_task = self._watchdog_task = None
@@ -171,8 +182,14 @@ class SerialLink:
         antenna config) over the already-open port - no close/reopen, so
         this never touches DTR/RTS. Useful when the handshake fired before
         the amp's CPU was ready (e.g. right after a DTR/RTS power-on pulse)
-        and telemetry never actually got enabled."""
+        and telemetry never actually got enabled.
+
+        Unlike startup, waits for the config pull to finish, so the
+        caller (Setup's "Refresh from Amp") reads back fresh values."""
         await self._startup_handshake()
+        task = self._config_pull_task
+        if task is not None:
+            await asyncio.shield(task)
 
     async def pulse_power_toggle(self) -> None:
         """Asserts DTR+RTS together for ~1.5s then releases - confirmed on
@@ -351,9 +368,37 @@ class SerialLink:
         # for recovering an amp that's already in that state.
         await self.enqueue(protocol.build_atu_activate_cyclic_display(protocol.ATU_ACTIVATE_CYCLIC_2F))
         await asyncio.sleep(INTER_MESSAGE_PACING_S)
+        # In the background, so startup isn't held up by a few seconds of
+        # request/wait; one pull at a time (the comms-down watchdog re-runs
+        # this handshake every 5s).
+        if self._config_pull_task is None or self._config_pull_task.done():
+            self._config_pull_task = asyncio.create_task(self._pull_config(), name="serial-config-pull")
+
+    async def _pull_config(self) -> None:
+        """Requests each of STARTUP_REQUEST_MESSAGES in turn, waiting up to
+        CONFIG_REQUEST_TIMEOUT_S for the amp to send it before retrying
+        (CONFIG_REQUEST_ATTEMPTS tries) and moving on to the next."""
+        missing = []
         for message_address in STARTUP_REQUEST_MESSAGES:
-            await self.enqueue(protocol.build_request_message(message_address))
-            await asyncio.sleep(INTER_MESSAGE_PACING_S)
+            got = False
+            for _ in range(CONFIG_REQUEST_ATTEMPTS):
+                event = asyncio.Event()
+                self._awaited_reply = (message_address, event)
+                await self.enqueue(protocol.build_request_message(message_address))
+                try:
+                    await asyncio.wait_for(event.wait(), CONFIG_REQUEST_TIMEOUT_S)
+                    got = True
+                    break
+                except asyncio.TimeoutError:
+                    pass
+                finally:
+                    self._awaited_reply = None
+            if not got:
+                missing.append(f"0x{message_address:02X}")
+        if missing:
+            logger.info("Config pull: no reply for %s", ", ".join(missing))
+        else:
+            logger.info("Config pull: all replies received")
 
     async def _write_loop(self) -> None:
         while True:
@@ -465,6 +510,9 @@ class SerialLink:
                         frame.address, frame.data.hex(" "),
                     )
                 fut.set_result(protocol.CommandAck(ok=True, param=0))
+        awaited = self._awaited_reply
+        if awaited is not None and frame.address == awaited[0]:
+            awaited[1].set()
         if self._on_frame is not None:
             try:
                 self._on_frame(frame)
