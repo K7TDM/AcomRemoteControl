@@ -435,13 +435,17 @@ def parse_antenna_names(frame: Frame) -> list[str]:
 
 def parse_antenna_assignments(frame: Frame) -> list[AntennaSlot]:
     """Parses message 0x18 (16 bytes: Byte3-6 type per antenna 0-3,
-    Byte7-14 band-high/band-low byte pairs per antenna)."""
+    Byte7-14 band-low/band-high byte pairs per antenna).
+
+    Low byte first: a real 1200S reports an antenna on every band as
+    "ff 07" (0x7FF = bits 0-10, 160m-6m). Read high-first, as this used
+    to, that came out as 0x707 - a wrong band list in Antenna Setup."""
     data = frame.data  # bytes 3..14 inclusive (12 bytes)
     types = data[0:4]
     slots = []
     for i in range(NUM_ANTENNAS):
-        band_hi = data[4 + i * 2]
-        band_lo = data[5 + i * 2]
+        band_lo = data[4 + i * 2]
+        band_hi = data[5 + i * 2]
         mask = band_lo | ((band_hi & 0x07) << 8)
         slots.append(AntennaSlot(number=i + 1, type=types[i] & 0x03, band_mask=mask))
     return slots
@@ -460,7 +464,7 @@ def build_set_antenna_assignments(slots: list[AntennaSlot]) -> bytes:
     for slot in ordered:
         band_hi = (slot.band_mask >> 8) & 0x07
         band_lo = slot.band_mask & 0xFF
-        band_bytes += bytes([band_hi, band_lo])
+        band_bytes += bytes([band_lo, band_hi])  # low byte first, as in 0x18
     return build_frame(0xA0, types + bytes(band_bytes))
 
 
