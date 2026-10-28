@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.11] - 2026-10-27
+
 ### Added
 - The band panel shows the antenna's name after its number, e.g.
   "A1R - DXC", using the names set in Setup -> Antenna Setup. Antennas
