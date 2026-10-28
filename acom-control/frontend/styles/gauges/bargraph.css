@@ -104,12 +104,33 @@
   font-size: 1.5rem;
 }
 
-/* Full-screen fit layout (base.css): the bar grows or shrinks to fill the
-   panel's grid cell between the header row and the peak line, within
-   readable limits. */
+/* Full-screen fit layout (base.css): the whole bar panel scales with its
+   grid cell, like the amp's own screen enlarged - the panel is a size
+   container, and the header text, bar, scale numbers and peak line are
+   all sized in cqh (percent of the panel's height) within readable
+   limits. A fixed-height bar in a tall cell left most of the panel empty
+   (per Tyler: "the gauge windows feel too tall"). */
 html.fit-layout .gauge-wrapper[data-mounted-widget="bargraph"],
 html.fit-layout .gauge-hero[data-mounted-widget="bargraph"] {
+  container-type: size;
   grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+/* One size for every panel's header (rows are equal height, so cqh is the
+   same everywhere) - a long label in a narrow panel is trimmed with "…"
+   rather than wrapping or getting its own smaller size. */
+html.fit-layout [data-mounted-widget="bargraph"] .gauge-label,
+html.fit-layout [data-mounted-widget="bargraph"] .gauge-value {
+  font-size: clamp(0.7rem, 9cqh, 1.3rem);
+  white-space: nowrap;
+}
+
+html.fit-layout [data-mounted-widget="bargraph"] .gauge-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  align-content: center;
 }
 
 html.fit-layout .gauge-bargraph {
@@ -119,13 +140,16 @@ html.fit-layout .gauge-bargraph {
 
 html.fit-layout .gauge-bargraph .track,
 html.fit-layout .gauge-hero .gauge-bargraph .track {
-  height: auto;
-  flex: 1 1 0;
+  height: clamp(0.9rem, 40cqh, 9rem);
+  flex: 0 1 auto;
   min-height: 0.9rem;
-  max-height: 3.5rem;
+}
+
+html.fit-layout [data-mounted-widget="bargraph"] .gauge-ticks {
+  font-size: clamp(0.6rem, 6cqh, 1rem);
 }
 
 html.fit-layout [data-mounted-widget="bargraph"] .gauge-peak {
-  font-size: 0.8rem;
+  font-size: clamp(0.7rem, 6.5cqh, 1.1rem);
   margin-top: 0.15rem;
 }

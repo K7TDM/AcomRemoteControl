@@ -27,7 +27,10 @@ first, then get moved under a version heading below when tagged.
   header, the buttons stay on one row, and on screens 3:2 or wider the
   gauges pack two layout-widths side by side. It's automatic - it
   follows the screen's size and orientation, nothing to set. Portrait
-  screens keep the scrolling layout.
+  screens keep the scrolling layout. In the ACOM and Modern themes the
+  bar panels scale their bar and text with the panel, and stop growing
+  at about 200px tall so they don't turn into tall, mostly empty boxes
+  on a big monitor.
 - Two more gauge sizes in Setup -> Display: ⅛ and "2× Full" (spans the
   whole screen on wide screens; the same as Full elsewhere).
 - Bigger touch targets for the buttons on touchscreens.
