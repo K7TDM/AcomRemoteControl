@@ -76,13 +76,6 @@ class UpdateConfig:
     beta: bool = False
 
 
-@dataclass
-class BuzzerConfig:
-    # What the dashboard's Buzzer Test button plays in Morse on the amp's
-    # buzzer (POST /api/buzzer/morse) - set in Setup.
-    morse_text: str = "TEST"
-
-
 # Dashboard panels the Setup screen's "Display" section can show/hide,
 # resize and reorder (the status row and button bar are fixed, not listed).
 # Order here is the default layout, which reproduces the dashboard as it
@@ -149,7 +142,6 @@ class AppConfig:
     path: Path = field(repr=False)
     update: UpdateConfig = field(default_factory=UpdateConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
-    buzzer: BuzzerConfig = field(default_factory=BuzzerConfig)
 
     def save(self) -> None:
         payload = {
@@ -160,7 +152,6 @@ class AppConfig:
             "logging": asdict(self.logging),
             "update": asdict(self.update),
             "display": asdict(self.display),
-            "buzzer": asdict(self.buzzer),
         }
         self.path.write_text(json.dumps(payload, indent=2) + "\n")
         logger.info("Saved config to %s", self.path)
@@ -178,7 +169,6 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     logging_cfg = LoggingConfig(**data.get("logging", {}))
     update = UpdateConfig(**data.get("update", {}))
     display = DisplayConfig(panels=normalize_display_panels(data.get("display", {}).get("panels")))
-    buzzer = BuzzerConfig(**data.get("buzzer", {}))
 
     validate_config(amp.model, tuner.model)
 
@@ -199,5 +189,5 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
 
     return AppConfig(
         amp=amp, tuner=tuner, web=web, modbus=modbus, logging=logging_cfg, path=path,
-        update=update, display=display, buzzer=buzzer,
+        update=update, display=display,
     )

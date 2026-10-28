@@ -1323,8 +1323,6 @@ function populateConfigForm(cfg) {
   }
   const debugCheckbox = document.getElementById("setup-debug-logging");
   if (debugCheckbox) debugCheckbox.checked = !!cfg.debug_logging_enabled;
-  const buzzerText = document.getElementById("setup-buzzer-text");
-  if (buzzerText) buzzerText.value = cfg.buzzer_text || "";
   const logMarkerNote = document.getElementById("setup-log-marker-note");
   if (logMarkerNote) {
     logMarkerNote.hidden = !cfg.log_marker;
@@ -1452,7 +1450,6 @@ async function saveSetup() {
   const ampModel = document.getElementById("setup-amp-select").value;
   const tunerModel = document.getElementById("setup-tuner-select").value || null;
   const debugLogging = document.getElementById("setup-debug-logging")?.checked;
-  const buzzerText = document.getElementById("setup-buzzer-text")?.value.trim();
   const serialSelect = document.getElementById("setup-serial-select");
   const serialDevice = serialSelect ? serialSelect.value : undefined;
   const serialChanged = !!serialSelect && serialDevice !== (serialSelect.dataset.originalValue || "");
@@ -1469,7 +1466,6 @@ async function saveSetup() {
       amp_model: ampModel,
       tuner_model: tunerModel,
       logging_level: debugLogging ? "DEBUG" : "INFO",
-      ...(buzzerText ? { buzzer_text: buzzerText } : {}),
       ...(serialChanged ? { serial_device: serialDevice, confirm: true } : {}),
     })
   );
