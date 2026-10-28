@@ -103,3 +103,29 @@
 .gauge-hero .gauge-value {
   font-size: 1.5rem;
 }
+
+/* Full-screen fit layout (base.css): the bar grows or shrinks to fill the
+   panel's grid cell between the header row and the peak line, within
+   readable limits. */
+html.fit-layout .gauge-wrapper[data-mounted-widget="bargraph"],
+html.fit-layout .gauge-hero[data-mounted-widget="bargraph"] {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+html.fit-layout .gauge-bargraph {
+  min-height: 0;
+  justify-content: center;
+}
+
+html.fit-layout .gauge-bargraph .track,
+html.fit-layout .gauge-hero .gauge-bargraph .track {
+  height: auto;
+  flex: 1 1 0;
+  min-height: 0.9rem;
+  max-height: 3.5rem;
+}
+
+html.fit-layout [data-mounted-widget="bargraph"] .gauge-peak {
+  font-size: 0.8rem;
+  margin-top: 0.15rem;
+}

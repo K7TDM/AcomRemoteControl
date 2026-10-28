@@ -110,6 +110,40 @@
   stroke-width: 2;
 }
 
+/* Full-screen fit layout (base.css): the panel's grid cell sets the size.
+   The meter body takes the space left after the label and peak line and
+   is a size container, so the SVG scales to whichever of the cell's width
+   or height runs out first, keeping its own aspect (--meter-ratio, set per
+   shape in gauges.js). */
+html.fit-layout .gauge-wrapper[data-mounted-widget="needle"],
+html.fit-layout .gauge-hero[data-mounted-widget="needle"] {
+  display: flex;
+  flex-direction: column;
+}
+
+html.fit-layout .gauge-needle {
+  flex: 1 1 0;
+  min-height: 0;
+  container-type: size;
+  align-items: center;
+}
+
+html.fit-layout .gauge-needle svg,
+html.fit-layout .gauge-needle.wide svg {
+  width: min(calc(100cqw - 14px), calc((100cqh - 14px) * var(--meter-ratio, 2)));
+  max-width: none;
+  margin: 0;
+}
+
+html.fit-layout [data-mounted-widget="needle"] .gauge-label {
+  margin: 0 0 0.2rem;
+}
+
+html.fit-layout [data-mounted-widget="needle"] .gauge-peak {
+  font-size: 0.8rem;
+  margin-top: 0.15rem;
+}
+
 /* The reading is printed on the meter face, so the separate value line
    under it would just repeat it. */
 .gauge-wrapper[data-mounted-widget="needle"] .gauge-value,
