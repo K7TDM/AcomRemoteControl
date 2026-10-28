@@ -1186,12 +1186,18 @@ async function refreshFromAmp() {
   // button did nothing. POST /api/resync re-sends those requests now, so
   // a later retry can succeed even if the first attempt (fired the
   // instant the serial port opened) was too early for the amp/ATU to
-  // answer. resync() only enqueues the request frames and returns
-  // immediately - it doesn't wait for the amp's actual reply - so give
-  // the round trip + backend parsing a moment before re-reading.
-  await apiFetch("/api/resync", { method: "POST" });
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  await loadSetup();
+  // answer. /api/resync now asks for each message in turn and only
+  // returns once they've all been answered or given up on (a few
+  // seconds at most), so the re-read right after it sees the results.
+  const btn = document.getElementById("btn-setup-refresh");
+  const label = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "Refreshing…"; }
+  try {
+    await apiFetch("/api/resync", { method: "POST" });
+    await loadSetup();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
 }
 
 async function loadSetup() {
