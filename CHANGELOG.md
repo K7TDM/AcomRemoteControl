@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.8] - 2026-10-27
+
 ### Added
 - Full-screen layout for landscape screens - monitors (16:9, 4:3, 5:4),
   the Raspberry Pi touchscreens (800x480 and 1280x720) and phones on
@@ -43,11 +45,6 @@ first, then get moved under a version heading below when tagged.
   version and "Already up to date" instead of repeating the same
   version as "New version".
 
-### Fixed
-- After an update the browser could run the new dashboard code with an
-  old cached copy of its gauge or theme code (only the main script was
-  version-stamped). All of them now update together.
-
 ### Changed
 - Modern theme redesigned as a "glass cockpit" (avionics display): navy
   panels with cyan accents in dark mode, a matching daylight palette in
@@ -60,6 +57,11 @@ first, then get moved under a version heading below when tagged.
   labels like the buttons, with solid jewel lamps that light green when
   the status is good - the amber lamps used to disappear into the amber
   labels.
+
+### Fixed
+- After an update the browser could run the new dashboard code with an
+  old cached copy of its gauge or theme code (only the main script was
+  version-stamped). All of them now update together.
 
 ## [0.1.7] - 2026-10-27
 
