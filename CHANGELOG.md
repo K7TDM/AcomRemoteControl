@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.7] - 2026-10-27
+
 ### Added
 - Captions under the header controls: Theme, Light/Dark, Updates and
   Settings.
@@ -33,7 +35,7 @@ first, then get moved under a version heading below when tagged.
   Forward Power, is now a rectangular backlit panel meter with a printed
   scale, red line, peak and average marks, and the reading on its face.
   The band dial is a backlit slide-rule window, and state buttons show
-  a jewel lamp (green, amber or red) instead of a colored fill.
+  a solid jewel lamp (green, amber or red) instead of a colored fill.
   Full-width gauges use a wide, short edgewise meter (styled like the
   band dial, with a flat needle sweeping across it) instead of a
   scaled-up round meter; half and quarter widths keep the standard one.
