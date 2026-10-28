@@ -35,7 +35,19 @@ first, then get moved under a version heading below when tagged.
   whole screen on wide screens; the same as Full elsewhere).
 - Bigger touch targets for the buttons on touchscreens.
 
+### Fixed
+- After an update the browser could run the new dashboard code with an
+  old cached copy of its gauge or theme code (only the main script was
+  version-stamped). All of them now update together.
+
 ### Changed
+- Modern theme redesigned as a "glass cockpit" (avionics display): navy
+  panels with cyan accents in dark mode, a matching daylight palette in
+  light mode. Forward Power is a smooth green-amber-red tape with a
+  boxed digital readout, a magenta peak bug and a dashed cyan average;
+  the other gauges are arc dials with the reading in a boxed window.
+  Monospace instrument lettering and outlined soft-key buttons colored
+  by state.
 - Classic theme status row (Comms, Mode, ATU, Antenna): dark capped
   labels like the buttons, with solid jewel lamps that light green when
   the status is good - the amber lamps used to disappear into the amber
