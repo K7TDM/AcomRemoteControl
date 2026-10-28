@@ -34,6 +34,9 @@ first, then get moved under a version heading below when tagged.
   scale, red line, peak and average marks, and the reading on its face.
   The band dial is a backlit slide-rule window, and state buttons show
   a jewel lamp (green, amber or red) instead of a colored fill.
+  Full-width gauges use a wide, short edgewise meter (styled like the
+  band dial, with a flat needle sweeping across it) instead of a
+  scaled-up round meter; half and quarter widths keep the standard one.
 
 ### Fixed
 - Classic theme needles could swing off the dial and disappear: the

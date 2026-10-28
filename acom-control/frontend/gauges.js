@@ -210,39 +210,51 @@ function renderPlainGauge() {
 // --meter-* CSS variables (classic.css), so light/dark mode restyles a
 // mounted meter without re-rendering it.
 //
+// Two shapes (opts.wide picks): the standard meter for half/quarter-width
+// panels, and a wide, short edgewise meter for full-width panels - styled
+// like the band dial - whose pivot is so far below the window that the
+// needle sweeps nearly flat across it (per Tyler: the standard meter was
+// too big at full width).
+//
 // The needle, peak and average marks are drawn pointing straight up at the
 // pivot and rotated by a CSS transform about that one pivot (transform-box:
 // view-box; transform-origin in viewBox units). The previous dial combined
 // an SVG rotate(angle cx cy) with a CSS transform-origin, which applied two
 // pivots and could swing the needle off the visible face.
-
-const METER_W = 320;
-const METER_H = 156;
-const METER_SWEEP_DEG = 48; // each side of vertical
-const METER_R = 198;
-const METER_CX = METER_W / 2;
-const METER_CY = 22 + 0.97 * METER_R; // pivot, below the window
+//
+// Geometry: W/H = window; cy = pivot (below the window); sweep = degrees
+// each side of vertical; scale = scale-arc radius; the rest are radial
+// offsets from the scale arc, in viewBox units. unitY = baseline of the
+// unit word and reading (bottom corners on the standard meter, top corners
+// on the wide one, where the bottom corners hold the scale's ends).
+const METER_GEOMETRY = {
+  standard: {
+    W: 320, H: 156, cy: 214, sweep: 48, scale: 162,
+    red: 8, minor: 12, major: 20, number: 30, needle: 24, peakFrom: -64, avgFrom: -20, avgTo: 14,
+    unitY: 146, valueSize: 18,
+  },
+  wide: {
+    W: 600, H: 108, cy: 806, sweep: 20, scale: 762,
+    red: 7, minor: 9, major: 16, number: 28, needle: 20, peakFrom: -40, avgFrom: -16, avgTo: 12,
+    unitY: 24, valueSize: 20,
+  },
+};
 
 // Printed on the meter face like the legend on a real panel meter.
 const METER_UNIT_WORDS = { W: "WATTS", A: "AMPS", "°C": "°C", ":1": "SWR" };
 
 let meterInstanceCounter = 0;
 
-function meterPolar(r, angleDeg) {
+function meterPolar(g, r, angleDeg) {
   const rad = (angleDeg * Math.PI) / 180;
   const round = (v) => Math.round(v * 10) / 10;
-  return [round(METER_CX + r * Math.sin(rad)), round(METER_CY - r * Math.cos(rad))];
+  return [round(g.W / 2 + r * Math.sin(rad)), round(g.cy - r * Math.cos(rad))];
 }
 
-function meterArc(r, a1, a2) {
-  const [x1, y1] = meterPolar(r, a1);
-  const [x2, y2] = meterPolar(r, a2);
+function meterArc(g, r, a1, a2) {
+  const [x1, y1] = meterPolar(g, r, a1);
+  const [x2, y2] = meterPolar(g, r, a2);
   return `M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`;
-}
-
-function meterAngle(opts, value) {
-  const frac = fraction({ ...opts, value });
-  return -METER_SWEEP_DEG + frac * 2 * METER_SWEEP_DEG;
 }
 
 function formatScaleNumber(v) {
@@ -251,43 +263,45 @@ function formatScaleNumber(v) {
 
 function renderNeedleGauge(opts) {
   const wrapper = document.createElement("div");
-  wrapper.className = "gauge-needle";
-  wrapper.innerHTML = buildMeterSvg(opts);
+  wrapper.className = "gauge-needle" + (opts.wide ? " wide" : "");
+  wrapper.innerHTML = buildMeterSvg(opts, METER_GEOMETRY[opts.wide ? "wide" : "standard"]);
   updateNeedleGauge(wrapper, opts);
   return wrapper;
 }
 
-function buildMeterSvg(opts) {
+function buildMeterSvg(opts, g) {
   const id = meterInstanceCounter++;
   const clipId = `meter-clip-${id}`;
   const glowId = `meter-glow-${id}`;
   const { min = 0, max = 100 } = opts;
-  const danger = ZONE_DANGER_FRACTION;
+  const cx = g.W / 2;
+  const angleAt = (frac) => -g.sweep + frac * 2 * g.sweep;
 
-  let scale = `<path class="meter-scale" d="${meterArc(METER_R * 0.82, -METER_SWEEP_DEG, METER_SWEEP_DEG)}" />`;
-  scale += `<path class="meter-redline" d="${meterArc(METER_R * 0.86, -METER_SWEEP_DEG + danger * 2 * METER_SWEEP_DEG, METER_SWEEP_DEG)}" />`;
+  let scale = `<path class="meter-scale" d="${meterArc(g, g.scale, -g.sweep, g.sweep)}" />`;
+  scale += `<path class="meter-redline" d="${meterArc(g, g.scale + g.red, angleAt(ZONE_DANGER_FRACTION), g.sweep)}" />`;
   for (let k = 0; k <= 20; k++) {
-    const angle = -METER_SWEEP_DEG + (k / 20) * 2 * METER_SWEEP_DEG;
+    const angle = angleAt(k / 20);
     const major = k % 5 === 0;
-    const [x1, y1] = meterPolar(METER_R * 0.82, angle);
-    const [x2, y2] = meterPolar(METER_R * (major ? 0.92 : 0.88), angle);
+    const [x1, y1] = meterPolar(g, g.scale, angle);
+    const [x2, y2] = meterPolar(g, g.scale + (major ? g.major : g.minor), angle);
     scale += `<line class="meter-tick${major ? " major" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
     if (major) {
-      const [tx, ty] = meterPolar(METER_R * 0.97, angle);
+      const [tx, ty] = meterPolar(g, g.scale + g.number, angle);
       scale += `<text class="meter-number" x="${tx}" y="${ty}">${formatScaleNumber(min + (k / 20) * (max - min))}</text>`;
     }
   }
 
-  // Each pointer is a vertical line from the pivot; data-angle-of says which
-  // value it tracks, updateNeedleGauge() rotates it.
+  // Each pointer is a vertical line up from the pivot; updateNeedleGauge()
+  // rotates it to its value.
   const pointer = (cls, from, to) =>
-    `<line class="${cls}" x1="${METER_CX}" y1="${METER_CY - METER_R * from}" x2="${METER_CX}" y2="${METER_CY - METER_R * to}"` +
-    ` style="transform-origin: ${METER_CX}px ${METER_CY}px" />`;
+    `<line class="${cls}" x1="${cx}" y1="${g.cy - from}" x2="${cx}" y2="${g.cy - to}"` +
+    ` style="transform-origin: ${cx}px ${g.cy}px" />`;
+  const unitWord = METER_UNIT_WORDS[opts.unit] ?? opts.unit ?? "";
 
   return `
-    <svg viewBox="0 0 ${METER_W} ${METER_H}" role="img" aria-label="${opts.label || "Meter"}">
+    <svg viewBox="0 0 ${g.W} ${g.H}" role="img" aria-label="${opts.label || "Meter"}" data-sweep="${g.sweep}">
       <defs>
-        <clipPath id="${clipId}"><rect x="0" y="0" width="${METER_W}" height="${METER_H}" /></clipPath>
+        <clipPath id="${clipId}"><rect x="0" y="0" width="${g.W}" height="${g.H}" /></clipPath>
         <radialGradient id="${glowId}" cx="50%" cy="62%" r="70%">
           <stop offset="0%" class="meter-glow-hot" />
           <stop offset="55%" class="meter-glow-warm" />
@@ -295,30 +309,31 @@ function buildMeterSvg(opts) {
         </radialGradient>
       </defs>
       <g clip-path="url(#${clipId})">
-        <rect class="meter-face" x="0" y="0" width="${METER_W}" height="${METER_H}" style="fill:url(#${glowId})" />
+        <rect class="meter-face" x="0" y="0" width="${g.W}" height="${g.H}" style="fill:url(#${glowId})" />
         ${scale}
-        ${pointer("meter-avg", 0.72, 0.9)}
-        ${pointer("meter-peak", 0.5, 0.93)}
-        ${pointer("meter-needle", 0, 0.94)}
-        <text class="meter-unit" x="10" y="${METER_H - 10}">${METER_UNIT_WORDS[opts.unit] ?? opts.unit ?? ""}</text>
-        <text class="meter-value" x="${METER_W - 10}" y="${METER_H - 10}" data-meter-value></text>
-        <polygon class="meter-glass" points="${METER_W * 0.06},0 ${METER_W * 0.4},0 ${METER_W * 0.2},${METER_H} ${-METER_W * 0.14},${METER_H}" />
+        ${pointer("meter-avg", g.scale + g.avgFrom, g.scale + g.avgTo)}
+        ${pointer("meter-peak", g.scale + g.peakFrom, g.scale + g.needle - 2)}
+        ${pointer("meter-needle", 0, g.scale + g.needle)}
+        <text class="meter-unit" x="10" y="${g.unitY}">${unitWord}</text>
+        <text class="meter-value" x="${g.W - 10}" y="${g.unitY}" style="font-size:${g.valueSize}px" data-meter-value></text>
+        <polygon class="meter-glass" points="${g.W * 0.06},0 ${g.W * 0.4},0 ${g.W * 0.2},${g.H} ${-g.W * 0.14},${g.H}" />
       </g>
-      <rect class="meter-bezel" x="0" y="0" width="${METER_W}" height="${METER_H}" />
+      <rect class="meter-bezel" x="0" y="0" width="${g.W}" height="${g.H}" />
     </svg>`;
 }
 
-function setPointer(el, opts, value) {
+function setPointer(el, opts, value, sweep) {
   if (!el) return;
   const show = value !== null && value !== undefined && !Number.isNaN(value);
   el.style.visibility = show ? "visible" : "hidden";
-  if (show) el.style.transform = `rotate(${meterAngle(opts, value)}deg)`;
+  if (show) el.style.transform = `rotate(${-sweep + fraction({ ...opts, value }) * 2 * sweep}deg)`;
 }
 
 function updateNeedleGauge(bodyEl, opts) {
-  setPointer(bodyEl.querySelector(".meter-needle"), opts, opts.value ?? opts.min ?? 0);
-  setPointer(bodyEl.querySelector(".meter-peak"), opts, opts.peak);
-  setPointer(bodyEl.querySelector(".meter-avg"), opts, opts.avg);
+  const sweep = Number(bodyEl.querySelector("svg")?.dataset.sweep) || METER_GEOMETRY.standard.sweep;
+  setPointer(bodyEl.querySelector(".meter-needle"), opts, opts.value ?? opts.min ?? 0, sweep);
+  setPointer(bodyEl.querySelector(".meter-peak"), opts, opts.peak, sweep);
+  setPointer(bodyEl.querySelector(".meter-avg"), opts, opts.avg, sweep);
   const valueEl = bodyEl.querySelector("[data-meter-value]");
   // The unit is already printed on the face (METER_UNIT_WORDS), so just the number.
   if (valueEl) valueEl.textContent = formatValue(opts.value, "");

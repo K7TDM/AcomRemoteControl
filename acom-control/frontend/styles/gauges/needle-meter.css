@@ -19,6 +19,13 @@
   margin: 6px 6px 2px;
 }
 
+/* Full-width panels: the wide edgewise meter spans the panel like the
+   band dial does. */
+.gauge-needle.wide svg {
+  max-width: none;
+  margin: 6px 6px 4px;
+}
+
 .gauge-needle .meter-glow-hot { stop-color: var(--meter-glow); }
 .gauge-needle .meter-glow-warm { stop-color: var(--meter-face); }
 .gauge-needle .meter-glow-edge { stop-color: var(--meter-face-edge, var(--meter-face)); }
