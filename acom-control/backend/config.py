@@ -89,7 +89,9 @@ DISPLAY_PANEL_DEFAULTS: tuple[tuple[str, str], ...] = (
     ("swr_calc", "full"),
     ("band_panel", "full"),
 )
-DISPLAY_WIDTHS = ("quarter", "half", "full")
+# "double" (2x Full) spans both halves of a wide screen; elsewhere it
+# renders the same as "full" - see the frontend's base.css.
+DISPLAY_WIDTHS = ("eighth", "quarter", "half", "full", "double")
 DISPLAY_FULL_WIDTH_ONLY = {"band_panel"}
 
 

@@ -19,6 +19,19 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Added
+- Full-screen layout for landscape screens - monitors (16:9, 4:3, 5:4),
+  the Raspberry Pi touchscreens (800x480 and 1280x720) and phones on
+  their side. The dashboard fills the whole window with no scrolling:
+  every gauge scales to its space, the status lights move up into the
+  header, the buttons stay on one row, and on screens 3:2 or wider the
+  gauges pack two layout-widths side by side. It's automatic - it
+  follows the screen's size and orientation, nothing to set. Portrait
+  screens keep the scrolling layout.
+- Two more gauge sizes in Setup -> Display: ⅛ and "2× Full" (spans the
+  whole screen on wide screens; the same as Full elsewhere).
+- Bigger touch targets for the buttons on touchscreens.
+
 ### Changed
 - Classic theme status row (Comms, Mode, ATU, Antenna): dark capped
   labels like the buttons, with solid jewel lamps that light green when

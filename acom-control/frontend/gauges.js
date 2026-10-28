@@ -299,7 +299,8 @@ function buildMeterSvg(opts, g) {
   const unitWord = METER_UNIT_WORDS[opts.unit] ?? opts.unit ?? "";
 
   return `
-    <svg viewBox="0 0 ${g.W} ${g.H}" role="img" aria-label="${opts.label || "Meter"}" data-sweep="${g.sweep}">
+    <svg viewBox="0 0 ${g.W} ${g.H}" role="img" aria-label="${opts.label || "Meter"}" data-sweep="${g.sweep}"
+         style="--meter-ratio: ${Math.round((g.W / g.H) * 1000) / 1000}">
       <defs>
         <clipPath id="${clipId}"><rect x="0" y="0" width="${g.W}" height="${g.H}" /></clipPath>
         <radialGradient id="${glowId}" cx="50%" cy="62%" r="70%">

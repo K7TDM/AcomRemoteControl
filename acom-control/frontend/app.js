@@ -572,7 +572,10 @@ const DEFAULT_DISPLAY_PANELS = [
   { id: "swr_calc", visible: true, width: "full" },
   { id: "band_panel", visible: true, width: "full" },
 ];
-const PANEL_WIDTH_OPTIONS = [["quarter", "¼"], ["half", "½"], ["full", "Full"]];
+// "double" spans both halves of a wide screen (see base.css fit-wide);
+// on other screens it's the same as Full.
+const PANEL_WIDTH_OPTIONS = [["eighth", "⅛"], ["quarter", "¼"], ["half", "½"], ["full", "Full"], ["double", "2× Full"]];
+const WIDE_METER_WIDTHS = new Set(["full", "double"]); // Classic's wide edgewise meter shape
 const DISPLAY_SAVE_DEBOUNCE_MS = 400;
 let displaySaveTimer = null;
 
@@ -591,7 +594,94 @@ function applyDisplayLayout(panels) {
   // A panel that was hidden skipped rendering - draw it now rather than
   // waiting for the next telemetry tick.
   if (unhid && appState.lastStatus) renderGauges(appState.lastStatus);
+  updatePanelRows();
 }
+
+// =============================================================================
+// Full-screen fit layout (landscape screens: monitors, the Pi touchscreen,
+// phones on their side) - see the "fit" section of base.css. The CSS does
+// the structure; this sets the two html classes from the same media queries
+// and sizes the grid rows.
+// =============================================================================
+
+const FIT_QUERY = "(orientation: landscape) and (min-width: 640px) and (min-height: 300px)";
+const FIT_WIDE_QUERY = `${FIT_QUERY} and (min-aspect-ratio: 3/2)`;
+// Grid columns per width (base.css): 8 per layout-width, 16 on wide screens.
+const PANEL_SPANS = { eighth: 1, quarter: 2, half: 4, full: 8, double: 16 };
+
+function updateFitMode() {
+  const root = document.documentElement;
+  const fit = window.matchMedia(FIT_QUERY).matches;
+  root.classList.toggle("fit-layout", fit);
+  root.classList.toggle("fit-wide", fit && window.matchMedia(FIT_WIDE_QUERY).matches);
+  // Status lights live in the header in fit mode (saves a full row of
+  // height), back at the top of the dashboard otherwise.
+  const statusRow = document.getElementById("status-row");
+  const header = document.querySelector(".app-header");
+  const dashboard = document.getElementById("dashboard");
+  if (statusRow && header && dashboard) {
+    if (fit && statusRow.parentElement !== header) header.insertBefore(statusRow, header.querySelector(".header-controls"));
+    if (!fit && statusRow.parentElement !== dashboard) dashboard.prepend(statusRow);
+  }
+  updatePanelRows();
+}
+
+// Roughly how much height a panel needs for a given width, so rows of big
+// meters get more of the screen than the short band dial. Classic's meters
+// keep a fixed aspect (standard ~2:1, wide ~5.5:1), so their need scales
+// with the width they get; bargraphs are about the same height at any width.
+function panelWeight(el, span, cols) {
+  if (el.dataset.panelId === "band_panel") return 1;
+  if (appState.theme.style === "classic") {
+    const aspect = WIDE_METER_WIDTHS.has(el.dataset.width) ? 5.55 : 2.05;
+    return (span / cols / aspect) * 10 + 0.6;
+  }
+  return el.id === "power-out-hero" ? 1.5 : 1.15;
+}
+
+// Works out which panels share each grid row (CSS grid's own sparse
+// auto-placement: a panel that doesn't fit the rest of a row starts the
+// next one) and gives each row the height share of its tallest panel.
+function updatePanelRows() {
+  const grid = document.getElementById("panel-grid");
+  if (!grid) return;
+  const root = document.documentElement;
+  if (!root.classList.contains("fit-layout")) {
+    grid.style.removeProperty("--panel-rows");
+    return;
+  }
+  const cols = root.classList.contains("fit-wide") ? 16 : 8;
+  const rows = []; // { weight, onlyBand, panels }
+  let col = 0;
+  [...grid.children].forEach((el) => {
+    delete el.dataset.rowAlone;
+    if (!el.dataset.panelId || el.hidden) return;
+    const span = Math.min(PANEL_SPANS[el.dataset.width] || 8, cols);
+    if (col === 0 || col + span > cols) {
+      rows.push({ weight: 0, onlyBand: true, panels: [] });
+      col = 0;
+    }
+    const row = rows[rows.length - 1];
+    row.weight = Math.max(row.weight, panelWeight(el, span, cols));
+    row.panels.push(el);
+    if (el.dataset.panelId !== "band_panel") row.onlyBand = false;
+    col += span;
+    if (col >= cols) col = 0;
+  });
+  // The band dial alone in a row spans the whole row (see base.css).
+  rows.forEach((r) => {
+    if (r.onlyBand && r.panels.length === 1) r.panels[0].dataset.rowAlone = "1";
+  });
+  // A row holding only the band dial gets exactly the height it needs
+  // (it's fixed-size text and a scale); the meter rows share the rest.
+  grid.style.setProperty(
+    "--panel-rows",
+    rows.map((r) => (r.onlyBand ? "auto" : `minmax(0, ${Math.round(r.weight * 100) / 100}fr)`)).join(" "),
+  );
+}
+
+window.matchMedia(FIT_QUERY).addEventListener("change", updateFitMode);
+window.matchMedia(FIT_WIDE_QUERY).addEventListener("change", updateFitMode);
 
 function setDisplayPanels(panels) {
   appState.display = panels;
@@ -722,7 +812,7 @@ function mountOrUpdateGauge(el, def, telemetry, theme, forceWidget) {
   // Full-width panels get the Classic meter's wide, short edgewise shape
   // (see gauges.js METER_GEOMETRY); a width change in Display settings
   // remounts the meter in the new shape.
-  const wide = el.dataset.width === "full";
+  const wide = WIDE_METER_WIDTHS.has(el.dataset.width);
   const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain, peak, avg, wide };
   const widget = resolveWidget(theme, opts, forceWidget);
   const shape = widget === "needle" && wide ? "wide" : "standard";
@@ -752,6 +842,7 @@ function remountAllGauges() {
 document.addEventListener("acom-theme-change", (event) => {
   appState.theme = event.detail;
   remountAllGauges();
+  updatePanelRows(); // row weights depend on the theme's widget
 });
 
 // Band panel - mirrors the middle of the amp's own Basic Screen, e.g.
@@ -1556,6 +1647,7 @@ async function waitForUpdateRestart(beforeCommit, statusEl, button) {
 
 async function boot() {
   initThemeSwitcher();
+  updateFitMode();
   appState.display = DEFAULT_DISPLAY_PANELS;
   wireControls();
   try {
