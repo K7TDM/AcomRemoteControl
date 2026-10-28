@@ -93,6 +93,40 @@ passwordless sudo for exactly one fixed, root-owned helper script
 `setup/acom-control-update.sudoers` to review or revoke it). The manual
 fallback, e.g. over SSH: `sudo acom-update-apply`.
 
+## Kiosk display (the Pi's own screen)
+
+To also show the dashboard full screen on a screen plugged into the Pi -
+the official touchscreen or an HDMI monitor - run the installer with
+`--kiosk`:
+
+    bash install.sh --kiosk
+
+This works on Raspberry Pi OS Lite (no desktop needed): it installs
+`cage`, a single-app display server, and Chromium, and a service
+(`acom-kiosk`) that starts them on the console at every boot, once the
+dashboard backend is answering. A Pi 4 or newer is recommended.
+
+- **Cursor:** hidden until a mouse is actually used, then hides again
+  after a few seconds idle. Touching the screen never shows it.
+- **Touch:** tap anywhere as normal; text selection, the long-press
+  menu, pinch zoom and swipe-back are turned off so it behaves like an
+  instrument panel. Typing (e.g. antenna names in Setup) needs a USB
+  keyboard, or use the dashboard from another device.
+- **Updates:** the kiosk page reloads itself when the dashboard is
+  updated (from any device), and updates keep the kiosk launcher current.
+- **Two screens:** with the touchscreen and an HDMI monitor connected at
+  the same time, the dashboard shows on one of them.
+- **Get a console back:** plug in a keyboard and press Ctrl+Alt+F2, or
+  turn the kiosk off: `sudo systemctl disable --now acom-kiosk`.
+
+**Touch Display 2** (the 1280x720 7" or the 5"): add the overlay for your
+model to `/boot/firmware/config.txt` and reboot, e.g.
+`dtoverlay=vc4-kms-dsi-ili9881-7inch` (5": `vc4-kms-dsi-ili9881-5inch`).
+Its panel is natively portrait; if the dashboard comes up sideways, add
+`,rotation=90` (or `270`) to that line. The original 7" (800x480)
+touchscreen and HDMI monitors need no setup. Not yet verified on real
+hardware - see `../CHANGELOG.md`.
+
 ## Logs
 
 Backend and frontend-reported errors share one journald stream but use

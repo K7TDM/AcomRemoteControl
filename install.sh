@@ -9,9 +9,19 @@
 # acom-control/README.md for hardware setup and how to actually run it
 # after this script finishes.
 #
-# Usage: bash install.sh
+# Usage: bash install.sh            (headless - dashboard over the network)
+#        bash install.sh --kiosk    (also show the dashboard full screen on
+#                                    the Pi's own touchscreen/monitor)
 
 set -euo pipefail
+
+KIOSK=0
+for arg in "$@"; do
+  case "$arg" in
+    --kiosk) KIOSK=1 ;;
+    *) echo "Unknown option: $arg (the only option is --kiosk)" >&2; exit 2 ;;
+  esac
+done
 
 if [[ "$(id -u)" -eq 0 ]]; then
   echo "Run this as your normal user (e.g. 'pi'), not root - it uses sudo where needed." >&2
@@ -131,6 +141,29 @@ sudo chown root:root "$SUDOERS_DST"
 sudo chmod 440 "$SUDOERS_DST"
 rm -f "$SUDOERS_TMP"
 
+if [[ "$KIOSK" -eq 1 ]]; then
+  echo "==> Setting up the kiosk display (Chromium full screen on the attached screen)"
+  # cage: a single-app Wayland display server, so Pi OS Lite needs no
+  # desktop. Chromium is "chromium" on current Raspberry Pi OS and
+  # "chromium-browser" on older releases.
+  sudo apt-get install -y cage curl
+  if ! sudo apt-get install -y chromium; then
+    sudo apt-get install -y chromium-browser
+  fi
+  # Display, GPU and input-device access for the kiosk session.
+  for group in video render input; do
+    if getent group "$group" >/dev/null; then
+      sudo usermod -aG "$group" "$INSTALL_USER"
+    fi
+  done
+  sudo install -o root -g root -m 755 "$REPO_DIR/acom-control/setup/acom-kiosk.sh" /usr/local/bin/acom-kiosk
+  sed "s#__KIOSK_USER__#$INSTALL_USER#" "$REPO_DIR/acom-control/setup/acom-kiosk.service" \
+    | sudo tee /etc/systemd/system/acom-kiosk.service >/dev/null
+  sudo systemctl daemon-reload
+  sudo systemctl enable acom-kiosk
+  sudo systemctl restart acom-kiosk
+fi
+
 cat <<EOF
 
 ==> Done.
@@ -168,3 +201,18 @@ cat <<EOF
   acom-control/setup/acom-control-update.sudoers if you want to review
   or revoke that.) The manual fallback is: sudo acom-update-apply
 EOF
+
+if [[ "$KIOSK" -eq 1 ]]; then
+  cat <<EOF
+- Kiosk display: the dashboard now runs full screen on the Pi's attached
+  screen, and starts at every boot (service: acom-kiosk). The mouse
+  cursor stays hidden until a mouse is actually used; touch never shows
+  it. To get a text console back: plug in a keyboard and press
+  Ctrl+Alt+F2, or turn the kiosk off with
+    sudo systemctl disable --now acom-kiosk
+  Touch Display 2: add  dtoverlay=vc4-kms-dsi-ili9881-7inch  (or the 5"
+  overlay) to /boot/firmware/config.txt and reboot. Its panel is natively
+  portrait, so it may also need rotating - see acom-control/README.md.
+  The original 7" touchscreen and HDMI monitors need no setup.
+EOF
+fi

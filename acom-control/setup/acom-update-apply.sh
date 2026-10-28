@@ -203,5 +203,21 @@ else
   echo "acom-update-apply: WARNING - the new sudo rule failed validation; keeping the old one" >&2
 fi
 
+# Kiosk display (install.sh --kiosk), only if it's installed: refresh its
+# launcher and unit the same way. The running kiosk isn't restarted - the
+# dashboard page reloads itself when the backend comes back on a new
+# version (app.js), and launcher/unit changes apply from the next boot.
+KIOSK_UNIT="/etc/systemd/system/acom-kiosk.service"
+if [[ -f /usr/local/bin/acom-kiosk && -f "$KIOSK_UNIT" ]]; then
+  echo "acom-update-apply: refreshing the kiosk display launcher"
+  KIOSK_TMP="$(mktemp /usr/local/bin/.acom-kiosk.XXXXXX)"
+  cp "$REPO_DIR/acom-control/setup/acom-kiosk.sh" "$KIOSK_TMP"
+  chown root:root "$KIOSK_TMP"
+  chmod 755 "$KIOSK_TMP"
+  mv -f "$KIOSK_TMP" /usr/local/bin/acom-kiosk
+  sed "s#${PH}KIOSK_USER${PH}#$REPO_OWNER#" "$REPO_DIR/acom-control/setup/acom-kiosk.service" > "$KIOSK_UNIT"
+  systemctl daemon-reload
+fi
+
 echo "acom-update-apply: restarting acom-control"
 systemctl restart --no-block acom-control
