@@ -1441,22 +1441,39 @@ async def test_buzzer(req: BuzzerRequest) -> dict:
 
 
 BUZZER_MORSE_TEXT = "K7TDM TEST"
+# The amp's own startup "TEST" sounds like ~15 WPM. Timed a bit slower
+# than that here, so a character is never sent while the amp is still
+# playing the previous one (it drops it - see protocol.morse_schedule()).
+BUZZER_MORSE_WPM = 15
+BUZZER_MORSE_MARGIN = 1.15
+
+_morse_task: Optional[asyncio.Task] = None
 
 
 class BuzzerMorseRequest(BaseModel):
     volume: int = 50
 
 
+async def _play_morse(link: SerialLink, schedule: list) -> None:
+    for frame, wait_s in schedule:
+        if frame is not None:
+            await link.enqueue(frame)
+        await asyncio.sleep(wait_s * BUZZER_MORSE_MARGIN)
+
+
 @app.post("/api/buzzer/morse")
 async def buzzer_morse(req: BuzzerMorseRequest) -> dict:
     """Plays BUZZER_MORSE_TEXT in Morse on the amp's buzzer: one 0x0A
-    command per character, queued back to back - the amp is assumed to
-    buffer them and do its own timing (its startup "TEST" sounds like ~15
-    WPM). Never ACKed, like the other buzzer signals, so these are
-    fire-and-forget."""
+    command per character, each sent only after the previous one has had
+    time to play (the amp doesn't buffer them). Runs in the background and
+    returns at once; a click while it's still playing is ignored. Never
+    ACKed, like the other buzzer signals, so these are fire-and-forget."""
+    global _morse_task
     link = _require_serial_link()
-    for frame in protocol.build_buzzer_morse(BUZZER_MORSE_TEXT, max(0, min(100, req.volume))):
-        await link.enqueue(frame)
+    if _morse_task is not None and not _morse_task.done():
+        return {"ok": True, "text": BUZZER_MORSE_TEXT, "already_playing": True}
+    schedule = protocol.morse_schedule(BUZZER_MORSE_TEXT, max(0, min(100, req.volume)), BUZZER_MORSE_WPM)
+    _morse_task = _spawn(_play_morse(link, schedule))
     backend_logger.info("Buzzer Morse: %r", BUZZER_MORSE_TEXT)
     return {"ok": True, "text": BUZZER_MORSE_TEXT}
 

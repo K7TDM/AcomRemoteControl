@@ -19,6 +19,13 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Fixed
+- Buzzer Test only played the "K" of "K7TDM TEST": the amp plays one
+  Morse character at a time and ignores any sent while it's busy. The
+  Pi now times the characters itself at 15 WPM (about 7.5 seconds for
+  the whole message); pressing the button again while it plays does
+  nothing.
+
 ## [0.1.13] - 2026-10-27
 
 ### Changed
