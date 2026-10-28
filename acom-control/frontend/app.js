@@ -961,8 +961,11 @@ function renderFreqReadout(state) {
   const onCb = loadShowCbBand() && (overlaps(low, high) || (khz && overlaps(khz, khz + 0.001)));
   setText("band-name", onCb ? "CB" : BAND_NAMES[b.band_number - 1] || `Band ${b.band_number}`);
   // Same shorthand as the amp's own display: "A1R" = antenna 1, Regular.
+  // Followed by the name given in Antenna Setup, if any: "A1R - DXC".
   const typeLetter = (ANTENNA_TYPES[b.antenna_type] || "?").charAt(0);
-  setText("band-antenna", `A${b.antenna_number}${typeLetter}`);
+  const slot = (state.antenna_config || []).find((s) => s.number === b.antenna_number);
+  const antName = slot && slot.name ? slot.name.trim() : "";
+  setText("band-antenna", `A${b.antenna_number}${typeLetter}${antName ? ` - ${antName}` : ""}`);
 
   if (!scale) return;
   // Like the amp's own display: the scale spans the whole band, with the
