@@ -34,6 +34,14 @@ first, then get moved under a version heading below when tagged.
 - Two more gauge sizes in Setup -> Display: ⅛ and "2× Full" (spans the
   whole screen on wide screens; the same as Full elsewhere).
 - Bigger touch targets for the buttons on touchscreens.
+- Update screen: with beta updates off while running a beta build, a
+  "Roll back to vX.Y.Z" button returns to the latest release (keeps the
+  Pi's own settings; refuses rather than overwrite any other local
+  change). **Needs `install.sh` re-run once on the Pi** to install the
+  updater's new rollback mode and its sudo permission.
+- Update screen: when there's nothing newer, it shows just the current
+  version and "Already up to date" instead of repeating the same
+  version as "New version".
 
 ### Fixed
 - After an update the browser could run the new dashboard code with an

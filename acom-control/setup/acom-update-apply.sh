@@ -14,7 +14,7 @@
 # push --tags` does), and so this never auto-deploys unreleased,
 # possibly-unfinished work just because it happened to land on main.
 #
-# Four modes, all invoked with a fixed, no-extra-argument command line so
+# Five modes, all invoked with a fixed, no-extra-argument command line so
 # the sudoers rule can allow exactly these and nothing else:
 #   acom-update-apply check   - read-only: fetch tags + compare, never
 #                                pulls or restarts. Used by the daily
@@ -30,6 +30,16 @@
 #                                work. Switching back off just returns to
 #                                tag tracking: a Pi already past the latest
 #                                tag stays put until a newer tag lands.
+#   acom-update-apply rollback
+#                             - for a Pi running a beta build (ahead of the
+#                                latest release tag): moves back to that
+#                                release, reinstalls requirements and
+#                                restarts. The update screen offers this
+#                                when beta updates are switched off. Uses
+#                                `git reset --keep`, which refuses (and
+#                                changes nothing) if a locally edited file
+#                                - e.g. the Pi's own config.json - would be
+#                                overwritten.
 #
 # Runs as root (that's what the sudoers rule grants), but git and pip run
 # as REPO_OWNER (whoever ran install.sh) instead of root, so pulled files
@@ -57,11 +67,26 @@ case "$MODE" in
   check|apply) BETA=0 ;;
   check-beta) BETA=1; MODE=check ;;
   beta) BETA=1; MODE=apply ;;
+  rollback) BETA=0 ;;
   *) echo "acom-update-apply: unknown mode '$MODE'" >&2; exit 2 ;;
 esac
 
 echo "acom-update-apply: fetching tags"
 git_as_owner fetch --tags --quiet origin
+
+# The latest release tag, whichever mode we're in - by version sort, not by
+# tag-creation date, so a tag pushed out of order can't confuse it. Only
+# vX.Y.Z-shaped tags count; this repo shouldn't have other tag shapes, but
+# don't assume.
+RELEASE_TAG="$(git_as_owner tag --list 'v*' --sort=-v:refname | head -n1)"
+
+# "yes" when HEAD is a beta build: strictly ahead of the latest release
+# (the release is an ancestor, but HEAD isn't the release itself).
+ahead_of_release() {
+  [[ -n "$RELEASE_TAG" ]] \
+    && git_as_owner merge-base --is-ancestor "$RELEASE_TAG" HEAD \
+    && [[ "$(git_as_owner rev-parse HEAD)" != "$(git_as_owner rev-parse "$RELEASE_TAG^{commit}")" ]]
+}
 
 if [[ "$BETA" == 1 ]]; then
   # Tip of main, whatever's there - tagged or not. LATEST_REF is what gets
@@ -70,10 +95,7 @@ if [[ "$BETA" == 1 ]]; then
   LATEST_REF="origin/main"
   LATEST_TAG="$(git_as_owner describe --tags --always "$LATEST_REF")"
 else
-  # Latest release tag by version sort, not by tag-creation date - so this
-  # can't be confused by a tag pushed out of order. Only vX.Y.Z-shaped tags
-  # count; this repo shouldn't have other tag shapes, but don't assume.
-  LATEST_TAG="$(git_as_owner tag --list 'v*' --sort=-v:refname | head -n1)"
+  LATEST_TAG="$RELEASE_TAG"
   LATEST_REF="$LATEST_TAG"
 fi
 CURRENT_VERSION="$(git_as_owner describe --tags --always)"
@@ -81,6 +103,12 @@ CURRENT_VERSION="$(git_as_owner describe --tags --always)"
 if [[ "$MODE" == "check" ]]; then
   echo "current=$CURRENT_VERSION"
   echo "latest_ref=${LATEST_REF:-none}"
+  echo "release=${RELEASE_TAG:-none}"
+  if ahead_of_release; then
+    echo "ahead_of_release=yes"
+  else
+    echo "ahead_of_release=no"
+  fi
   if [[ -z "$LATEST_TAG" ]]; then
     echo "latest=none"
     echo "update_available=no"
@@ -95,18 +123,27 @@ if [[ "$MODE" == "check" ]]; then
   exit 0
 fi
 
-if [[ -z "$LATEST_TAG" ]]; then
-  echo "acom-update-apply: no tagged release exists yet (current: $CURRENT_VERSION) - nothing to update to"
-  exit 0
-fi
+if [[ "$MODE" == "rollback" ]]; then
+  if ! ahead_of_release; then
+    echo "acom-update-apply: not running a beta build ($CURRENT_VERSION, latest release ${RELEASE_TAG:-none}) - nothing to roll back"
+    exit 0
+  fi
+  echo "acom-update-apply: rolling back $CURRENT_VERSION -> $RELEASE_TAG"
+  git_as_owner reset --keep "$RELEASE_TAG"
+else
+  if [[ -z "$LATEST_TAG" ]]; then
+    echo "acom-update-apply: no tagged release exists yet (current: $CURRENT_VERSION) - nothing to update to"
+    exit 0
+  fi
 
-if git_as_owner merge-base --is-ancestor "$LATEST_REF" HEAD; then
-  echo "acom-update-apply: already at or past $LATEST_TAG ($CURRENT_VERSION) - nothing to restart"
-  exit 0
-fi
+  if git_as_owner merge-base --is-ancestor "$LATEST_REF" HEAD; then
+    echo "acom-update-apply: already at or past $LATEST_TAG ($CURRENT_VERSION) - nothing to restart"
+    exit 0
+  fi
 
-echo "acom-update-apply: updating $CURRENT_VERSION -> $LATEST_TAG"
-git_as_owner merge --ff-only "$LATEST_REF"
+  echo "acom-update-apply: updating $CURRENT_VERSION -> $LATEST_TAG"
+  git_as_owner merge --ff-only "$LATEST_REF"
+fi
 
 echo "acom-update-apply: updating Python packages"
 sudo -u "$REPO_OWNER" -H "$VENV_DIR/bin/pip" install -r "$REPO_DIR/requirements.txt"

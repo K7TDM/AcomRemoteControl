@@ -1072,6 +1072,7 @@ function wireControls() {
     });
   }
   document.getElementById("btn-update-check")?.addEventListener("click", checkForUpdateNow);
+  document.getElementById("btn-update-rollback")?.addEventListener("click", withErrorBanner(rollbackToRelease));
   document.getElementById("btn-clear-logs")?.addEventListener("click", withErrorBanner(async () => {
     if (!window.confirm("Clear the log view? Downloaded logs will only include entries from this point forward - nothing is deleted from the system log itself.")) return;
     await apiFetch("/api/logs/clear", { method: "POST" });
@@ -1562,6 +1563,12 @@ async function runUpdateCheck(request) {
   if (currentEl) currentEl.textContent = "";
   if (latestEl) latestEl.textContent = "";
   if (statusEl) statusEl.hidden = true;
+  const latestRow = document.getElementById("update-latest-row");
+  const rollbackBox = document.getElementById("update-rollback");
+  const rollbackButton = document.getElementById("btn-update-rollback");
+  if (latestRow) latestRow.hidden = true;
+  if (rollbackBox) rollbackBox.hidden = true;
+  if (rollbackButton) rollbackButton.disabled = false;
   // Hidden until a check actually confirms there's something to install -
   // nothing to click/no reason to restart the service otherwise.
   if (updateNowButton) { updateNowButton.hidden = true; updateNowButton.disabled = false; }
@@ -1582,6 +1589,19 @@ async function runUpdateCheck(request) {
         : updateStatus.error ? `Check failed: ${updateStatus.error}` : "Already up to date";
     }
     if (updateNowButton) updateNowButton.hidden = !updateStatus.available;
+    // "New version" only when there's something newer; otherwise the
+    // headline's "Already up to date" says it.
+    if (latestRow) latestRow.hidden = !updateStatus.available;
+    // Beta updates off while running a beta build: offer the way back to
+    // the latest release (the backend only sets can_rollback with beta off).
+    if (rollbackBox && updateStatus.can_rollback && updateStatus.release) {
+      rollbackBox.hidden = false;
+      setText(
+        "update-rollback-note",
+        `You're running a beta build (${updateStatus.current_version}), newer than the latest release.`,
+      );
+      if (rollbackButton) rollbackButton.textContent = `Roll back to ${updateStatus.release}`;
+    }
     renderUpdateChanges();
     renderUpdateButtonHighlight();
   } catch (err) {
@@ -1597,8 +1617,22 @@ async function applyUpdateNow() {
     "Update now? The backend will restart - amp control will be briefly " +
     "unavailable (usually just a few seconds)."
   )) return;
+  await launchUpdate("/api/update/apply", document.getElementById("btn-update-now"), "Updating and restarting...");
+}
+
+async function rollbackToRelease() {
+  const release = updateStatus?.release || "the latest release";
+  if (!window.confirm(
+    `Roll back to ${release}? The backend will restart - amp control will be ` +
+    "briefly unavailable (usually just a few seconds)."
+  )) return;
+  await launchUpdate("/api/update/rollback", document.getElementById("btn-update-rollback"), `Rolling back to ${release} and restarting...`);
+}
+
+// Shared by Update Now and Roll Back: start the helper, then wait for the
+// restarted service to report a different commit.
+async function launchUpdate(path, button, startingText) {
   const statusEl = document.getElementById("update-status");
-  const button = document.getElementById("btn-update-now");
   // Raw commit hash, not updateStatus.current_version (that's the
   // tag-based display string) - waitForUpdateRestart() just needs
   // something that changes once the new process comes up.
@@ -1612,10 +1646,10 @@ async function applyUpdateNow() {
   if (button) button.disabled = true;
   if (statusEl) {
     statusEl.hidden = false;
-    statusEl.textContent = "Updating and restarting...";
+    statusEl.textContent = startingText;
   }
   try {
-    await apiFetch("/api/update/apply", { method: "POST" });
+    await apiFetch(path, { method: "POST" });
   } catch (err) {
     if (statusEl) statusEl.textContent = `Failed to start update: ${err.message}`;
     if (button) button.disabled = false;

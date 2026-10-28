@@ -965,6 +965,11 @@ update_status: dict = {
     "error": None,
     "changes": [],
     "beta": False,
+    # Set when beta updates are off but the Pi is running a beta build
+    # (ahead of the latest release tag) - the update screen then offers
+    # rolling back to `release` (POST /api/update/rollback).
+    "can_rollback": False,
+    "release": None,
 }
 
 _update_check_task: Optional[asyncio.Task] = None
@@ -1068,6 +1073,11 @@ async def _check_for_update() -> None:
         update_status["current_version"] = fields.get("current", GIT_VERSION)
         latest = fields.get("latest", "none")
         update_status["latest_version"] = latest if latest != "none" else None
+        release = fields.get("release", "none")
+        update_status["release"] = release if release != "none" else None
+        # An older installed helper doesn't print ahead_of_release, which
+        # reads as "no" - no rollback offered until install.sh is re-run.
+        update_status["can_rollback"] = not beta and fields.get("ahead_of_release") == "yes"
         update_status["error"] = None
         if update_status["available"]:
             backend_logger.info(
@@ -1167,6 +1177,28 @@ async def apply_update() -> dict:
         raise HTTPException(500, f"failed to launch update: {exc}") from exc
     backend_logger.info("Update requested from the dashboard%s (currently at commit %s)",
                         " (beta)" if beta else "", GIT_COMMIT)
+    return {"ok": True, "launched": True, "current_commit": GIT_COMMIT}
+
+
+@app.post("/api/update/rollback")
+async def rollback_update() -> dict:
+    """Launches the helper's `rollback` mode: moves a Pi running a beta
+    build back to the latest release, reinstalls requirements and restarts
+    (see acom-update-apply.sh). Only offered with beta updates off - with
+    them on, the next check would just offer the beta build again. Same
+    detached launch as apply_update(); the frontend watches git_commit for
+    the restart."""
+    if config.update.beta:
+        raise HTTPException(409, "turn off beta updates before rolling back to a release")
+    try:
+        subprocess.Popen(
+            ["sudo", UPDATE_APPLY_SCRIPT, "rollback"],
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"failed to launch rollback: {exc}") from exc
+    backend_logger.info("Rollback to release %s requested from the dashboard (currently at commit %s)",
+                        update_status.get("release"), GIT_COMMIT)
     return {"ok": True, "launched": True, "current_commit": GIT_COMMIT}
 
 
