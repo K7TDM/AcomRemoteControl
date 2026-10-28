@@ -164,10 +164,22 @@ BUZZER_HARD_FAULT = 5
 BUZZER_PWRON = 6
 # Any other Byte4 value is an ASCII character the amp plays as Morse (doc
 # §5.1: "BUZZER_LETTER (Morze code coresponding to the ASCII)"), one per
-# command. Kept to characters with a standard Morse code; the amp's own
-# table isn't documented. NEEDS REAL-HARDWARE VERIFICATION, including
-# whether a space plays as a word gap.
-MORSE_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 /?.,=-")
+# command. Confirmed 2026-10-27: the amp does NOT buffer them - sent back
+# to back, only the first character played - so the sender has to wait
+# out each character (see morse_schedule()). Kept to characters with a
+# standard Morse code; the amp's own table isn't documented.
+MORSE_CODE = {
+    "A": ".-", "B": "-...", "C": "-.-.", "D": "-..", "E": ".", "F": "..-.",
+    "G": "--.", "H": "....", "I": "..", "J": ".---", "K": "-.-", "L": ".-..",
+    "M": "--", "N": "-.", "O": "---", "P": ".--.", "Q": "--.-", "R": ".-.",
+    "S": "...", "T": "-", "U": "..-", "V": "...-", "W": ".--", "X": "-..-",
+    "Y": "-.--", "Z": "--..",
+    "0": "-----", "1": ".----", "2": "..---", "3": "...--", "4": "....-",
+    "5": ".....", "6": "-....", "7": "--...", "8": "---..", "9": "----.",
+    "/": "-..-.", "?": "..--..", ".": ".-.-.-", ",": "--..--", "=": "-...-",
+    "-": "-....-",
+}
+MORSE_CHARS = frozenset(MORSE_CODE) | {" "}
 
 # 0x81 Cmd 0x10 "ATU Service Commands" - Byte4 selection (doc section 5.1)
 ATU_ERASE_CURRENT = 0x01
@@ -265,13 +277,25 @@ def build_buzzer(signal: int, volume: int) -> bytes:
     return build_amp_command(CMD_BUZZER, param_hw=signal, param_lw=volume)
 
 
-def build_buzzer_morse(text: str, volume: int) -> list[bytes]:
-    """One buzzer command per character of `text` (see MORSE_CHARS)."""
-    text = text.upper()
+def morse_schedule(text: str, volume: int, wpm: float) -> list[tuple[Optional[bytes], float]]:
+    """(frame, seconds to wait after sending it) per character of `text`,
+    standard PARIS timing at `wpm`: a dot is one unit, a dash three, one
+    unit between elements, three between characters, seven between words.
+    A space sends nothing (frame None) and just stretches the gap to seven."""
+    text = " ".join(text.upper().split())
     bad = sorted(set(text) - MORSE_CHARS)
     if bad:
         raise ValueError(f"no Morse code for {''.join(bad)!r}")
-    return [build_buzzer(ord(ch), volume) for ch in text]
+    unit_s = 1.2 / wpm
+    schedule: list[tuple[Optional[bytes], float]] = []
+    for ch in text:
+        if ch == " ":
+            schedule.append((None, 4 * unit_s))  # 3 already waited + 4 = 7
+            continue
+        code = MORSE_CODE[ch]
+        units = sum(3 if el == "-" else 1 for el in code) + (len(code) - 1)
+        schedule.append((build_buzzer(ord(ch), volume), (units + 3) * unit_s))
+    return schedule
 
 
 def build_factory_reset(selection: int) -> bytes:
