@@ -41,6 +41,10 @@
 #                                - e.g. the Pi's own config.json - would be
 #                                overwritten.
 #
+# apply, beta and rollback also reinstall this script and its sudoers rule
+# from the newly checked-out code (see the end of this file), so an update
+# that changes them doesn't need install.sh re-run.
+#
 # Runs as root (that's what the sudoers rule grants), but git and pip run
 # as REPO_OWNER (whoever ran install.sh) instead of root, so pulled files
 # don't end up root-owned and break a future manual `git pull`/`bash
@@ -157,6 +161,47 @@ sed \
   -e "s#^ExecStart=.*#ExecStart=$VENV_DIR/bin/uvicorn backend.app:app --host 0.0.0.0 --port 8000#" \
   "$SERVICE_SRC" > "$SERVICE_DST"
 systemctl daemon-reload
+
+# Reinstall this helper and its sudo rule from the code just checked out,
+# the same way install.sh does, so changes to them (a new mode like
+# rollback) take effect without re-running install.sh. Before this, the
+# installed copy only ever changed when install.sh was re-run - and running
+# it before the update that carried the change installed the old copy.
+#
+# Both are written to a temp file on the same filesystem and renamed into
+# place: bash reads a running script incrementally, so overwriting this
+# file in place could corrupt the rest of this run (the rename leaves this
+# run on the old copy), and sudo ignores files in sudoers.d whose names
+# contain a "." until the rename. A new sudo rule that fails visudo's check
+# is never installed - the old one stays and the update carries on.
+echo "acom-update-apply: refreshing this updater and its sudo rule"
+SELF_SRC="$REPO_DIR/acom-control/setup/acom-update-apply.sh"
+SELF_DST="/usr/local/bin/acom-update-apply"
+SELF_TMP="$(mktemp /usr/local/bin/.acom-update-apply.XXXXXX)"
+# The placeholder names are assembled from $PH rather than written out:
+# install.sh (and this very step) substitute every literal placeholder in
+# this file, which would also rewrite the patterns below into no-ops and
+# leave the next installed copy with its placeholders unfilled.
+PH="__"
+sed \
+  -e "s#${PH}REPO_DIR${PH}#$REPO_DIR#" \
+  -e "s#${PH}REPO_OWNER${PH}#$REPO_OWNER#" \
+  -e "s#${PH}VENV_DIR${PH}#$VENV_DIR#" \
+  "$SELF_SRC" > "$SELF_TMP"
+chown root:root "$SELF_TMP"
+chmod 755 "$SELF_TMP"
+mv -f "$SELF_TMP" "$SELF_DST"
+
+SUDOERS_SRC="$REPO_DIR/acom-control/setup/acom-control-update.sudoers"
+SUDOERS_DST="/etc/sudoers.d/acom-control-update"
+SUDOERS_TMP="/etc/sudoers.d/.acom-control-update.new"
+install -o root -g root -m 440 "$SUDOERS_SRC" "$SUDOERS_TMP"
+if visudo -cf "$SUDOERS_TMP" >/dev/null; then
+  mv -f "$SUDOERS_TMP" "$SUDOERS_DST"
+else
+  rm -f "$SUDOERS_TMP"
+  echo "acom-update-apply: WARNING - the new sudo rule failed validation; keeping the old one" >&2
+fi
 
 echo "acom-update-apply: restarting acom-control"
 systemctl restart --no-block acom-control
