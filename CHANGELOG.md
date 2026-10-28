@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.13] - 2026-10-27
+
 ### Changed
 - Buzzer Test now plays "K7TDM TEST" in Morse on the amp's buzzer
   instead of a single beep. The amp plays each character with its own
