@@ -20,11 +20,9 @@ Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
 ### Changed
-- Buzzer Test now plays a message in Morse on the amp's buzzer instead
-  of a single beep. Set the text in Setup -> Amplifier & Tuner ("Buzzer
-  Test plays", up to 30 characters, default "TEST") - e.g. your
-  callsign. The amp plays each character with its own Morse table and
-  timing.
+- Buzzer Test now plays "K7TDM TEST" in Morse on the amp's buzzer
+  instead of a single beep. The amp plays each character with its own
+  Morse table and timing.
 
 ## [0.1.12] - 2026-10-27
 

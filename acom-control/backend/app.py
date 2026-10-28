@@ -768,8 +768,6 @@ class ConfigRequest(BaseModel):
     # operation, toggled live from the Setup screen rather than requiring
     # a config.json edit + restart.
     logging_level: Optional[str] = None
-    # What Buzzer Test plays in Morse (see POST /api/buzzer/morse).
-    buzzer_text: Optional[str] = None
     # Must be explicitly true to change serial_device - switching ports
     # closes/reopens the OS-level handle, which risks toggling the amp's
     # power via DTR (see CLAUDE.md open question 4) - this is enforced
@@ -790,7 +788,6 @@ def _config_response() -> dict:
         "available_amp_models": sorted(AMP_PROFILES),
         "available_tuner_models": list(TUNER_MODELS),
         "display": config.display.panels,
-        "buzzer_text": config.buzzer.morse_text,
         "kiosk": _kiosk_status(),
     }
 
@@ -821,14 +818,6 @@ async def set_config(req: ConfigRequest) -> dict:
     if new_logging_level not in VALID_LOG_LEVELS:
         raise HTTPException(400, f"logging_level must be one of {VALID_LOG_LEVELS}")
 
-    new_buzzer_text = config.buzzer.morse_text
-    if provided.get("buzzer_text") is not None:
-        new_buzzer_text = " ".join(provided["buzzer_text"].upper().split())
-        try:
-            _validate_morse_text(new_buzzer_text)
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-
     device_changed = new_serial_device != config.amp.serial_device
     if device_changed and not req.confirm:
         raise HTTPException(400, "must set confirm=true to change the serial port (may toggle amp power)")
@@ -849,7 +838,6 @@ async def set_config(req: ConfigRequest) -> dict:
     config.amp.model = new_amp_model
     config.tuner.model = new_tuner_model
     config.logging.level = new_logging_level
-    config.buzzer.morse_text = new_buzzer_text
     if device_changed:
         config.amp.serial_device = new_serial_device
     amp_state.profile = get_amp_profile(new_amp_model)
@@ -1452,39 +1440,25 @@ async def test_buzzer(req: BuzzerRequest) -> dict:
     return await _send_pulse_command(link, protocol.build_buzzer(req.signal, req.volume))
 
 
-MORSE_TEXT_MAX_LEN = 30
-
-
-def _validate_morse_text(text: str) -> None:
-    if not text.strip():
-        raise ValueError("Morse text is empty")
-    if len(text) > MORSE_TEXT_MAX_LEN:
-        raise ValueError(f"Morse text is longer than {MORSE_TEXT_MAX_LEN} characters")
-    protocol.build_buzzer_morse(text, 0)  # raises on a character with no Morse code
+BUZZER_MORSE_TEXT = "K7TDM TEST"
 
 
 class BuzzerMorseRequest(BaseModel):
-    text: Optional[str] = None  # None plays the saved Setup text
     volume: int = 50
 
 
 @app.post("/api/buzzer/morse")
 async def buzzer_morse(req: BuzzerMorseRequest) -> dict:
-    """Plays `text` in Morse on the amp's buzzer: one 0x0A command per
-    character, queued back to back - the amp is assumed to buffer them
-    and do its own timing (its startup "TEST" sounds like ~15 WPM). Never
-    ACKed, like the other buzzer signals, so these are fire-and-forget."""
+    """Plays BUZZER_MORSE_TEXT in Morse on the amp's buzzer: one 0x0A
+    command per character, queued back to back - the amp is assumed to
+    buffer them and do its own timing (its startup "TEST" sounds like ~15
+    WPM). Never ACKed, like the other buzzer signals, so these are
+    fire-and-forget."""
     link = _require_serial_link()
-    text = " ".join((req.text if req.text is not None else config.buzzer.morse_text).upper().split())
-    try:
-        _validate_morse_text(text)
-        frames = protocol.build_buzzer_morse(text, max(0, min(100, req.volume)))
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    for frame in frames:
+    for frame in protocol.build_buzzer_morse(BUZZER_MORSE_TEXT, max(0, min(100, req.volume))):
         await link.enqueue(frame)
-    backend_logger.info("Buzzer Morse: %r", text)
-    return {"ok": True, "text": text}
+    backend_logger.info("Buzzer Morse: %r", BUZZER_MORSE_TEXT)
+    return {"ok": True, "text": BUZZER_MORSE_TEXT}
 
 
 class FrontendLogRequest(BaseModel):
