@@ -19,6 +19,12 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Changed
+- Classic theme status row (Comms, Mode, ATU, Antenna): dark capped
+  labels like the buttons, with solid jewel lamps that light green when
+  the status is good - the amber lamps used to disappear into the amber
+  labels.
+
 ## [0.1.7] - 2026-10-27
 
 ### Added

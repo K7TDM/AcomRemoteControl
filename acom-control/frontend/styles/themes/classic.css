@@ -138,15 +138,43 @@
 }
 
 /* Pilot lamps on the status row: a lit glass envelope in a metal ring. */
-[data-theme="classic"] .led-dot {
-  background: radial-gradient(circle at 35% 30%, var(--lamp-glass-off), var(--led-off) 75%);
+/* Status row: dark engraved caps like the push buttons (an amber chip
+   swallowed an amber lamp), each with a jewel lamp - green when the status
+   is good, dark when not, matching the buttons' green. */
+[data-theme="classic"] .status-chip {
+  background: var(--button-bg);
+  color: var(--button-text);
   border: 2px solid var(--chrome);
-  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius);
+  font-family: var(--font-family-display);
+  font-weight: normal;
+  letter-spacing: 0.06em;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.12), inset 0 -2px 0 rgba(0, 0, 0, 0.45);
+  --led-on: #2fc63a;
+}
+
+[data-theme="classic"] .status-chip-label {
+  background: none;
+  color: inherit;
+}
+
+/* Same solid-lamp look as the buttons' jewel lamps: mostly solid color
+   with a small glint, so lit and unlit read clearly. */
+[data-theme="classic"] .led-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.35) 0 10%, transparent 26%),
+    var(--led-off);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 1px var(--chrome), inset 0 0 2px rgba(0, 0, 0, 0.6);
 }
 
 [data-theme="classic"] .led-dot.on {
-  background: radial-gradient(circle at 35% 30%, var(--lamp-glass-hotspot), var(--led-on) 65%);
-  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5), 0 0 6px 2px var(--led-on);
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.75) 0 10%, transparent 26%),
+    var(--led-on);
+  box-shadow: 0 0 0 1px var(--chrome), 0 0 7px 2px var(--led-on);
 }
 
 /* Push buttons: dark caps with a chrome rim and engraved lettering. */
