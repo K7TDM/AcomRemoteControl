@@ -1,94 +1,353 @@
-/* Modern theme - contemporary flat dashboard. Shares the bargraph +
-   component markup with ACOM, differs only via these variables. */
+/* Modern theme - "glass cockpit", picked by Tyler from a set of concepts:
+   an avionics multi-function display. Navy panels, cyan accents, a magenta
+   peak bug, monospace readouts in boxed windows, outlined soft-key buttons.
+   Forward Power is a smooth gradient tape (bargraph widget); the other
+   gauges are arc dials (gauges.js renderArcGauge(), --arc-* below). Light
+   mode is the same instrument in a daylight palette. */
 
 [data-theme="modern"][data-mode="dark"] {
-  --bg-page: #121417;
-  --bg-panel: #1e2126;
-  --accent-label: #4fd1c5;
-  --accent-label-text: #06201d;
-  --text-primary: #e8e8ea;
-  --text-secondary: #9aa0a6;
-  --readout-power: #4fd1c5;
-  --readout-freq: #ffffff;
-  --warn-bg: #f0b429;
-  --warn-text: #241a00;
-  --led-on: #4fd1c5;
-  --led-off: #333a40;
-  --radius: 10px;
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --border-color: #2a2f36;
-  --button-bg: #262b31;
-  --button-text: #e8e8ea;
-  --button-bg-active: #4fd1c5;
-  --button-text-active: #06201d;
-  --zone-good: #4fd1c5;
-  --zone-warn: #f0b429;
-  --zone-danger: #ef4444;
+  --bg-page: #0a1120;
+  --bg-panel: #101a2e;
+  --border-color: #22324f;
+  --text-primary: #e6f0ff;
+  --text-secondary: #7f93b5;
+  --accent-label: #3fd2ff;
+  --accent-label-text: #031421;
+  --cockpit-cyan: #3fd2ff;
+  --cockpit-magenta: #ff5ad9;
+  --cockpit-green: #3ddc84;
+  --cockpit-amber: #ffb020;
+  --cockpit-red: #ff4d4d;
+  --window-bg: #000000;
+  --track-bg: #0b1426;
+  --arc-track: #1d2a44;
+  --readout-power: #e6f0ff;
+  --readout-freq: #e6f0ff;
+  --warn-bg: #ffb020;
+  --warn-text: #1a1000;
+  --led-on: #3ddc84;
+  --led-off: #22324f;
+  --button-bg: #0b1426;
+  --button-text: #3fd2ff;
+  --button-bg-active: #3fd2ff;
+  --button-text-active: #031421;
 }
 
 [data-theme="modern"][data-mode="light"] {
-  --bg-page: #f5f6f8;
-  --bg-panel: #ffffff;
-  --accent-label: #2a9d94;
+  --bg-page: #e9eef5;
+  --bg-panel: #f8fafd;
+  --border-color: #c3cfe0;
+  --text-primary: #0d1b33;
+  --text-secondary: #5a6c88;
+  --accent-label: #0a8fc2;
   --accent-label-text: #ffffff;
-  --text-primary: #1a1a1a;
-  --text-secondary: #5a6069;
-  --readout-power: #1f8a7a;
-  --readout-freq: #1a1a1a;
-  --warn-bg: #f0b429;
-  --warn-text: #241a00;
-  --led-on: #2a9d94;
-  --led-off: #d8dce0;
-  --radius: 10px;
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --border-color: #e1e4e8;
-  --button-bg: #eef0f2;
-  --button-text: #1a1a1a;
-  --button-bg-active: #2a9d94;
+  --cockpit-cyan: #0a8fc2;
+  --cockpit-magenta: #c42aa6;
+  --cockpit-green: #178a4c;
+  --cockpit-amber: #b87800;
+  --cockpit-red: #d32f2f;
+  --window-bg: #ffffff;
+  --track-bg: #e2e9f3;
+  --arc-track: #d6dfeb;
+  --readout-power: #0d1b33;
+  --readout-freq: #0d1b33;
+  --warn-bg: #f2b233;
+  --warn-text: #1a1000;
+  --led-on: #178a4c;
+  --led-off: #c3cfe0;
+  --button-bg: #f8fafd;
+  --button-text: #0a8fc2;
+  --button-bg-active: #0a8fc2;
   --button-text-active: #ffffff;
-  --zone-good: #1f8a7a;
-  --zone-warn: #b5690f;
-  --zone-danger: #c62828;
 }
 
-[data-theme="modern"] .gauge-bargraph .fill {
-  background: linear-gradient(90deg, var(--readout-power), var(--accent-label));
-  border-radius: var(--radius);
+[data-theme="modern"] {
+  --radius: 6px;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+  --zone-good: var(--cockpit-green);
+  --zone-warn: var(--cockpit-amber);
+  --zone-danger: var(--cockpit-red);
 }
 
-[data-theme="modern"] .gauge-bargraph .fill.zone-warn {
-  background: var(--zone-warn);
+/* Instrument lettering: small monospace caps, muted. */
+[data-theme="modern"] .gauge-label,
+[data-theme="modern"] .app-header h1,
+[data-theme="modern"] .gauge-peak,
+[data-theme="modern"] .gauge-ticks,
+[data-theme="modern"] .band-header {
+  font-family: var(--font-mono);
 }
 
-[data-theme="modern"] .gauge-bargraph .fill.zone-danger {
-  background: var(--zone-danger);
+[data-theme="modern"] .gauge-label {
+  text-align: left;
+  color: var(--text-secondary);
+  letter-spacing: 0.12em;
 }
 
-[data-theme="modern"] .status-chip {
-  border-radius: 999px;
-}
-
-/* A quiet signature instead of a uniform card shadow on every tile: each
-   gauge carries a left edge tinted by its own current reading, so a glance
-   down the dashboard shows which readings are elevated without reading any
-   digit - information encoded in the layout, not just decoration. */
-[data-theme="modern"] .gauge-wrapper,
-[data-theme="modern"] .gauge-hero {
-  border-left: 3px solid var(--zone-good);
-  transition: border-color 0.2s ease;
-}
-
-[data-theme="modern"] .gauge-wrapper:has(.gauge-value[data-zone="warn"]),
-[data-theme="modern"] .gauge-hero:has(.gauge-value[data-zone="warn"]) {
-  border-left-color: var(--zone-warn);
-}
-
-[data-theme="modern"] .gauge-wrapper:has(.gauge-value[data-zone="danger"]),
-[data-theme="modern"] .gauge-hero:has(.gauge-value[data-zone="danger"]) {
-  border-left-color: var(--zone-danger);
+[data-theme="modern"] .gauge-peak {
+  color: var(--text-secondary);
+  font-weight: normal;
 }
 
 [data-theme="modern"] .app-header {
   border-bottom: 1px solid var(--border-color);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="modern"] .app-header h1 {
+  color: var(--cockpit-cyan);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* --- Forward Power: smooth tape with a boxed digital readout ------------- */
+
+[data-theme="modern"] .gauge-bargraph .track {
+  background: var(--track-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+}
+
+[data-theme="modern"] .gauge-bargraph .fill {
+  /* The gradient spans the whole scale (sized to the track, not the fill),
+     so the fill's color shows how far up the scale it has reached. */
+  background: linear-gradient(90deg, var(--cockpit-green), var(--cockpit-amber) 60%, var(--cockpit-red));
+  background-size: var(--fill-scale, 100%) 100%;
+  border-radius: 2px;
+}
+
+[data-theme="modern"] .gauge-bargraph .fill.zone-warn,
+[data-theme="modern"] .gauge-bargraph .fill.zone-danger {
+  background-color: transparent;
+}
+
+/* Magenta peak bug, cyan dashed average - the avionics convention. */
+[data-theme="modern"] .gauge-bargraph .peak-marker {
+  background: var(--cockpit-magenta);
+  box-shadow: none;
+}
+
+[data-theme="modern"] .gauge-bargraph .avg-marker {
+  background: repeating-linear-gradient(180deg, var(--cockpit-cyan) 0 4px, transparent 4px 7px);
+  box-shadow: none;
+}
+
+[data-theme="modern"] [data-mounted-widget="bargraph"] .gauge-value {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  background: var(--window-bg);
+  border: 1px solid var(--cockpit-cyan);
+  border-radius: 3px;
+  padding: 0.1rem 0.6rem;
+  font-weight: 500;
+}
+
+[data-theme="modern"] .gauge-ticks {
+  color: var(--text-secondary);
+}
+
+/* --- Arc dials ------------------------------------------------------------- */
+
+.gauge-arc {
+  display: flex;
+  justify-content: center;
+}
+
+.gauge-arc svg {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+}
+
+.gauge-arc .arc-track,
+.gauge-arc .arc-fill {
+  fill: none;
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+
+.gauge-arc .arc-track {
+  stroke: var(--arc-track);
+}
+
+.gauge-arc .arc-fill {
+  stroke: var(--cockpit-cyan);
+  transition: stroke-dasharray 0.25s ease-out, stroke 0.2s;
+}
+
+.gauge-arc .arc-fill[data-zone="warn"] {
+  stroke: var(--cockpit-amber);
+}
+
+.gauge-arc .arc-fill[data-zone="danger"] {
+  stroke: var(--cockpit-red);
+}
+
+.gauge-arc .arc-peak {
+  stroke: var(--cockpit-magenta);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transform-box: view-box;
+  transition: transform 0.25s ease-out;
+}
+
+.gauge-arc .arc-window {
+  fill: var(--window-bg);
+  stroke: var(--border-color);
+}
+
+.gauge-arc .arc-value,
+.gauge-arc .arc-unit,
+.gauge-arc .arc-end {
+  font-family: var(--font-mono, monospace);
+  text-anchor: middle;
+}
+
+.gauge-arc .arc-value {
+  fill: var(--text-primary);
+  font-size: 20px;
+}
+
+.gauge-arc .arc-unit,
+.gauge-arc .arc-end {
+  fill: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* The reading is in the dial's window, so the separate value line would
+   repeat it. */
+[data-mounted-widget="arc"] .gauge-value {
+  display: none;
+}
+
+/* Full-screen fit layout: the dial scales to its cell like Classic's
+   meters do (see needle-meter.css). */
+html.fit-layout .gauge-wrapper[data-mounted-widget="arc"] {
+  display: flex;
+  flex-direction: column;
+}
+
+html.fit-layout .gauge-arc {
+  flex: 1 1 0;
+  min-height: 0;
+  container-type: size;
+  align-items: center;
+}
+
+html.fit-layout .gauge-arc svg {
+  width: min(calc(100cqw - 6px), calc((100cqh - 4px) * var(--meter-ratio, 1.33)));
+  max-width: none;
+}
+
+html.fit-layout [data-mounted-widget="arc"] .gauge-label {
+  margin: 0 0 0.1rem;
+}
+
+html.fit-layout [data-mounted-widget="arc"] .gauge-peak {
+  font-size: 0.8rem;
+  margin-top: 0;
+}
+
+/* --- Panels, status, band, buttons ---------------------------------------- */
+
+[data-theme="modern"] .gauge-wrapper,
+[data-theme="modern"] .gauge-hero,
+[data-theme="modern"] .freq-readout,
+[data-theme="modern"] .status-row,
+[data-theme="modern"] .button-bar {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+}
+
+[data-theme="modern"] .status-chip {
+  background: var(--window-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-weight: normal;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="modern"] .led-dot {
+  border-radius: 2px;
+}
+
+[data-theme="modern"] .led-dot.on {
+  box-shadow: 0 0 6px var(--led-on);
+}
+
+[data-theme="modern"] .band-atu-label {
+  color: var(--cockpit-green);
+}
+
+[data-theme="modern"] .band-range {
+  color: var(--text-primary);
+}
+
+[data-theme="modern"] .band-name,
+[data-theme="modern"] .band-antenna {
+  color: var(--cockpit-cyan);
+}
+
+[data-theme="modern"] .band-scale-track {
+  background: var(--track-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+}
+
+[data-theme="modern"] .band-scale-segment {
+  background: var(--cockpit-cyan);
+  opacity: 0.4;
+}
+
+[data-theme="modern"] .band-scale-marker {
+  background: var(--cockpit-magenta);
+}
+
+[data-theme="modern"] .band-tick {
+  font-family: var(--font-mono);
+}
+
+/* Soft keys: outlined in their state color, like an MFD's bezel keys.
+   Green = operating / ATU engaged, amber = standby / bypassed / tuning,
+   red = power off, cyan = everything else. */
+[data-theme="modern"] .acom-button {
+  background: var(--button-bg);
+  color: var(--key-color, var(--cockpit-cyan));
+  border: 1px solid var(--key-color, var(--cockpit-cyan));
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+[data-theme="modern"] .acom-button:active {
+  background: var(--key-color, var(--cockpit-cyan));
+  color: var(--bg-page);
+}
+
+[data-theme="modern"] .acom-button[data-opr-state="operate"],
+[data-theme="modern"] .acom-button[data-bypass-state="active"] {
+  --key-color: var(--cockpit-green);
+  background: var(--button-bg);
+}
+
+[data-theme="modern"] .acom-button[data-opr-state="stb"],
+[data-theme="modern"] .acom-button[data-bypass-state="bypass"],
+[data-theme="modern"] .acom-button[data-bypass-state="tuning"] {
+  --key-color: var(--cockpit-amber);
+  background: var(--button-bg);
+}
+
+/* components.css gives Power Off a solid red fill with white text by id,
+   which outranks the key rule above - restate the colors here. */
+[data-theme="modern"] #btn-power-off {
+  --key-color: var(--cockpit-red);
+  background: var(--button-bg);
+  color: var(--cockpit-red);
+  border-color: var(--cockpit-red);
 }

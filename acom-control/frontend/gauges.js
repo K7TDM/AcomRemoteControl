@@ -2,10 +2,12 @@
 // re-mount on theme switch. See PI_CONTROL_PLAN.md "UI Design - Themes"
 // / "Component architecture".
 
+// Modern's Forward Power stays a bargraph "tape" (app.js forces the hero's
+// widget outside Classic); its other gauges are arc dials.
 const GAUGE_WIDGET_BY_THEME = {
   acom: "bargraph",
   classic: "needle",
-  modern: "bargraph",
+  modern: "arc",
 };
 
 // Segmented (ACOM) vs. smooth-gradient (Modern) fill for the shared bargraph
@@ -66,6 +68,8 @@ export function mountGauge(el, themeStyle, opts, forceWidget) {
   let bodyEl;
   if (widget === "needle") {
     bodyEl = renderNeedleGauge(opts);
+  } else if (widget === "arc") {
+    bodyEl = renderArcGauge(opts);
   } else if (widget === "plain") {
     bodyEl = renderPlainGauge();
   } else {
@@ -92,6 +96,8 @@ export function updateGauge(el, value, peak, avg) {
   mounted.valueEl.dataset.zone = zoneForFraction(fraction(mounted.opts));
   if (mounted.widget === "needle") {
     updateNeedleGauge(mounted.bodyEl, mounted.opts);
+  } else if (mounted.widget === "arc") {
+    updateArcGauge(mounted.bodyEl, mounted.opts);
   } else if (mounted.widget === "bargraph") {
     updateBargraphGauge(mounted.bodyEl, mounted.opts);
   }
@@ -130,6 +136,10 @@ function buildBargraphFill(track, opts, style) {
     const fill = document.createElement("div");
     fill.className = "fill zone-" + zoneForFraction(frac);
     fill.style.width = `${frac * 100}%`;
+    // Lets a theme size a gradient to the whole scale rather than to the
+    // fill, so the fill's color reflects how far up the scale it reaches
+    // (Modern's green-amber-red tape - see themes/modern.css).
+    fill.style.setProperty("--fill-scale", frac > 0 ? `${Math.round(10000 / frac) / 100}%` : "100%");
     track.appendChild(fill);
   } else {
     const filledCount = Math.round(frac * BARGRAPH_SEGMENT_COUNT);
@@ -201,6 +211,67 @@ function renderPlainGauge() {
   const el = document.createElement("div");
   el.className = "gauge-plain";
   return el;
+}
+
+// --- Arc dial (Modern: "glass cockpit") ---------------------------------------
+// A 240-degree arc like an avionics engine gauge, with the reading in a boxed
+// window at its center and a magenta peak bug on the arc. Colors are the
+// --arc-* variables in themes/modern.css. The filled part of the arc is one
+// path with pathLength=100, so the fill is just a stroke-dasharray; the peak
+// bug is drawn at 12 o'clock and rotated about the arc's center.
+
+const ARC_W = 200;
+const ARC_H = 150;
+const ARC_CX = 100;
+const ARC_CY = 86;
+const ARC_R = 64;
+const ARC_SWEEP = 120; // degrees each side of 12 o'clock
+
+function arcPoint(r, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  const round = (v) => Math.round(v * 10) / 10;
+  return [round(ARC_CX + r * Math.sin(rad)), round(ARC_CY - r * Math.cos(rad))];
+}
+
+function renderArcGauge(opts) {
+  const { min = 0, max = 100 } = opts;
+  const [x1, y1] = arcPoint(ARC_R, -ARC_SWEEP);
+  const [x2, y2] = arcPoint(ARC_R, ARC_SWEEP);
+  const d = `M ${x1} ${y1} A ${ARC_R} ${ARC_R} 0 1 1 ${x2} ${y2}`;
+  const unit = METER_UNIT_WORDS[opts.unit] ?? opts.unit ?? "";
+  const wrapper = document.createElement("div");
+  wrapper.className = "gauge-arc";
+  wrapper.innerHTML = `
+    <svg viewBox="0 0 ${ARC_W} ${ARC_H}" role="img" aria-label="${opts.label || "Gauge"}" style="--meter-ratio: ${Math.round((ARC_W / ARC_H) * 1000) / 1000}">
+      <path class="arc-track" d="${d}" />
+      <path class="arc-fill" d="${d}" pathLength="100" data-arc-fill />
+      <line class="arc-peak" x1="${ARC_CX}" y1="${ARC_CY - ARC_R - 9}" x2="${ARC_CX}" y2="${ARC_CY - ARC_R + 9}"
+            style="transform-origin: ${ARC_CX}px ${ARC_CY}px" data-arc-peak />
+      <rect class="arc-window" x="${ARC_CX - 40}" y="${ARC_CY - 19}" width="80" height="32" rx="3" />
+      <text class="arc-value" x="${ARC_CX}" y="${ARC_CY + 5}" data-arc-value></text>
+      <text class="arc-unit" x="${ARC_CX}" y="${ARC_CY + 34}">${unit}</text>
+      <text class="arc-end" x="${x1 - 2}" y="${y1 + 20}">${formatScaleNumber(min)}</text>
+      <text class="arc-end" x="${x2 + 2}" y="${y2 + 20}">${formatScaleNumber(max)}</text>
+    </svg>`;
+  updateArcGauge(wrapper, opts);
+  return wrapper;
+}
+
+function updateArcGauge(bodyEl, opts) {
+  const frac = fraction(opts);
+  const fill = bodyEl.querySelector("[data-arc-fill]");
+  if (fill) {
+    fill.style.strokeDasharray = `${Math.max(frac * 100, 0.5)} 100`;
+    fill.dataset.zone = zoneForFraction(frac);
+  }
+  const peak = bodyEl.querySelector("[data-arc-peak]");
+  if (peak) {
+    const show = opts.peak !== null && opts.peak !== undefined && !Number.isNaN(opts.peak);
+    peak.style.visibility = show ? "visible" : "hidden";
+    if (show) peak.style.transform = `rotate(${-ARC_SWEEP + fraction({ ...opts, value: opts.peak }) * 2 * ARC_SWEEP}deg)`;
+  }
+  const valueEl = bodyEl.querySelector("[data-arc-value]");
+  if (valueEl) valueEl.textContent = formatValue(opts.value, "");
 }
 
 // --- Window meter (Classic) --------------------------------------------------
