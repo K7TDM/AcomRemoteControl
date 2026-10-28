@@ -14,6 +14,30 @@ html, body {
   min-height: 100vh;
 }
 
+/* Kiosk display on the Pi's own screen (?kiosk=1 - see index.html and
+   app.js's initKioskMode()). The cursor stays hidden until a real mouse is
+   used; touch never shows it. No text selection, long-press menu, tap
+   highlight or rubber-band scrolling - it should feel like an instrument,
+   not a web page. Form fields still take text. */
+html.kiosk-cursor-hidden,
+html.kiosk-cursor-hidden * {
+  cursor: none !important;
+}
+
+html.kiosk {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+html.kiosk input,
+html.kiosk textarea,
+html.kiosk select {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .app-header {
   position: relative;
   display: flex;

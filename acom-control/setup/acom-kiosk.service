@@ -1,0 +1,43 @@
+# The dashboard full screen on the Pi's attached display (official
+# touchscreen or HDMI monitor), on Raspberry Pi OS Lite - no desktop needed.
+# Runs cage, a single-app Wayland display server, on tty1 as the install
+# user, with Chromium inside it (/usr/local/bin/acom-kiosk).
+#
+# Installed by `install.sh --kiosk`, which fills in __KIOSK_USER__. To turn
+# the kiosk off:  sudo systemctl disable --now acom-kiosk
+# (tty1 gets its normal login prompt back on the next boot).
+
+[Unit]
+Description=ACOM dashboard kiosk (Chromium full screen on the attached display)
+After=acom-control.service systemd-user-sessions.service plymouth-quit-wait.service
+Wants=acom-control.service
+# Takes over tty1 from the text login prompt.
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+
+[Service]
+User=__KIOSK_USER__
+# A real login session (via logind) is what gives cage access to the
+# display, input devices and a runtime directory.
+PAMName=login
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+Environment=XDG_SESSION_TYPE=wayland
+# Start even with no keyboard, mouse or touchscreen attached - otherwise
+# cage refuses to start on a Pi with just a monitor.
+Environment=WLR_LIBINPUT_NO_DEVICES=1
+# -s: allow switching to a text console with Ctrl+Alt+F2 etc. if a
+# keyboard is plugged in.
+ExecStart=/usr/bin/cage -s -- /usr/local/bin/acom-kiosk
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

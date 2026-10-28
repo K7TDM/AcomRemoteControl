@@ -305,6 +305,7 @@ function connectWebSocket() {
 
   ws.addEventListener("open", () => {
     wsReconnectDelayMs = 1000;
+    reloadIfBackendUpdated();
   });
 
   ws.addEventListener("message", (event) => {
@@ -1694,14 +1695,62 @@ async function waitForUpdateRestart(beforeCommit, statusEl, button) {
 // Boot
 // =============================================================================
 
+// =============================================================================
+// Kiosk display (?kiosk=1 - the Pi's own screen, see setup/acom-kiosk.sh)
+// =============================================================================
+
+// How long the cursor stays visible after the mouse last moved.
+const KIOSK_CURSOR_IDLE_MS = 4000;
+
+// index.html already hid the cursor before first paint; this shows it while
+// a real mouse is in use and hides it again when the mouse goes idle.
+// pointerType tells a mouse apart from a finger, so touching the screen
+// never brings the cursor up - and it works the same whether the mouse was
+// plugged in at boot or later.
+function initKioskMode() {
+  const root = document.documentElement;
+  if (!root.classList.contains("kiosk")) return;
+  let hideTimer = null;
+  document.addEventListener(
+    "pointermove",
+    (event) => {
+      if (event.pointerType !== "mouse") return;
+      root.classList.remove("kiosk-cursor-hidden");
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => root.classList.add("kiosk-cursor-hidden"), KIOSK_CURSOR_IDLE_MS);
+    },
+    { passive: true },
+  );
+  // A long press on a touchscreen would otherwise open the browser's menu.
+  document.addEventListener("contextmenu", (event) => event.preventDefault());
+}
+
+// The backend commit this page was loaded against. When the WebSocket
+// reconnects after the backend restarts on a different commit (an update,
+// from any device), reload so this page runs the matching dashboard code -
+// mostly for the kiosk screen, which nobody would otherwise refresh.
+let loadedBackendCommit = null;
+
+async function reloadIfBackendUpdated() {
+  if (!loadedBackendCommit) return;
+  try {
+    const cfg = await (await fetch("/api/config")).json();
+    if (cfg.git_commit && cfg.git_commit !== loadedBackendCommit) window.location.reload();
+  } catch {
+    // Backend not fully up yet - the next reconnect checks again.
+  }
+}
+
 async function boot() {
   initThemeSwitcher();
+  initKioskMode();
   updateFitMode();
   appState.display = DEFAULT_DISPLAY_PANELS;
   wireControls();
   try {
     const cfg = await (await apiFetch("/api/config")).json();
     if (Array.isArray(cfg.display)) appState.display = cfg.display;
+    loadedBackendCommit = cfg.git_commit || null;
   } catch {
     // Keep the default layout - the dashboard still works.
   }

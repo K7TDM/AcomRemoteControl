@@ -19,6 +19,13 @@
         document.documentElement.setAttribute("data-theme", "acom");
         document.documentElement.setAttribute("data-mode", "dark");
       }
+      // Kiosk display on the Pi's own screen (setup/acom-kiosk.sh opens
+      // ?kiosk=1): start with the cursor hidden, before first paint, so it
+      // never flashes up on a touch-only screen. app.js shows it while a
+      // real mouse is in use.
+      if (/[?&]kiosk=1\b/.test(location.search)) {
+        document.documentElement.classList.add("kiosk", "kiosk-cursor-hidden");
+      }
     })();
   </script>
 
