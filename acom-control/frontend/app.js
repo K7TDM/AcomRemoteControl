@@ -719,11 +719,17 @@ function mountOrUpdateGauge(el, def, telemetry, theme, forceWidget) {
   // in the same pass that updates the badge below it.
   const peak = updatePeak(def.id, value);
   const avg = updateTxAverage(def.id, value);
-  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain, peak, avg };
+  // Full-width panels get the Classic meter's wide, short edgewise shape
+  // (see gauges.js METER_GEOMETRY); a width change in Display settings
+  // remounts the meter in the new shape.
+  const wide = el.dataset.width === "full";
+  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain, peak, avg, wide };
   const widget = resolveWidget(theme, opts, forceWidget);
+  const shape = widget === "needle" && wide ? "wide" : "standard";
 
-  if (el.dataset.mountedWidget !== widget) {
+  if (el.dataset.mountedWidget !== widget || el.dataset.meterShape !== shape) {
     el.dataset.mountedWidget = widget;
+    el.dataset.meterShape = shape;
     mountGauge(el, theme, opts, forceWidget);
   } else {
     updateGauge(el, value, peak, avg);
