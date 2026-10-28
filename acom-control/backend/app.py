@@ -1342,10 +1342,16 @@ async def set_antenna_config(req: AntennaConfigRequest) -> dict:
     ordered = sorted(slots, key=lambda s: s.number)
     names = [s.name for s in ordered]
 
-    names_result = await link.send_command(protocol.build_set_antenna_names(names))
+    # The amp answers these writes by sending back the stored table (0x1B
+    # for names - confirmed on real hardware, never an OK), so that
+    # read-back counts as confirmation. 0x18 for assignments is assumed to
+    # work the same way; an OK still counts if it sends one instead.
+    names_result = await link.send_command(protocol.build_set_antenna_names(names), echo_address=0x1B)
     if not names_result.ok:
         raise HTTPException(502, f"amplifier did not confirm antenna names (param=0x{names_result.param:04X})")
-    assignments_result = await link.send_command(protocol.build_set_antenna_assignments(ordered))
+    assignments_result = await link.send_command(
+        protocol.build_set_antenna_assignments(ordered), echo_address=0x18
+    )
     if not assignments_result.ok:
         raise HTTPException(502, f"amplifier did not confirm antenna assignments (param=0x{assignments_result.param:04X})")
     # Refresh AmpState from the amp's own echo rather than trusting the

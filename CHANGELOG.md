@@ -24,6 +24,15 @@ first, then get moved under a version heading below when tagged.
   "A1R - DXC", using the names set in Setup -> Antenna Setup. Antennas
   without a name still show just "A1R".
 
+### Fixed
+- Antenna Setup's Save reported "amplifier did not confirm antenna
+  names" even though the amp took them, and so never sent the band
+  assignments. The amp confirms by sending the names back rather than
+  an OK; that now counts.
+- Antenna Setup showed the wrong bands for each antenna (and would have
+  written them wrong): the amp's band bytes are low byte first. An
+  antenna set to every band now shows every band.
+
 ## [0.1.10] - 2026-10-27
 
 ### Added

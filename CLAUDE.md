@@ -130,6 +130,17 @@ the "10AS" model name) — see the discrepancy noted below.
   amp-status sections). Identical 16-byte layout to `0x18` ("Similar to
   Message 0x18" per the doc), just the opposite direction — this is the
   actual "write the band↔antenna matrix" command.
+- **Band bytes are low byte first (confirmed 2026-10-27).** A real 1200S
+  sent `0x18` = `01 01 01 01 ff 07 00 00 00 00 ff 07`: `ff 07` read
+  low-first is `0x7FF`, exactly the 11 bands. `protocol.py` used to read
+  (and write) them high-first, which garbled Antenna Setup's band list.
+- **Writes are confirmed by a read-back, not OK (confirmed 2026-10-27 for
+  names).** A `0x85` names write is never answered with `0x03`; the amp
+  sends back `0x1B` with the names it stored, ~150ms later. So
+  `send_command(..., echo_address=0x1B)` counts that as confirmation.
+  Before this, Save sent the names 5 times, returned 502, and never sent
+  the `0xA0` assignments. `0xA0` is assumed to answer with `0x18` the same
+  way (an OK also counts) - NEEDS REAL-HARDWARE VERIFICATION.
 - **Antenna switching (cycle only):** `0x81` Cmd `0x09` Byte5=`0x30`
   "Next Antenna" — confirmed there is no "Previous Antenna" counterpart,
   only Next Band/Previous Band/Next Segment/Previous Segment/Next Antenna.

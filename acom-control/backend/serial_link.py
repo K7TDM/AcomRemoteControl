@@ -108,6 +108,10 @@ class SerialLink:
         # message retry model (see protocol.build_ack's docstring).
         self._confirmation_lock = asyncio.Lock()
         self._pending_confirmation: "Optional[asyncio.Future[protocol.CommandAck]]" = None
+        # Set while a send_command(echo_address=...) is in flight: the
+        # read-back message that also counts as the amp's confirmation,
+        # plus the payload we wrote, to log a mismatch against.
+        self._pending_echo: Optional[tuple[int, bytes]] = None
 
     async def start(self) -> None:
         self._open_port()
@@ -230,11 +234,18 @@ class SerialLink:
         frame: bytes,
         max_attempts: int = COMMAND_MAX_ATTEMPTS,
         timeout_s: float = COMMAND_CONFIRM_TIMEOUT_S,
+        echo_address: Optional[int] = None,
     ) -> protocol.CommandAck:
         """Writes `frame` and waits for the amp's 0x03 (OK) / 0x04 (ERR) -
         or 0x01 malformed-reply - response, resending up to `max_attempts`
         times on timeout before giving up (doc section 1: unconfirmed
         messages are resent, discarded after the fifth attempt).
+
+        `echo_address`: some writes are never answered with OK/ERR - the
+        amp answers by sending back the matching read message instead
+        (confirmed 2026-10-27: a 0x85 antenna-names write gets a 0x1B
+        carrying the names just written, never a 0x03). A frame at that
+        address then counts as OK too.
 
         Writes directly (bypassing the pacing queue) rather than going
         through `enqueue()`, so the confirmation-wait window isn't skewed
@@ -250,6 +261,8 @@ class SerialLink:
                 loop = asyncio.get_running_loop()
                 fut: "asyncio.Future[protocol.CommandAck]" = loop.create_future()
                 self._pending_confirmation = fut
+                # frame = start, address, length, payload..., checksum
+                self._pending_echo = (echo_address, frame[3:-1]) if echo_address is not None else None
                 try:
                     assert self._serial is not None
                     self._serial.write(frame)
@@ -257,6 +270,7 @@ class SerialLink:
                 except Exception:
                     logger.exception("Failed writing confirmed frame to serial port")
                     self._pending_confirmation = None
+                    self._pending_echo = None
                     await asyncio.sleep(INTER_MESSAGE_PACING_S)
                     continue
                 try:
@@ -270,6 +284,7 @@ class SerialLink:
                 finally:
                     if self._pending_confirmation is fut:
                         self._pending_confirmation = None
+                        self._pending_echo = None
                     await asyncio.sleep(INTER_MESSAGE_PACING_S)
             logger.error("Command not confirmed after %d attempts, giving up: %s", max_attempts, frame.hex(" "))
             return protocol.CommandAck(ok=False, param=0)
@@ -439,6 +454,17 @@ class SerialLink:
                     fut.set_result(protocol.parse_err(frame))
                 else:
                     fut.set_result(protocol.parse_malformed_reply(frame))
+        elif self._pending_echo is not None and frame.address == self._pending_echo[0]:
+            fut = self._pending_confirmation
+            if fut is not None and not fut.done():
+                if frame.data != self._pending_echo[1]:
+                    # Still the amp's answer - it's what it actually stored,
+                    # and _on_frame below puts that into AmpState.
+                    logger.warning(
+                        "0x%02X read-back differs from what was written: %s",
+                        frame.address, frame.data.hex(" "),
+                    )
+                fut.set_result(protocol.CommandAck(ok=True, param=0))
         if self._on_frame is not None:
             try:
                 self._on_frame(frame)
