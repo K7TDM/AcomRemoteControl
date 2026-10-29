@@ -105,6 +105,28 @@ sed \
   -e "s#^Environment=PATH=.*#Environment=PATH=$VENV_DIR/bin:/usr/bin:/bin#" \
   -e "s#^ExecStart=.*#ExecStart=$VENV_DIR/bin/uvicorn backend.app:app --host 0.0.0.0 --port 8000#" \
   "$SERVICE_SRC" | sudo tee "$SERVICE_DST" >/dev/null
+
+echo "==> Giving the acom-control service account access to the repo and venv"
+# The repo and venv live under this user's home, but the service runs as
+# acom-control. Current Raspberry Pi OS creates home directories as 0700,
+# so without this systemd can't even chdir into WorkingDirectory and the
+# service crash-loops with status=200/CHDIR. o+x (traverse only, not
+# list) on every directory above the repo and venv is all it needs - the
+# repo and venv themselves are already world-readable.
+for dir in "$REPO_DIR" "$VENV_DIR"; do
+  dir="$(dirname "$dir")"
+  while [[ "$dir" != "/" ]]; do
+    sudo chmod o+x "$dir"
+    dir="$(dirname "$dir")"
+  done
+done
+# The Setup screen saves config.json in place as acom-control. The service
+# runs with Group=dialout, which this user was added to above too, so a
+# group-writable file stays editable by both.
+CONFIG_FILE="$REPO_DIR/acom-control/config.json"
+sudo chgrp dialout "$CONFIG_FILE"
+sudo chmod 664 "$CONFIG_FILE"
+
 sudo systemctl daemon-reload
 sudo systemctl enable acom-control
 # Opening the serial port raises DTR, which has been observed to toggle
