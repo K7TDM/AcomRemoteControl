@@ -20,6 +20,12 @@ Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
 ### Fixed
+- After a fresh install on a new SD card the dashboard never started
+  (the service crash-looped with `status=200/CHDIR`): current Raspberry
+  Pi OS locks home folders to their owner, so the `acom-control` service
+  account couldn't reach the app or its venv. `install.sh` now opens the
+  home folder for traversal and makes `config.json` writable by the
+  service, so Setup-screen changes save too.
 - Buzzer Test only played the "K" of "K7TDM TEST": the amp plays one
   Morse character at a time and ignores any sent while it's busy. The
   Pi now times the characters itself at 15 WPM (about 7.5 seconds for
