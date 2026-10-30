@@ -30,6 +30,12 @@ first, then get moved under a version heading below when tagged.
   updated service file adds.
 
 ### Fixed
+- The kiosk screen showed a mouse arrow with no mouse attached: cage,
+  the kiosk's display server, drew its own cursor, which the page can't
+  hide. Cage now gets an invisible cursor theme; a real mouse still
+  shows an arrow, hidden again after a few seconds without movement.
+  Takes effect on the next reboot after updating (or
+  `sudo systemctl restart acom-kiosk`).
 - Power On could leave the dashboard stuck refusing Power On ("power
   state is unknown", 409) until the service was restarted: if the power
   pulse got no reply (amp unplugged, mains off), nothing ever resolved
