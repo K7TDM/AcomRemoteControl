@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.15] - 2026-10-29
+
 ### Added
 - Alarm sounds in the browser: when the amp shows a new alarm, the
   dashboard plays it in Morse like the amp's buzzer - W for a warning, S
