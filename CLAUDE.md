@@ -429,6 +429,16 @@ frame. Key ones:
    pulse branches it unlocks, which are confirmed) hasn't been exercised
    against a real ambiguous-comms-loss event on the amp yet.
 
+   **Second dead end, found live 2026-10-29 and fixed:** that timer only
+   starts on a comms on→off transition. A Power On pulse sets
+   `"unknown"` too, and if the amp never answers (it was unplugged)
+   comms never come up, so nothing ever resolved it - Power On returned
+   409 until a service restart. `set_power()` now also spawns
+   `_assume_off_after_timeout()` after the pulse, with a longer
+   `POWER_ON_ASSUME_OFF_AFTER_S` = 15s (amp boot time + the ~5s
+   handshake resend). Same trade-off as above: a pulse that *did* wake
+   the amp over a dead RX line would be wrongly concluded "off".
+
    **Applied:** real-hardware testing (2026-10-20) found a front-panel
    power-off took up to ~20s to show up in the UI - the comms watchdog's
    own 10s detection window (item 7 below) plus this 10s grace period,

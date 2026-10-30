@@ -279,6 +279,11 @@ def _maybe_apply_detected_amp_model(identity: protocol.AmplifierIdentity) -> Non
 
 
 ASSUME_OFF_AFTER_S = 3.0
+# After a Power On pulse: how long to wait for the amp to boot and start
+# replying before concluding the pulse didn't wake it (unplugged, mains
+# off, ...). Longer than ASSUME_OFF_AFTER_S - the amp's CPU needs time to
+# come up and the handshake only re-sends every ~5s.
+POWER_ON_ASSUME_OFF_AFTER_S = 15.0
 
 
 def _on_comms_change(ok: bool) -> None:
@@ -301,12 +306,10 @@ def _on_comms_change(ok: bool) -> None:
     _spawn(ws_manager.broadcast(amp_state.to_dict()))
 
 
-async def _assume_off_after_timeout() -> None:
-    await asyncio.sleep(ASSUME_OFF_AFTER_S)
+async def _assume_off_after_timeout(delay_s: float = ASSUME_OFF_AFTER_S, reason: str = "losing comms") -> None:
+    await asyncio.sleep(delay_s)
     if amp_state.power_state == "unknown":
-        backend_logger.info(
-            "No reply within %.0fs of losing comms - assuming amplifier is off", ASSUME_OFF_AFTER_S
-        )
+        backend_logger.info("No reply within %.0fs of %s - assuming amplifier is off", delay_s, reason)
         amp_state.mark_power_off_confirmed()
         _spawn(ws_manager.broadcast(amp_state.to_dict()))
 
@@ -574,6 +577,11 @@ async def set_power(req: PowerRequest) -> dict:
             # recovery window doesn't rely on a now-stale "off" belief
             # and double-pulse.
             amp_state.power_state = "unknown"
+            # Comms were never up, so _on_comms_change() won't fire its own
+            # assume-off timer if the pulse didn't wake the amp - without
+            # this, "unknown" stuck forever and Power On returned 409 until
+            # a service restart (seen live 2026-10-29 with the amp unplugged).
+            _spawn(_assume_off_after_timeout(POWER_ON_ASSUME_OFF_AFTER_S, "a Power On pulse"))
             return {"ok": True, "pulsed": True}
         if amp_state.power_state == "unknown":
             raise HTTPException(

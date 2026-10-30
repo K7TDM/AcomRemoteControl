@@ -20,6 +20,11 @@ Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
 ### Fixed
+- Power On could leave the dashboard stuck refusing Power On ("power
+  state is unknown", 409) until the service was restarted: if the power
+  pulse got no reply (amp unplugged, mains off), nothing ever resolved
+  the state. It now falls back to "off" after 15s with no reply, so
+  Power On can be tried again.
 - After a fresh install on a new SD card the dashboard never started
   (the service crash-looped with `status=200/CHDIR`): current Raspberry
   Pi OS locks home folders to their owner, so the `acom-control` service
