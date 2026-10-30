@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.14] - 2026-10-29
+
 ### Added
 - Screen dimming: after 10 minutes with no touch and no key-up, the
   dashboard dims to 5% - the Pi touchscreen's real backlight on the
