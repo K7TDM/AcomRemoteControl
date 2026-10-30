@@ -235,6 +235,11 @@
           <input type="checkbox" id="setup-alarm-sounds" />
           Play the amp's alarms in this browser
         </label>
+        <label class="brightness-setting">
+          Volume
+          <input type="range" id="setup-alarm-volume" min="5" max="100" step="5" value="60" />
+          <output id="setup-alarm-volume-value" for="setup-alarm-volume">60%</output>
+        </label>
         <p class="danger-warning">
           In Morse, like the amp's own buzzer: W for a warning, S for a soft
           fault, a series of F for a hard fault. Each device decides for
