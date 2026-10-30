@@ -258,6 +258,51 @@
   margin: 0.25rem 0;
 }
 
+/* Setup -> Display: the Pi screen's brightness slider, under the kiosk
+   switch. */
+.brightness-setting {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.brightness-setting input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent-label);
+}
+
+.brightness-setting output {
+  min-width: 3.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inactivity dimming (app.js's initIdleDim()). Covers the whole page while
+   dimmed: it darkens the page to ~5% where there's no hardware backlight
+   to turn down (a remote browser, an HDMI monitor), and either way it
+   catches the waking touch, so that touch doesn't also press whatever
+   button was under the finger. */
+.idle-dim-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.5s ease;
+}
+
+html.idle-dimmed .idle-dim-overlay,
+html.idle-waking .idle-dim-overlay {
+  pointer-events: auto;
+}
+
+html.idle-dimmed:not(.idle-dim-hardware) .idle-dim-overlay {
+  opacity: 0.95;
+}
+
 /* Setup -> Display: one row per dashboard panel - grab handle, name,
    Show toggle, width selector. */
 .display-panel-list {

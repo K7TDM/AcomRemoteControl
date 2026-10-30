@@ -203,6 +203,17 @@
           Show the dashboard on the Pi's display
         </label>
         <p id="setup-kiosk-status" class="danger-warning"></p>
+        <!-- Pi touchscreen backlight - see app.js's renderBrightnessSetting()
+             and POST /api/display/brightness. -->
+        <label class="brightness-setting">
+          Screen brightness
+          <input type="range" id="setup-brightness" min="10" max="100" step="5" value="100" />
+          <output id="setup-brightness-value" for="setup-brightness">100%</output>
+        </label>
+        <p id="setup-brightness-status" class="danger-warning">
+          The screen dims to 5% after 10 minutes with no touch and no key-up;
+          a touch or key-up brings it back.
+        </p>
       </div>
 
       <h3>Gauges</h3>
@@ -358,6 +369,9 @@
       <button id="btn-update-close" class="acom-button" type="button">Close</button>
     </div>
   </section>
+
+  <!-- Inactivity dimming - see app.js's initIdleDim(). -->
+  <div id="idle-dim-overlay" class="idle-dim-overlay" aria-hidden="true"></div>
 
   <script type="module" src="app.js?v={{ASSET_VERSION}}"></script>
 </body>

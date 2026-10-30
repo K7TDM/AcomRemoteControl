@@ -27,9 +27,11 @@ from . import protocol
 from .amp_profiles import AMP_PROFILES, AMP_TYPE_CODE_TO_MODEL, TUNER_MODELS, get_amp_profile
 from .amp_state import AmpState
 from .config import (
+    DISPLAY_BRIGHTNESS_MIN,
     DISPLAY_PANEL_DEFAULTS,
     AppConfig,
     load_config,
+    normalize_display_brightness,
     normalize_display_panels,
     validate_config,
 )
@@ -796,6 +798,9 @@ def _config_response() -> dict:
         "available_amp_models": sorted(AMP_PROFILES),
         "available_tuner_models": list(TUNER_MODELS),
         "display": config.display.panels,
+        "brightness": config.display.brightness,
+        "brightness_min": DISPLAY_BRIGHTNESS_MIN,
+        "backlight_available": _backlight_device() is not None,
         "kiosk": _kiosk_status(),
     }
 
@@ -885,6 +890,73 @@ async def set_display(req: DisplayRequest) -> dict:
     config.display.panels = normalize_display_panels([p.model_dump() for p in req.panels])
     config.save()
     return {"display": config.display.panels}
+
+
+# =============================================================================
+# Pi display backlight: Setup -> Display's brightness slider, and the kiosk's
+# inactivity dimming (app.js's initIdleDim() - the kiosk page decides when to
+# dim, since it's the one that sees touches and key-ups; this just drives the
+# hardware). The official touchscreen exposes /sys/class/backlight/<dev>;
+# an HDMI monitor has nothing there, and the kiosk falls back to dimming
+# the page itself. Writing it needs the video group - see
+# setup/acom-control.service's SupplementaryGroups.
+# =============================================================================
+
+BACKLIGHT_DIR = Path("/sys/class/backlight")
+BACKLIGHT_DIM_PERCENT = 5
+_backlight_dimmed = False
+
+
+def _backlight_device() -> Optional[Path]:
+    try:
+        devices = sorted(BACKLIGHT_DIR.iterdir())
+    except OSError:
+        return None
+    return devices[0] if devices else None
+
+
+def _apply_backlight() -> bool:
+    """Sets the backlight to the dim level or the saved brightness. Returns
+    whether that worked, so the kiosk knows to dim the page itself instead."""
+    device = _backlight_device()
+    if device is None:
+        return False
+    percent = BACKLIGHT_DIM_PERCENT if _backlight_dimmed else config.display.brightness
+    try:
+        max_level = int((device / "max_brightness").read_text())
+        level = max(1, round(max_level * percent / 100))
+        (device / "brightness").write_text(f"{level}\n")
+    except (OSError, ValueError) as exc:
+        backend_logger.warning("Could not set the Pi display backlight (%s): %s", device, exc)
+        return False
+    return True
+
+
+class BrightnessRequest(BaseModel):
+    brightness: int
+
+
+@app.post("/api/display/brightness")
+async def set_display_brightness(req: BrightnessRequest) -> dict:
+    """Saves the slider's brightness and applies it right away (unless the
+    screen is currently dimmed - then it applies on the next wake)."""
+    config.display.brightness = normalize_display_brightness(req.brightness)
+    config.save()
+    applied = _apply_backlight()
+    return {"brightness": config.display.brightness, "backlight": applied}
+
+
+class BacklightRequest(BaseModel):
+    dimmed: bool
+
+
+@app.post("/api/display/backlight")
+async def set_display_backlight(req: BacklightRequest) -> dict:
+    """The kiosk's inactivity dim/wake. Not saved - a restart comes back at
+    the saved brightness, and the kiosk page re-sends this when it loads."""
+    global _backlight_dimmed
+    _backlight_dimmed = req.dimmed
+    return {"backlight": _apply_backlight()}
 
 
 # =============================================================================
