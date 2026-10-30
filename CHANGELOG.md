@@ -24,6 +24,9 @@ first, then get moved under a version heading below when tagged.
   so it can't be hit by accident while operating. It's greyed out while
   the amp isn't on. This also stops the Classic theme's buttons getting
   cut off on the Pi's 800x480 touchscreen.
+- Settings -> Display's brightness slider is now "Kiosk brightness" and
+  only shows on the kiosk screen itself, so a phone or desktop browser
+  can't change the Pi screen's brightness by accident.
 - Classic theme: much larger numbers, unit and reading on the meters -
   the scale numbers were about 6px tall on the Pi touchscreen. The end
   numbers on the small meters no longer sit on the red zone.
