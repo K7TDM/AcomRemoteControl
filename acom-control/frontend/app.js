@@ -835,6 +835,8 @@ const BRIGHTNESS_SAVE_DEBOUNCE_MS = 250;
 let brightnessSaveTimer = null;
 
 function renderBrightnessSetting(cfg) {
+  const group = document.getElementById("setup-brightness-group");
+  if (group) group.hidden = !isKiosk();
   const slider = document.getElementById("setup-brightness");
   // Not while a save is pending - that would snap the slider back mid-drag.
   if (!slider || brightnessSaveTimer) return;
