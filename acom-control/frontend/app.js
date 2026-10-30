@@ -1957,11 +1957,15 @@ function initIdleDim() {
 // stand-in. Synthesized with Web Audio, so no sound files; on/off per
 // browser in Setup -> Display.
 const ALARM_SOUNDS_STORAGE_KEY = "acom.alarmSounds";
+const ALARM_VOLUME_STORAGE_KEY = "acom.alarmVolume";
 const ALARM_MORSE = { warning: "W", soft_fault: "S", hard_fault: "FFF" };
 const MORSE_CODE = { F: "..-.", S: "...", W: ".--" };
 const ALARM_TONE_HZ = 1000;
 const ALARM_WPM = 15;
-const ALARM_VOLUME = 0.3;
+// The volume slider's 100% - the level these first shipped at, which Tyler
+// found a bit loud, hence the slider (default 60%, per browser).
+const ALARM_MAX_GAIN = 0.3;
+const ALARM_DEFAULT_VOLUME = 60;
 let alarmAudioCtx = null;
 let lastAlarmCode = null;
 
@@ -1979,6 +1983,30 @@ function saveAlarmSoundsEnabled(enabled) {
   } catch {
     // Private window etc. - the checkbox still works until the page reloads.
   }
+}
+
+function loadAlarmVolume() {
+  try {
+    const saved = Number(localStorage.getItem(ALARM_VOLUME_STORAGE_KEY));
+    return saved >= 5 && saved <= 100 ? saved : ALARM_DEFAULT_VOLUME;
+  } catch {
+    return ALARM_DEFAULT_VOLUME;
+  }
+}
+
+function saveAlarmVolume(percent) {
+  try {
+    localStorage.setItem(ALARM_VOLUME_STORAGE_KEY, String(percent));
+  } catch {
+    // Private window etc. - the slider still works until the page reloads.
+  }
+}
+
+// Squared, so the slider's lower half isn't all "barely quieter": loudness
+// is heard roughly logarithmically, and a straight line puts most of the
+// audible change at the bottom of the travel.
+function alarmGain() {
+  return ALARM_MAX_GAIN * (loadAlarmVolume() / 100) ** 2;
 }
 
 // Browsers only let a page make sound once it's been tapped or clicked, so
@@ -2000,6 +2028,7 @@ function playMorse(text) {
   const ctx = alarmAudioCtx;
   if (!ctx) return;
   const dit = 1.2 / ALARM_WPM;
+  const volume = alarmGain();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.frequency.value = ALARM_TONE_HZ;
@@ -2015,8 +2044,8 @@ function playMorse(text) {
       const len = element === "-" ? dit * 3 : dit;
       // 5ms ramps, so each tone doesn't start and stop with a click.
       gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(ALARM_VOLUME, t + 0.005);
-      gain.gain.setValueAtTime(ALARM_VOLUME, t + len - 0.005);
+      gain.gain.linearRampToValueAtTime(volume, t + 0.005);
+      gain.gain.setValueAtTime(volume, t + len - 0.005);
       gain.gain.linearRampToValueAtTime(0, t + len);
       t += len + dit;
     }
@@ -2046,6 +2075,18 @@ function initAlarmSounds() {
   if (checkbox) {
     checkbox.checked = loadAlarmSoundsEnabled();
     checkbox.addEventListener("change", () => saveAlarmSoundsEnabled(checkbox.checked));
+  }
+  const volume = document.getElementById("setup-alarm-volume");
+  if (volume) {
+    volume.value = loadAlarmVolume();
+    setText("setup-alarm-volume-value", `${volume.value}%`);
+    volume.addEventListener("input", () => {
+      setText("setup-alarm-volume-value", `${volume.value}%`);
+      saveAlarmVolume(Number(volume.value));
+    });
+    // A short W at the new level when the slider is let go, so it can be
+    // set by ear.
+    volume.addEventListener("change", () => playMorse("W"));
   }
   document.getElementById("btn-alarm-sound-test")?.addEventListener("click", () => playMorse("W S FFF"));
 }

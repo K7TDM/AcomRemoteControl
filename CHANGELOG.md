@@ -26,8 +26,9 @@ first, then get moved under a version heading below when tagged.
   names the hard-fault sound; W matches what the amp played for "ATU
   tuning outdated"; S is a stand-in). A successful tune stays silent.
   Each alarm code's level comes from the protocol doc's own WARNING /
-  SOFT FAULT / HARD FAULT labels. On/off per browser in Settings ->
-  Display, with a Test Sounds button; a new alarm also wakes a dimmed
+  SOFT FAULT / HARD FAULT labels. On/off and a volume slider per browser
+  in Settings -> Display, with a Test Sounds button (letting go of the
+  slider plays a W at the new level); a new alarm also wakes a dimmed
   screen.
 
 ### Changed
