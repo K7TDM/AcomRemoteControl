@@ -228,6 +228,22 @@
         </div>
       </div>
 
+      <!-- Per-browser alarm sounds - see app.js's checkAlarmSound(). -->
+      <div class="sound-setting">
+        <h3>Alarm sounds</h3>
+        <label>
+          <input type="checkbox" id="setup-alarm-sounds" />
+          Play the amp's alarms in this browser
+        </label>
+        <p class="danger-warning">
+          In Morse, like the amp's own buzzer: W for a warning, S for a soft
+          fault, a series of F for a hard fault. Each device decides for
+          itself. Browsers stay silent until the page has been tapped or
+          clicked once.
+        </p>
+        <button id="btn-alarm-sound-test" class="acom-button" type="button">Test Sounds</button>
+      </div>
+
       <h3>Gauges</h3>
       <p class="danger-warning">
         Show, size and reorder the dashboard's gauges (drag the &#x283F;

@@ -998,6 +998,65 @@ FAULT_CODE_NAMES: dict[int, str] = {
 }
 
 
+# Protection level of each alarm code, from the same doc table (section
+# 3.7.1 prints one of WARNING / SOFT FAULT / HARD FAULT after every
+# described bit; extracted by bit position, so the "Error Codes 9" misprint
+# above doesn't apply). The 1200S manual (section 4, "protection levels"):
+# a WARNING keeps transmitting, a SOFT FAULT drops to STANDBY, a HARD FAULT
+# turns the amp off - each with its own sound alarm. Codes missing here have
+# no level in the doc: 0x88 (filled in as a warning - same kind of notice as
+# 0x89 beside it, which the doc does mark), and 0x14 / 0x8E / 0x70-0x7F /
+# 0x8C-0x8F, which the doc leaves blank (0x14 and 0x8E are tune results the
+# amp shows after a tune, not faults).
+FAULT_CODE_LEVELS: dict[int, str] = {
+    0x00: "warning", 0x01: "warning", 0x02: "hard_fault", 0x03: "hard_fault",
+    0x04: "warning", 0x05: "soft_fault", 0x06: "warning", 0x07: "soft_fault",
+    0x08: "soft_fault", 0x09: "soft_fault", 0x0A: "soft_fault", 0x0B: "soft_fault",
+    0x0C: "warning", 0x0D: "soft_fault", 0x0E: "warning", 0x0F: "warning",
+    0x10: "hard_fault", 0x11: "hard_fault", 0x12: "hard_fault", 0x13: "hard_fault",
+    0x15: "hard_fault", 0x16: "hard_fault", 0x17: "hard_fault", 0x18: "soft_fault",
+    0x19: "soft_fault", 0x1A: "warning", 0x1B: "warning", 0x1C: "warning",
+    0x1D: "warning", 0x1E: "soft_fault", 0x1F: "soft_fault", 0x20: "hard_fault",
+    0x21: "hard_fault", 0x22: "soft_fault", 0x23: "soft_fault", 0x24: "warning",
+    0x25: "soft_fault", 0x26: "soft_fault", 0x27: "soft_fault", 0x28: "soft_fault",
+    0x29: "soft_fault", 0x2A: "hard_fault", 0x2B: "hard_fault", 0x2C: "hard_fault",
+    0x2D: "hard_fault", 0x2E: "soft_fault", 0x2F: "soft_fault", 0x30: "hard_fault",
+    0x31: "hard_fault", 0x32: "hard_fault", 0x33: "warning", 0x34: "hard_fault",
+    0x35: "hard_fault", 0x36: "hard_fault", 0x37: "hard_fault", 0x38: "warning",
+    0x39: "soft_fault", 0x40: "hard_fault", 0x41: "hard_fault", 0x42: "soft_fault",
+    0x43: "soft_fault", 0x44: "warning", 0x45: "soft_fault", 0x46: "soft_fault",
+    0x47: "soft_fault", 0x48: "soft_fault", 0x49: "soft_fault", 0x4A: "hard_fault",
+    0x4B: "hard_fault", 0x4C: "hard_fault", 0x4D: "hard_fault", 0x4E: "soft_fault",
+    0x4F: "soft_fault", 0x50: "hard_fault", 0x51: "hard_fault", 0x52: "hard_fault",
+    0x53: "warning", 0x54: "hard_fault", 0x55: "hard_fault", 0x56: "hard_fault",
+    0x57: "hard_fault", 0x58: "warning", 0x59: "soft_fault", 0x60: "hard_fault",
+    0x61: "hard_fault", 0x62: "soft_fault", 0x63: "soft_fault", 0x64: "warning",
+    0x65: "warning", 0x66: "warning", 0x67: "warning", 0x68: "warning",
+    0x69: "warning", 0x6C: "warning", 0x6D: "warning", 0x6E: "warning",
+    0x6F: "soft_fault", 0x70: "warning", 0x80: "warning", 0x81: "warning",
+    0x82: "warning", 0x83: "warning", 0x84: "warning", 0x85: "warning",
+    0x86: "warning", 0x87: "warning", 0x89: "warning", 0x8A: "warning",
+    0x8B: "warning", 0x90: "warning", 0x91: "warning", 0x92: "warning",
+    0x93: "warning", 0x94: "warning", 0x95: "warning", 0x96: "warning",
+    0x97: "warning", 0x98: "warning", 0x99: "warning", 0x9A: "warning",
+    0x9B: "warning", 0x9C: "warning", 0x9D: "warning", 0x9E: "warning",
+    0x9F: "warning", 0xA0: "hard_fault", 0xA1: "hard_fault", 0xA2: "hard_fault",
+    0xA3: "hard_fault", 0xA4: "soft_fault", 0xA5: "hard_fault", 0xA6: "soft_fault",
+    0xA7: "hard_fault", 0xA8: "soft_fault", 0xA9: "hard_fault", 0xAA: "soft_fault",
+    0xAB: "hard_fault", 0xAC: "soft_fault", 0xAD: "warning", 0xAE: "hard_fault",
+    0xAF: "hard_fault",
+    0x88: "warning",
+}
+
+
+def alarm_level(code: int) -> Optional[str]:
+    """"warning" / "soft_fault" / "hard_fault" for 0x2F's live alarm code,
+    or None when nothing is displayed or the code has no documented level.
+    The dashboard plays its alarm sound by this (app.js's playAlarmSound())."""
+    if code == ALARM_CODE_NONE:
+        return None
+    return FAULT_CODE_LEVELS.get(code)
+
 ALARM_CODE_NONE = 0xFF  # 0x2F Byte66 value when the amp's screen shows no alarm
 
 

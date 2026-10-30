@@ -19,6 +19,17 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Added
+- Alarm sounds in the browser: when the amp shows a new alarm, the
+  dashboard plays it in Morse like the amp's buzzer - W for a warning, S
+  for a soft fault, a series of F for a hard fault (the manual only
+  names the hard-fault sound; W matches what the amp played for "ATU
+  tuning outdated"; S is a stand-in). A successful tune stays silent.
+  Each alarm code's level comes from the protocol doc's own WARNING /
+  SOFT FAULT / HARD FAULT labels. On/off per browser in Settings ->
+  Display, with a Test Sounds button; a new alarm also wakes a dimmed
+  screen.
+
 ### Changed
 - Power Off moved off the dashboard's button bar to the top of Settings,
   so it can't be hit by accident while operating. It's greyed out while
