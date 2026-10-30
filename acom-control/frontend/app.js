@@ -331,6 +331,8 @@ function render(state) {
   appState.lastStatus = state;
   appState.maxPowerW = state.max_power_w || appState.maxPowerW;
   updateTxEdgeState(state);
+  // Keying up counts as activity, so the screen never dims mid-over.
+  if (appState.inTx) noteActivity();
 
   renderStatusRow(state);
   renderGauges(state);
@@ -813,6 +815,45 @@ function renderKioskSetting(kiosk) {
   setText("setup-kiosk-status", status);
 }
 
+// Setup -> Display's "Screen brightness" slider: the Pi touchscreen's
+// backlight, saved on the Pi (POST /api/display/brightness). Applies as it
+// moves, debounced like the gauge layout.
+const BRIGHTNESS_SAVE_DEBOUNCE_MS = 250;
+let brightnessSaveTimer = null;
+
+function renderBrightnessSetting(cfg) {
+  const slider = document.getElementById("setup-brightness");
+  // Not while a save is pending - that would snap the slider back mid-drag.
+  if (!slider || brightnessSaveTimer) return;
+  if (cfg.brightness_min) slider.min = cfg.brightness_min;
+  if (cfg.brightness) slider.value = cfg.brightness;
+  setText("setup-brightness-value", `${slider.value}%`);
+  slider.disabled = cfg.backlight_available === false;
+  setText(
+    "setup-brightness-status",
+    cfg.backlight_available === false
+      ? "The Pi's display has no adjustable backlight (an HDMI monitor, or no display) - brightness can only be set on the monitor itself. Dimming after 10 minutes idle still applies."
+      : "The screen dims to 5% after 10 minutes with no touch and no key-up; a touch or key-up brings it back.",
+  );
+}
+
+function onBrightnessInput(event) {
+  setText("setup-brightness-value", `${event.target.value}%`);
+  clearTimeout(brightnessSaveTimer);
+  brightnessSaveTimer = setTimeout(saveBrightness, BRIGHTNESS_SAVE_DEBOUNCE_MS);
+}
+
+async function saveBrightness() {
+  brightnessSaveTimer = null;
+  const slider = document.getElementById("setup-brightness");
+  if (!slider) return;
+  try {
+    await apiFetch("/api/display/brightness", postJson({ brightness: Number(slider.value) }));
+  } catch (err) {
+    showActionError(`Couldn't set the screen brightness: ${err.message}`);
+  }
+}
+
 function friendlyDisplayName(name) {
   if (name.startsWith("DSI")) return "touchscreen";
   if (name.startsWith("HDMI")) return `HDMI monitor (${name})`;
@@ -1137,6 +1178,7 @@ function wireControls() {
   document.getElementById("update-beta-toggle")?.addEventListener("change", setBetaUpdates);
   document.getElementById("btn-display-reset")?.addEventListener("click", () => setDisplayPanels(DEFAULT_DISPLAY_PANELS));
   document.getElementById("setup-kiosk-toggle")?.addEventListener("change", withErrorBanner((event) => setKioskEnabled(event.target.checked)));
+  document.getElementById("setup-brightness")?.addEventListener("input", onBrightnessInput);
   const cbCheckbox = document.getElementById("setup-show-cb-band");
   if (cbCheckbox) {
     cbCheckbox.checked = loadShowCbBand();
@@ -1215,6 +1257,7 @@ async function loadSetup() {
   }
   renderDisplaySettings();
   renderKioskSetting(configResp.kiosk);
+  renderBrightnessSetting(configResp);
   // Reopening Setup while the Pi display is still switching: keep following it.
   if (configResp.kiosk?.busy) pollKioskUntilSettled();
   populateSerialPortOptions(portsResp, configResp.serial_device);
@@ -1808,6 +1851,87 @@ function initKioskMode() {
   document.addEventListener("contextmenu", (event) => event.preventDefault());
 }
 
+// Inactivity dimming, on every device: after IDLE_DIM_AFTER_MS with no
+// touch/click/key/mouse movement and no key-up (render() calls
+// noteActivity() while in OPR/TX), the screen dims to 5%; any of those
+// brings it back. On the kiosk that's the Pi touchscreen's real backlight
+// (POST /api/display/backlight, back up to Setup -> Display's brightness);
+// where there's no backlight to drive - a remote browser, or an HDMI
+// monitor on the Pi - the overlay darkens the page instead. Either way the
+// overlay catches the waking touch, so it doesn't also press a button.
+const IDLE_DIM_AFTER_MS = 10 * 60 * 1000;
+// Keeps catching taps for a moment after waking, so the rest of the waking
+// tap (pointerup/click) can't land on the button under it either.
+const IDLE_WAKE_GUARD_MS = 500;
+let idleDimTimer = null;
+let idleDimmed = false;
+let piBacklightWorks = false;
+
+function isKiosk() {
+  return document.documentElement.classList.contains("kiosk");
+}
+
+async function setPiBacklight(dimmed) {
+  try {
+    const resp = await apiFetch("/api/display/backlight", postJson({ dimmed }));
+    piBacklightWorks = !!(await resp.json()).backlight;
+  } catch {
+    piBacklightWorks = false;
+  }
+  document.documentElement.classList.toggle("idle-dim-hardware", piBacklightWorks);
+}
+
+function dimForIdle() {
+  idleDimmed = true;
+  const root = document.documentElement;
+  root.classList.toggle("idle-dim-hardware", isKiosk() && piBacklightWorks);
+  root.classList.add("idle-dimmed");
+  if (isKiosk()) setPiBacklight(true);
+}
+
+function wakeFromIdle() {
+  idleDimmed = false;
+  const root = document.documentElement;
+  root.classList.remove("idle-dimmed");
+  root.classList.add("idle-waking");
+  setTimeout(() => root.classList.remove("idle-waking"), IDLE_WAKE_GUARD_MS);
+  if (isKiosk()) setPiBacklight(false);
+}
+
+function noteActivity() {
+  clearTimeout(idleDimTimer);
+  idleDimTimer = setTimeout(dimForIdle, IDLE_DIM_AFTER_MS);
+  if (idleDimmed) wakeFromIdle();
+}
+
+function initIdleDim() {
+  const overlay = document.getElementById("idle-dim-overlay");
+  if (overlay) {
+    const swallow = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    for (const type of ["pointerdown", "pointerup", "click", "touchstart", "touchend"]) {
+      overlay.addEventListener(type, swallow);
+    }
+  }
+  // Capture phase, so activity counts even where a handler stops it.
+  for (const type of ["pointerdown", "keydown", "wheel"]) {
+    document.addEventListener(type, noteActivity, { capture: true, passive: true });
+  }
+  document.addEventListener(
+    "pointermove",
+    (event) => {
+      if (event.pointerType === "mouse") noteActivity();
+    },
+    { capture: true, passive: true },
+  );
+  // Back to full brightness whenever the kiosk page loads - after a reload
+  // or an update the backlight may still be at the dim level.
+  if (isKiosk()) setPiBacklight(false);
+  noteActivity();
+}
+
 // The backend commit this page was loaded against. When the WebSocket
 // reconnects after the backend restarts on a different commit (an update,
 // from any device), reload so this page runs the matching dashboard code -
@@ -1827,6 +1951,7 @@ async function reloadIfBackendUpdated() {
 async function boot() {
   initThemeSwitcher();
   initKioskMode();
+  initIdleDim();
   updateFitMode();
   appState.display = DEFAULT_DISPLAY_PANELS;
   wireControls();

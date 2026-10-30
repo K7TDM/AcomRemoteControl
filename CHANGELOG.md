@@ -19,6 +19,16 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Added
+- Screen dimming: after 10 minutes with no touch and no key-up, the
+  dashboard dims to 5% - the Pi touchscreen's real backlight on the
+  kiosk, the page itself in a browser or on an HDMI monitor. A touch or
+  key-up brings it back; the waking touch doesn't press the button under
+  it.
+- Setup -> Display: a "Screen brightness" slider for the Pi touchscreen,
+  saved on the Pi. Needs the service in the `video` group, which the
+  updated service file adds.
+
 ### Fixed
 - Power On could leave the dashboard stuck refusing Power On ("power
   state is unknown", 409) until the service was restarted: if the power

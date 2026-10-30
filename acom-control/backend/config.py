@@ -125,11 +125,27 @@ def normalize_display_panels(panels: Optional[list]) -> list[dict]:
     return result
 
 
+# Setup -> Display's "Screen brightness" slider for the Pi's own display
+# (percent of its backlight). Floored above the 5% inactivity dim level, so
+# the slider can't make the awake screen look dimmed.
+DISPLAY_BRIGHTNESS_MIN = 10
+DISPLAY_BRIGHTNESS_MAX = 100
+
+
+def normalize_display_brightness(value) -> int:
+    try:
+        percent = int(value)
+    except (TypeError, ValueError):
+        return DISPLAY_BRIGHTNESS_MAX
+    return max(DISPLAY_BRIGHTNESS_MIN, min(DISPLAY_BRIGHTNESS_MAX, percent))
+
+
 @dataclass
 class DisplayConfig:
     # Setup screen's "Display" section - one layout shared by every device
     # (per Tyler), unlike the theme/CB preferences which are per browser.
     panels: list = field(default_factory=default_display_panels)
+    brightness: int = DISPLAY_BRIGHTNESS_MAX
 
 
 @dataclass
@@ -168,7 +184,11 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     modbus = ModbusConfig(**data.get("modbus", {}))
     logging_cfg = LoggingConfig(**data.get("logging", {}))
     update = UpdateConfig(**data.get("update", {}))
-    display = DisplayConfig(panels=normalize_display_panels(data.get("display", {}).get("panels")))
+    display_data = data.get("display", {})
+    display = DisplayConfig(
+        panels=normalize_display_panels(display_data.get("panels")),
+        brightness=normalize_display_brightness(display_data.get("brightness", DISPLAY_BRIGHTNESS_MAX)),
+    )
 
     validate_config(amp.model, tuner.model)
 
