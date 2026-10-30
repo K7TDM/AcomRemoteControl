@@ -8,8 +8,38 @@
 # Waits for the dashboard backend to answer before starting the browser:
 # at boot the kiosk can come up before acom-control is listening, and a
 # browser that loads too early just sits on an error page.
+#
+# `acom-kiosk --blank-cursor-theme` (the unit's ExecStartPre) instead
+# writes an invisible cursor theme for cage - see below.
 
 set -u
+
+# Cage draws its own arrow (the theme's left_ptr) wherever the pointer is,
+# and with only a touchscreen nothing ever replaces it: the page's
+# cursor-hiding CSS (app.js's initKioskMode()) only applies once a real
+# mouse moves over Chromium. So cage gets a theme whose cursors are a
+# single transparent pixel (XCURSOR_THEME=acom-blank in the unit), and
+# Chromium is started with the normal theme below - a real mouse still
+# shows an arrow, which the page hides again after a few seconds idle.
+BLANK_CURSOR_THEME="acom-blank"
+if [[ "${1:-}" == "--blank-cursor-theme" ]]; then
+  THEME_DIR="$HOME/.icons/$BLANK_CURSOR_THEME"
+  mkdir -p "$THEME_DIR/cursors"
+  printf '[Icon Theme]\nName=%s\n' "$BLANK_CURSOR_THEME" > "$THEME_DIR/index.theme"
+  # Xcursor file: header, one table-of-contents entry, one 1x1 image chunk
+  # whose single ARGB pixel is fully transparent.
+  python3 - "$THEME_DIR/cursors/left_ptr" <<'EOF'
+import struct, sys
+image_type, size = 0xFFFD0002, 24
+data = b"Xcur" + struct.pack("<III", 16, 0x10000, 1)
+data += struct.pack("<III", image_type, size, 28)
+data += struct.pack("<IIIIIIIII", 36, image_type, size, 1, 1, 1, 0, 0, 0) + struct.pack("<I", 0)
+open(sys.argv[1], "wb").write(data)
+EOF
+  ln -sf left_ptr "$THEME_DIR/cursors/default"
+  exit 0
+fi
+unset XCURSOR_THEME
 
 DASHBOARD="http://localhost:8000"
 # kiosk=1 turns on the dashboard's kiosk behaviors (hidden cursor until a
