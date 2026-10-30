@@ -19,6 +19,15 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Changed
+- Power Off moved off the dashboard's button bar to the top of Settings,
+  so it can't be hit by accident while operating. It's greyed out while
+  the amp isn't on. This also stops the Classic theme's buttons getting
+  cut off on the Pi's 800x480 touchscreen.
+- Classic theme: much larger numbers, unit and reading on the meters -
+  the scale numbers were about 6px tall on the Pi touchscreen. The end
+  numbers on the small meters no longer sit on the red zone.
+
 ## [0.1.14] - 2026-10-29
 
 ### Added
