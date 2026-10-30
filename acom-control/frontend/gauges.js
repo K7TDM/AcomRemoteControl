@@ -298,16 +298,20 @@ function updateArcGauge(bodyEl, opts) {
 // offsets from the scale arc, in viewBox units. unitY = baseline of the
 // unit word and reading (bottom corners on the standard meter, top corners
 // on the wide one, where the bottom corners hold the scale's ends).
+// numberSize/unitSize/valueSize are font sizes in viewBox units - the SVG
+// scales down with its panel, so these are sized for the Pi's 800x480
+// touchscreen, where a half-width meter is drawn ~170px wide (per Tyler:
+// the earlier 12-unit numbers were unreadable there).
 const METER_GEOMETRY = {
   standard: {
     W: 320, H: 156, cy: 214, sweep: 48, scale: 162,
     red: 8, minor: 12, major: 20, number: 30, needle: 24, peakFrom: -64, avgFrom: -20, avgTo: 14,
-    unitY: 146, valueSize: 18,
+    unitY: 148, numberSize: 27, unitSize: 18, valueSize: 34, endNumberInset: 5,
   },
   wide: {
-    W: 600, H: 108, cy: 806, sweep: 20, scale: 762,
+    W: 600, H: 120, cy: 818, sweep: 20, scale: 762,
     red: 7, minor: 9, major: 16, number: 28, needle: 20, peakFrom: -40, avgFrom: -16, avgTo: 12,
-    unitY: 24, valueSize: 20,
+    unitY: 32, numberSize: 24, unitSize: 18, valueSize: 32, endNumberInset: 0,
   },
 };
 
@@ -357,8 +361,15 @@ function buildMeterSvg(opts, g) {
     const [x2, y2] = meterPolar(g, g.scale + (major ? g.major : g.minor), angle);
     scale += `<line class="meter-tick${major ? " major" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
     if (major) {
-      const [tx, ty] = meterPolar(g, g.scale + g.number, angle);
-      scale += `<text class="meter-number" x="${tx}" y="${ty}">${formatScaleNumber(min + (k / 20) * (max - min))}</text>`;
+      // The end numbers sit near the window's side edges; anchor them
+      // inward so they can't run off it, and (standard meter) nudge them
+      // along the scale, up off the redline.
+      const inset = k === 0 ? g.endNumberInset : k === 20 ? -g.endNumberInset : 0;
+      const [tx, ty] = meterPolar(g, g.scale + g.number, angle + inset);
+      const anchor = k === 0 ? "start" : k === 20 ? "end" : "middle";
+      scale +=
+        `<text class="meter-number" x="${tx}" y="${ty}" style="font-size:${g.numberSize}px; text-anchor:${anchor}">` +
+        `${formatScaleNumber(min + (k / 20) * (max - min))}</text>`;
     }
   }
 
@@ -386,7 +397,7 @@ function buildMeterSvg(opts, g) {
         ${pointer("meter-avg", g.scale + g.avgFrom, g.scale + g.avgTo)}
         ${pointer("meter-peak", g.scale + g.peakFrom, g.scale + g.needle - 2)}
         ${pointer("meter-needle", 0, g.scale + g.needle)}
-        <text class="meter-unit" x="10" y="${g.unitY}">${unitWord}</text>
+        <text class="meter-unit" x="10" y="${g.unitY}" style="font-size:${g.unitSize}px">${unitWord}</text>
         <text class="meter-value" x="${g.W - 10}" y="${g.unitY}" style="font-size:${g.valueSize}px" data-meter-value></text>
         <polygon class="meter-glass" points="${g.W * 0.06},0 ${g.W * 0.4},0 ${g.W * 0.2},${g.H} ${-g.W * 0.14},${g.H}" />
       </g>

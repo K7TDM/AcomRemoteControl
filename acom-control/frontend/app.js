@@ -341,6 +341,7 @@ function render(state) {
   renderOprToggle(state);
   renderAtuBypassToggle(state);
   renderPowerOnButton(state);
+  renderPowerOffButton(state);
   updateScreenVisibility();
   if (appState.setupOpen) updateAntennaSetupVisibility();
 }
@@ -424,6 +425,18 @@ function renderPowerOnButton(state) {
   const btn = document.getElementById("btn-power-on");
   if (!btn) return;
   btn.hidden = state.power_state === "on";
+}
+
+// Setup's Power Off button: only does anything while the amp is confirmed
+// on (/api/power refuses or no-ops otherwise), so it's disabled - with a
+// note saying why - the rest of the time.
+function renderPowerOffButton(state) {
+  const btn = document.getElementById("btn-power-off");
+  if (!btn) return;
+  const on = state.power_state === "on";
+  btn.disabled = !on;
+  const note = document.getElementById("setup-power-note");
+  if (note) note.hidden = on;
 }
 
 // Colors the ATU Bypass button from the amp's own last-reported atu_label

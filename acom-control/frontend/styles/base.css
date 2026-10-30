@@ -406,6 +406,28 @@ main#dashboard[hidden],
   padding: 0.8rem 2.5rem;
 }
 
+/* Setup's Power Off: first on the screen, full width, finger-sized. */
+.setup-power {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.setup-power .acom-button {
+  width: 100%;
+  min-height: 48px;
+  font-size: 1rem;
+}
+
+.setup-power .acom-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.setup-power p {
+  margin: 0;
+}
+
 .setup-section {
   background: var(--bg-panel);
   border: 1px solid var(--border-color);

@@ -128,7 +128,6 @@
 
     <div class="button-bar">
       <button id="btn-power-on" class="acom-button" type="button">Power On</button>
-      <button id="btn-power-off" class="acom-button danger" type="button">Power Off</button>
       <!-- Single toggle mirroring the real amp's own physical OPR/STB
            button: color/state come from live telemetry.mode_name (see
            renderOprToggle() in app.js), not click-tracked UI state. -->
@@ -156,6 +155,15 @@
   </section>
 
   <section id="setup-screen" hidden>
+    <!-- Power Off lives here rather than on the dashboard's button bar, so
+         it can't be hit by accident while operating (per Tyler) - first
+         thing on the screen and never collapsed, so it's easy to find.
+         Disabled unless the amp is on - see renderPowerOffButton(). -->
+    <div class="setup-power">
+      <button id="btn-power-off" class="acom-button danger" type="button">Power Off Amplifier</button>
+      <p id="setup-power-note" class="danger-warning" hidden>The amplifier isn't on.</p>
+    </div>
+
     <!-- Each top-level section is a native <details>, collapsed by default -
          the Setup screen is long, so only the section being worked on opens. -->
     <details class="setup-section collapsible">
