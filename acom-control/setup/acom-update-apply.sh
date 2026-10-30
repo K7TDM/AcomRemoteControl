@@ -84,6 +84,15 @@ case "$MODE" in
   *) echo "acom-update-apply: unknown mode '$MODE'" >&2; exit 2 ;;
 esac
 
+# Keeps the Pi's HDMI-CEC devices from counting as a mouse in the kiosk (see
+# 99-acom-kiosk-input.rules). Takes effect when cage next starts.
+install_kiosk_input_rule() {
+  install -o root -g root -m 644 "$REPO_DIR/acom-control/setup/99-acom-kiosk-input.rules" \
+    /etc/udev/rules.d/99-acom-kiosk-input.rules
+  udevadm control --reload-rules
+  udevadm trigger --subsystem-match=input --action=change
+}
+
 # --- Kiosk display on/off (no git involved) ---------------------------------
 if [[ "$MODE" == "kiosk-on" ]]; then
   echo "acom-update-apply: turning the kiosk display on"
@@ -107,6 +116,7 @@ if [[ "$MODE" == "kiosk-on" ]]; then
     fi
   done
   install -o root -g root -m 755 "$REPO_DIR/acom-control/setup/acom-kiosk.sh" /usr/local/bin/acom-kiosk
+  install_kiosk_input_rule
   PH="__"  # see the self-refresh step at the end of this file for why
   sed "s#${PH}KIOSK_USER${PH}#$REPO_OWNER#" "$REPO_DIR/acom-control/setup/acom-kiosk.service" \
     > /etc/systemd/system/acom-kiosk.service
@@ -268,6 +278,7 @@ if [[ -f /usr/local/bin/acom-kiosk && -f "$KIOSK_UNIT" ]]; then
   mv -f "$KIOSK_TMP" /usr/local/bin/acom-kiosk
   sed "s#${PH}KIOSK_USER${PH}#$REPO_OWNER#" "$REPO_DIR/acom-control/setup/acom-kiosk.service" > "$KIOSK_UNIT"
   systemctl daemon-reload
+  install_kiosk_input_rule
 fi
 
 echo "acom-update-apply: restarting acom-control"

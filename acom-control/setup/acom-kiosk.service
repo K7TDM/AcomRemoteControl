@@ -33,11 +33,6 @@ Environment=XDG_SESSION_TYPE=wayland
 # Start even with no keyboard, mouse or touchscreen attached - otherwise
 # cage refuses to start on a Pi with just a monitor.
 Environment=WLR_LIBINPUT_NO_DEVICES=1
-# No arrow from cage itself - it's an invisible theme, written by
-# ExecStartPre (see acom-kiosk.sh). Chromium still uses the normal one, so
-# a real mouse gets a cursor.
-Environment=XCURSOR_THEME=acom-blank
-ExecStartPre=/usr/local/bin/acom-kiosk --blank-cursor-theme
 # -s: allow switching to a text console with Ctrl+Alt+F2 etc. if a
 # keyboard is plugged in.
 ExecStart=/usr/bin/cage -s -- /usr/local/bin/acom-kiosk

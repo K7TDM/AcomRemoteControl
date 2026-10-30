@@ -30,12 +30,14 @@ first, then get moved under a version heading below when tagged.
   updated service file adds.
 
 ### Fixed
-- The kiosk screen showed a mouse arrow with no mouse attached: cage,
-  the kiosk's display server, drew its own cursor, which the page can't
-  hide. Cage now gets an invisible cursor theme; a real mouse still
-  shows an arrow, hidden again after a few seconds without movement.
-  Takes effect on the next reboot after updating (or
-  `sudo systemctl restart acom-kiosk`).
+- The kiosk screen showed a mouse arrow with no mouse attached: the Pi's
+  HDMI-CEC input devices (TV-remote buttons) are tagged as pointing
+  sticks, so cage, the kiosk's display server, counted them as a mouse
+  and drew its arrow. A udev rule now has libinput ignore them, so the
+  arrow only appears with a real mouse, and the page hides it again
+  after a few seconds without movement. Takes effect on the next reboot
+  after updating (or `sudo systemctl restart acom-kiosk`). Replaces an
+  earlier invisible-cursor-theme attempt, which cage never read.
 - Power On could leave the dashboard stuck refusing Power On ("power
   state is unknown", 409) until the service was restarted: if the power
   pulse got no reply (amp unplugged, mains off), nothing ever resolved

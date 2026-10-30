@@ -1,0 +1,11 @@
+# udev rule for the kiosk display (acom-kiosk.service): libinput ignores
+# the Pi's HDMI-CEC input devices (vc4-hdmi-0/-1 - TV-remote buttons over
+# HDMI). udev tags them ID_INPUT_POINTINGSTICK, so cage counted them as a
+# mouse and drew its arrow in the middle of the touchscreen with no mouse
+# attached - nothing the page's cursor-hiding CSS could reach. With them
+# ignored, cage only shows an arrow when a real mouse is plugged in.
+#
+# Installed to /etc/udev/rules.d/ by acom-update-apply's kiosk-on mode and
+# by every update while the kiosk is installed.
+
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="vc4-hdmi-*", ENV{LIBINPUT_IGNORE_DEVICE}="1"
