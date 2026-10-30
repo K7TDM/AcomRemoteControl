@@ -37,6 +37,8 @@ if [[ -f "$PREFS" ]]; then
          -e 's/"exit_type":"Crashed"/"exit_type":"Normal"/' "$PREFS"
 fi
 
+# --autoplay-policy: the dashboard's alarm sounds play without the screen
+# having been touched first (see app.js's unlockAlarmAudio()).
 exec "$BROWSER" \
   --kiosk \
   --user-data-dir="$PROFILE_DIR" \
@@ -51,4 +53,5 @@ exec "$BROWSER" \
   --overscroll-history-navigation=0 \
   --disable-pinch \
   --hide-scrollbars \
+  --autoplay-policy=no-user-gesture-required \
   "$URL"

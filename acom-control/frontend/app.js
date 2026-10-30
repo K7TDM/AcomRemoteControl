@@ -333,6 +333,7 @@ function render(state) {
   updateTxEdgeState(state);
   // Keying up counts as activity, so the screen never dims mid-over.
   if (appState.inTx) noteActivity();
+  checkAlarmSound(state);
 
   renderStatusRow(state);
   renderGauges(state);
@@ -1947,6 +1948,108 @@ function initIdleDim() {
   noteActivity();
 }
 
+// Alarm sounds: when the amp shows a new alarm, play it in Morse like the
+// amp's own buzzer - telemetry.alarm_level is the protocol doc's WARNING /
+// SOFT FAULT / HARD FAULT label for the live alarm code (protocol.py's
+// FAULT_CODE_LEVELS). Per the 1200S manual a hard fault is "a series of F
+// sent in CW"; a warning plays W (heard by Tyler on "ATU tuning outdated",
+// a warning). The manual doesn't say what a soft fault plays - S is a
+// stand-in. Synthesized with Web Audio, so no sound files; on/off per
+// browser in Setup -> Display.
+const ALARM_SOUNDS_STORAGE_KEY = "acom.alarmSounds";
+const ALARM_MORSE = { warning: "W", soft_fault: "S", hard_fault: "FFF" };
+const MORSE_CODE = { F: "..-.", S: "...", W: ".--" };
+const ALARM_TONE_HZ = 1000;
+const ALARM_WPM = 15;
+const ALARM_VOLUME = 0.3;
+let alarmAudioCtx = null;
+let lastAlarmCode = null;
+
+function loadAlarmSoundsEnabled() {
+  try {
+    return localStorage.getItem(ALARM_SOUNDS_STORAGE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+function saveAlarmSoundsEnabled(enabled) {
+  try {
+    localStorage.setItem(ALARM_SOUNDS_STORAGE_KEY, enabled ? "on" : "off");
+  } catch {
+    // Private window etc. - the checkbox still works until the page reloads.
+  }
+}
+
+// Browsers only let a page make sound once it's been tapped or clicked, so
+// the audio context is created (or resumed) on the first one. The kiosk's
+// Chromium is started without that rule (acom-kiosk.sh).
+function unlockAlarmAudio() {
+  if (!alarmAudioCtx) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    alarmAudioCtx = new AudioCtx();
+  }
+  if (alarmAudioCtx.state === "suspended") alarmAudioCtx.resume().catch(() => {});
+}
+
+// Standard Morse timing: dah = 3 dits, 1 dit between elements, 3 between
+// letters, 7 between words (a space).
+function playMorse(text) {
+  unlockAlarmAudio();
+  const ctx = alarmAudioCtx;
+  if (!ctx) return;
+  const dit = 1.2 / ALARM_WPM;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.frequency.value = ALARM_TONE_HZ;
+  gain.gain.value = 0;
+  osc.connect(gain).connect(ctx.destination);
+  let t = ctx.currentTime + 0.05;
+  for (const ch of text) {
+    if (ch === " ") {
+      t += dit * 4;
+      continue;
+    }
+    for (const element of MORSE_CODE[ch] || "") {
+      const len = element === "-" ? dit * 3 : dit;
+      // 5ms ramps, so each tone doesn't start and stop with a click.
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(ALARM_VOLUME, t + 0.005);
+      gain.gain.setValueAtTime(ALARM_VOLUME, t + len - 0.005);
+      gain.gain.linearRampToValueAtTime(0, t + len);
+      t += len + dit;
+    }
+    t += dit * 2;
+  }
+  osc.start();
+  osc.stop(t);
+}
+
+// Called on every status update; sounds once per new alarm, not for as long
+// as it stays on the amp's screen. Any new alarm also wakes a dimmed screen.
+function checkAlarmSound(state) {
+  const code = state.telemetry ? state.telemetry.alarm_code : null;
+  const level = state.telemetry ? state.telemetry.alarm_level : null;
+  if (code !== lastAlarmCode && level) {
+    noteActivity();
+    if (loadAlarmSoundsEnabled()) playMorse(ALARM_MORSE[level] || "");
+  }
+  lastAlarmCode = code;
+}
+
+function initAlarmSounds() {
+  for (const type of ["pointerdown", "keydown"]) {
+    document.addEventListener(type, unlockAlarmAudio, { capture: true, passive: true });
+  }
+  const checkbox = document.getElementById("setup-alarm-sounds");
+  if (checkbox) {
+    checkbox.checked = loadAlarmSoundsEnabled();
+    checkbox.addEventListener("change", () => saveAlarmSoundsEnabled(checkbox.checked));
+  }
+  document.getElementById("btn-alarm-sound-test")?.addEventListener("click", () => playMorse("W S FFF"));
+}
+
 // The backend commit this page was loaded against. When the WebSocket
 // reconnects after the backend restarts on a different commit (an update,
 // from any device), reload so this page runs the matching dashboard code -
@@ -1967,6 +2070,7 @@ async function boot() {
   initThemeSwitcher();
   initKioskMode();
   initIdleDim();
+  initAlarmSounds();
   updateFitMode();
   appState.display = DEFAULT_DISPLAY_PANELS;
   wireControls();

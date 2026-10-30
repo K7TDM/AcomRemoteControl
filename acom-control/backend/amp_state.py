@@ -226,6 +226,7 @@ def _telemetry_to_dict(t: Optional[protocol.AmpTelemetry]) -> Optional[dict]:
         "bias_1b_mv": t.bias_1b_mv,
         "alarm_code": t.alarm_code,
         "alarm_name": protocol.alarm_name(t.alarm_code),
+        "alarm_level": protocol.alarm_level(t.alarm_code),
         "alarm_param": t.alarm_param,
         "fan_speed": t.fan_speed,
         "active_lpf_channel": t.active_lpf_channel,

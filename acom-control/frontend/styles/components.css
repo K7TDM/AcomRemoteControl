@@ -244,15 +244,17 @@
   50% { opacity: 0.55; }
 }
 
-/* Setup -> Display: the "Raspberry Pi display" (kiosk) switch, set apart
-   from the gauge list below it. */
-.kiosk-setting {
+/* Setup -> Display: the "Raspberry Pi display" (kiosk) switch and the
+   alarm sounds, each set apart from what follows. */
+.kiosk-setting,
+.sound-setting {
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--border-color);
 }
 
 .kiosk-setting h3,
+.sound-setting h3,
 .setup-section > h3 {
   font-size: 0.95rem;
   margin: 0.25rem 0;
