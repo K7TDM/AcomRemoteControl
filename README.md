@@ -37,14 +37,14 @@ On a fresh Raspberry Pi OS Lite install, clone this repo and run the
 installer:
 
 ```bash
-git clone git@github.com:tymaggert/AcomRemoteControl.git
+git clone git@github.com:K7TDM/AcomRemoteControl.git
 cd AcomRemoteControl
 bash install.sh
 ```
 
 This repo is currently private, so whichever machine runs this clone
 needs its own SSH key added to the repo's deploy keys (or your GitHub
-account) first. A `github.com-personal` SSH host alias is sometimes used
+account) first. A `github.com-k7tdm` SSH host alias is sometimes used
 to pick a specific key for this repo on a given machine, but that alias
 is only ever defined locally in `~/.ssh/config` - it won't resolve on a
 machine that doesn't have the same config entry, including a fresh Pi.
