@@ -172,6 +172,12 @@
   stroke: var(--arc-track);
 }
 
+.gauge-arc .arc-redline {
+  fill: none;
+  stroke: var(--cockpit-red);
+  stroke-width: 3;
+}
+
 .gauge-arc .arc-fill {
   stroke: var(--cockpit-cyan);
   transition: stroke-dasharray 0.25s ease-out, stroke 0.2s;

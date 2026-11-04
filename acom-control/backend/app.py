@@ -370,33 +370,34 @@ async def get_status() -> dict:
     return amp_state.to_dict()
 
 
-def _local_ipv4_addresses() -> list[str]:
-    """The Pi's own LAN addresses, for the dashboard footer - so someone
+def _local_ipv4_address() -> Optional[str]:
+    """The Pi's main LAN address, for the dashboard footer - so someone
     without a static IP can read it off the kiosk screen and open the
-    dashboard from another device. `hostname -I` lists every interface
-    (Ethernet + Wi-Fi); the UDP-connect fallback sends nothing, it just
-    asks the kernel which source address the default route would use."""
-    try:
-        out = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=2).stdout
-        addrs = [a for a in out.split() if "." in a and not a.startswith("127.")]
-        if addrs:
-            return addrs
-    except (OSError, subprocess.SubprocessError):
-        pass
+    dashboard from another device. One address even with both Ethernet and
+    Wi-Fi up: the one the default route uses (the UDP connect sends
+    nothing, it just asks the kernel which source address it would pick),
+    falling back to the first from `hostname -I` with no default route."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("10.255.255.255", 1))
             addr = s.getsockname()[0]
-        return [] if addr.startswith("127.") else [addr]
+        if not addr.startswith("127."):
+            return addr
     except OSError:
-        return []
+        pass
+    try:
+        out = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=2).stdout
+        addrs = [a for a in out.split() if "." in a and not a.startswith("127.")]
+        return addrs[0] if addrs else None
+    except (OSError, subprocess.SubprocessError):
+        return None
 
 
 @app.get("/api/network")
 async def get_network(request: Request) -> dict:
     # The port the dashboard was actually reached on (8000 from the kiosk's
     # localhost URL), so the footer shows an address that works as-is.
-    return {"addresses": _local_ipv4_addresses(), "port": request.url.port}
+    return {"address": _local_ipv4_address(), "port": request.url.port}
 
 
 @app.post("/api/resync")

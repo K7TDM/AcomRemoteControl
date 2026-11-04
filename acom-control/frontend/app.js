@@ -90,7 +90,9 @@ const GAUGE_DEFS = [
   // id1_a derived in renderGauges(). A max of 40A gives headroom above the
   // documented 32-36A full-power range.
   { id: "id1_a", label: "PA DC Current", unit: "A", min: 0, max: () => 40 },
-  { id: "swr_calc", label: "SWR", unit: ":1", min: 1, max: () => 5 },
+  // SWR meter convention: scaled by reflection coefficient out to infinity
+  // (gauges.js SCALES.swr), amber from 2:1, red from 3:1.
+  { id: "swr_calc", label: "SWR", unit: ":1", min: 1, max: () => Infinity, scale: "swr", warnFrom: 2, dangerFrom: 3 },
 ];
 
 const GAUGE_DEF_BY_ID = Object.fromEntries([HERO_GAUGE_DEF, ...GAUGE_DEFS].map((d) => [d.id, d]));
@@ -957,7 +959,7 @@ function mountOrUpdateGauge(el, def, telemetry, theme, forceWidget) {
   // (see gauges.js METER_GEOMETRY); a width change in Display settings
   // remounts the meter in the new shape.
   const wide = WIDE_METER_WIDTHS.has(el.dataset.width);
-  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain, peak, avg, wide };
+  const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain, peak, avg, wide, scale: def.scale, warnFrom: def.warnFrom, dangerFrom: def.dangerFrom };
   const widget = resolveWidget(theme, opts, forceWidget);
   const shape = widget === "needle" && wide ? "wide" : "standard";
 
@@ -1668,7 +1670,7 @@ async function refreshUpdateStatus() {
   }
 }
 
-// Dashboard footer showing the Pi's LAN address(es). Re-polled because a
+// Dashboard footer showing the Pi's main LAN address. Re-polled because a
 // DHCP lease can change while the kiosk page stays open for days.
 const NETWORK_FOOTER_POLL_MS = 60 * 1000;
 
@@ -1678,11 +1680,9 @@ async function refreshNetworkFooter() {
   try {
     const resp = await fetch("/api/network");
     if (!resp.ok) return;
-    const { addresses, port } = await resp.json();
+    const { address, port } = await resp.json();
     const suffix = port && port !== 80 ? `:${port}` : "";
-    footer.textContent = addresses.length
-      ? `Dashboard: ${addresses.map((a) => `http://${a}${suffix}`).join("  ·  ")}`
-      : "No network connection";
+    footer.textContent = address ? `Dashboard: http://${address}${suffix}` : "No network connection";
     footer.hidden = false;
   } catch {
     // Silent - passive background poll; keep the last address shown.

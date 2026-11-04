@@ -27,12 +27,39 @@ const BARGRAPH_SEGMENT_COUNT = 20;
 // visible on the real amp's LCD (see e.g. Figure 4-4 in the 1200S manual,
 // where PA Temperature's amber digit and Reflected Power's red digit line up
 // with how far each bargraph is filled).
+// A gauge can instead set its own breakpoints as values (opts.warnFrom /
+// opts.dangerFrom) - see zoneFractions().
 const ZONE_WARN_FRACTION = 0.6;
 const ZONE_DANGER_FRACTION = 0.85;
 
-function zoneForFraction(frac) {
-  if (frac >= ZONE_DANGER_FRACTION) return "danger";
-  if (frac >= ZONE_WARN_FRACTION) return "warn";
+// Non-linear scales, picked by opts.scale (default: linear min..max).
+const SCALES = {
+  // SWR meters - cross-needle meters, SWR bridges, the meter on most rigs -
+  // are scaled by reflection coefficient, position = (SWR-1)/(SWR+1),
+  // because that's what the bridge actually measures. 1:1 sits at the left
+  // end, 3:1 in the middle and infinity at the right end, with the high
+  // values crowding together toward it. Not log, but it gives the same
+  // "spread out at the low end, squeezed at the top" look.
+  swr: {
+    toFraction: (v) => (v === Infinity ? 1 : (v - 1) / (v + 1)),
+    labels: [1, 1.5, 2, 3, 5, Infinity],
+    minorTicks: [1.1, 1.2, 1.3, 1.4, 1.6, 1.7, 1.8, 1.9, 2.5, 4, 10],
+    // Bargraph's three numbers under the track (min / middle / max).
+    barTicks: [1, 3, Infinity],
+  },
+};
+
+function zoneFractions(opts = {}) {
+  return {
+    warn: opts.warnFrom != null ? valueFraction(opts, opts.warnFrom) : ZONE_WARN_FRACTION,
+    danger: opts.dangerFrom != null ? valueFraction(opts, opts.dangerFrom) : ZONE_DANGER_FRACTION,
+  };
+}
+
+function zoneForFraction(frac, opts) {
+  const zones = zoneFractions(opts);
+  if (frac >= zones.danger) return "danger";
+  if (frac >= zones.warn) return "warn";
   return "good";
 }
 
@@ -80,7 +107,7 @@ export function mountGauge(el, themeStyle, opts, forceWidget) {
   const valueEl = document.createElement("div");
   valueEl.className = "gauge-value";
   valueEl.textContent = formatValue(opts.value, opts.unit);
-  valueEl.dataset.zone = zoneForFraction(fraction(opts));
+  valueEl.dataset.zone = zoneForFraction(fraction(opts), opts);
   el.appendChild(valueEl);
 
   mountedWidgets.set(el, { widget, opts, bodyEl, valueEl });
@@ -93,7 +120,7 @@ export function updateGauge(el, value, peak, avg) {
   if (peak !== undefined) mounted.opts.peak = peak;
   if (avg !== undefined) mounted.opts.avg = avg;
   mounted.valueEl.textContent = formatValue(value, mounted.opts.unit);
-  mounted.valueEl.dataset.zone = zoneForFraction(fraction(mounted.opts));
+  mounted.valueEl.dataset.zone = zoneForFraction(fraction(mounted.opts), mounted.opts);
   if (mounted.widget === "needle") {
     updateNeedleGauge(mounted.bodyEl, mounted.opts);
   } else if (mounted.widget === "arc") {
@@ -110,9 +137,16 @@ function formatValue(value, unit) {
 }
 
 function fraction(opts) {
-  const { value, min = 0, max = 100 } = opts;
+  return valueFraction(opts, opts.value);
+}
+
+// Where `value` sits along this gauge's scale, 0..1.
+function valueFraction(opts, value) {
+  const { min = 0, max = 100 } = opts;
   if (value === null || value === undefined || Number.isNaN(value)) return 0;
-  return Math.min(1, Math.max(0, (value - min) / (max - min)));
+  const scale = SCALES[opts.scale];
+  const frac = scale ? scale.toFraction(value) : (value - min) / (max - min);
+  return Math.min(1, Math.max(0, frac));
 }
 
 // --- Bargraph (ACOM: segmented, Modern: smooth gradient) -------------------
@@ -134,7 +168,7 @@ function buildBargraphFill(track, opts, style) {
   const frac = fraction(opts);
   if (style === "smooth") {
     const fill = document.createElement("div");
-    fill.className = "fill zone-" + zoneForFraction(frac);
+    fill.className = "fill zone-" + zoneForFraction(frac, opts);
     fill.style.width = `${frac * 100}%`;
     // Lets a theme size a gradient to the whole scale rather than to the
     // fill, so the fill's color reflects how far up the scale it reaches
@@ -143,11 +177,12 @@ function buildBargraphFill(track, opts, style) {
     track.appendChild(fill);
   } else {
     const filledCount = Math.round(frac * BARGRAPH_SEGMENT_COUNT);
+    const dangerFrac = zoneFractions(opts).danger;
     for (let i = 0; i < BARGRAPH_SEGMENT_COUNT; i++) {
       const seg = document.createElement("div");
       seg.className = "segment";
       if (i < filledCount) seg.classList.add("filled");
-      if (i / BARGRAPH_SEGMENT_COUNT >= ZONE_DANGER_FRACTION) seg.classList.add("danger-zone");
+      if (i / BARGRAPH_SEGMENT_COUNT >= dangerFrac - 1e-9) seg.classList.add("danger-zone");
       track.appendChild(seg);
     }
   }
@@ -189,9 +224,10 @@ function buildTicks(opts) {
   const { min = 0, max = 100 } = opts;
   const row = document.createElement("div");
   row.className = "gauge-ticks";
-  [min, min + (max - min) / 2, max].forEach((v) => {
+  const values = SCALES[opts.scale]?.barTicks || [min, min + (max - min) / 2, max].map(Math.round);
+  values.forEach((v) => {
     const span = document.createElement("span");
-    span.textContent = Math.round(v);
+    span.textContent = formatScaleNumber(v);
     row.appendChild(span);
   });
   return row;
@@ -238,12 +274,21 @@ function renderArcGauge(opts) {
   const [x1, y1] = arcPoint(ARC_R, -ARC_SWEEP);
   const [x2, y2] = arcPoint(ARC_R, ARC_SWEEP);
   const d = `M ${x1} ${y1} A ${ARC_R} ${ARC_R} 0 1 1 ${x2} ${y2}`;
+  // Red arc just outside the scale from the danger point to the top end -
+  // an engine gauge's red range, matching ACOM's red segments and
+  // Classic's redline.
+  const redR = ARC_R + 9;
+  const redFrom = -ARC_SWEEP + zoneFractions(opts).danger * 2 * ARC_SWEEP;
+  const [rx1, ry1] = arcPoint(redR, redFrom);
+  const [rx2, ry2] = arcPoint(redR, ARC_SWEEP);
+  const redD = `M ${rx1} ${ry1} A ${redR} ${redR} 0 ${ARC_SWEEP - redFrom > 180 ? 1 : 0} 1 ${rx2} ${ry2}`;
   const unit = METER_UNIT_WORDS[opts.unit] ?? opts.unit ?? "";
   const wrapper = document.createElement("div");
   wrapper.className = "gauge-arc";
   wrapper.innerHTML = `
     <svg viewBox="0 0 ${ARC_W} ${ARC_H}" role="img" aria-label="${opts.label || "Gauge"}" style="--meter-ratio: ${Math.round((ARC_W / ARC_H) * 1000) / 1000}">
       <path class="arc-track" d="${d}" />
+      <path class="arc-redline" d="${redD}" />
       <path class="arc-fill" d="${d}" pathLength="100" data-arc-fill />
       <line class="arc-peak" x1="${ARC_CX}" y1="${ARC_CY - ARC_R - 9}" x2="${ARC_CX}" y2="${ARC_CY - ARC_R + 9}"
             style="transform-origin: ${ARC_CX}px ${ARC_CY}px" data-arc-peak />
@@ -262,7 +307,7 @@ function updateArcGauge(bodyEl, opts) {
   const fill = bodyEl.querySelector("[data-arc-fill]");
   if (fill) {
     fill.style.strokeDasharray = `${Math.max(frac * 100, 0.5)} 100`;
-    fill.dataset.zone = zoneForFraction(frac);
+    fill.dataset.zone = zoneForFraction(frac, opts);
   }
   const peak = bodyEl.querySelector("[data-arc-peak]");
   if (peak) {
@@ -333,6 +378,7 @@ function meterArc(g, r, a1, a2) {
 }
 
 function formatScaleNumber(v) {
+  if (v === Infinity) return "∞";
   return Math.abs(v) >= 10 || Number.isInteger(v) ? String(Math.round(v)) : String(Math.round(v * 10) / 10);
 }
 
@@ -353,10 +399,19 @@ function buildMeterSvg(opts, g) {
   const angleAt = (frac) => -g.sweep + frac * 2 * g.sweep;
 
   let scale = `<path class="meter-scale" d="${meterArc(g, g.scale, -g.sweep, g.sweep)}" />`;
-  scale += `<path class="meter-redline" d="${meterArc(g, g.scale + g.red, angleAt(ZONE_DANGER_FRACTION), g.sweep)}" />`;
-  for (let k = 0; k <= 20; k++) {
-    const angle = angleAt(k / 20);
-    const major = k % 5 === 0;
+  scale += `<path class="meter-redline" d="${meterArc(g, g.scale + g.red, angleAt(zoneFractions(opts).danger), g.sweep)}" />`;
+  // Linear: 20 even steps, every 5th numbered. A SCALES entry lists its
+  // own numbered and minor tick values instead.
+  const scaleDef = SCALES[opts.scale];
+  const ticks = scaleDef
+    ? [
+        ...scaleDef.labels.map((v) => ({ frac: valueFraction(opts, v), label: v })),
+        ...scaleDef.minorTicks.map((v) => ({ frac: valueFraction(opts, v) })),
+      ]
+    : Array.from({ length: 21 }, (_, k) => ({ frac: k / 20, label: k % 5 === 0 ? min + (k / 20) * (max - min) : undefined }));
+  for (const { frac, label } of ticks) {
+    const angle = angleAt(frac);
+    const major = label !== undefined;
     const [x1, y1] = meterPolar(g, g.scale, angle);
     const [x2, y2] = meterPolar(g, g.scale + (major ? g.major : g.minor), angle);
     scale += `<line class="meter-tick${major ? " major" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
@@ -364,12 +419,12 @@ function buildMeterSvg(opts, g) {
       // The end numbers sit near the window's side edges; anchor them
       // inward so they can't run off it, and (standard meter) nudge them
       // along the scale, up off the redline.
-      const inset = k === 0 ? g.endNumberInset : k === 20 ? -g.endNumberInset : 0;
+      const inset = frac === 0 ? g.endNumberInset : frac === 1 ? -g.endNumberInset : 0;
       const [tx, ty] = meterPolar(g, g.scale + g.number, angle + inset);
-      const anchor = k === 0 ? "start" : k === 20 ? "end" : "middle";
+      const anchor = frac === 0 ? "start" : frac === 1 ? "end" : "middle";
       scale +=
         `<text class="meter-number" x="${tx}" y="${ty}" style="font-size:${g.numberSize}px; text-anchor:${anchor}">` +
-        `${formatScaleNumber(min + (k / 20) * (max - min))}</text>`;
+        `${formatScaleNumber(label)}</text>`;
     }
   }
 

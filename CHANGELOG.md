@@ -22,8 +22,9 @@ first, then get moved under a version heading below when tagged.
 ### Added
 - A small line at the bottom of the dashboard shows the Pi's own address
   (e.g. `http://10.10.50.254:8000`), so a Pi without a static IP can be
-  found from the kiosk screen. Lists every interface (Ethernet and
-  Wi-Fi) and refreshes every minute in case the DHCP lease changes.
+  found from the kiosk screen. One address even with Ethernet and Wi-Fi
+  both up (the one the default route uses), refreshed every minute in
+  case the DHCP lease changes.
   New `GET /api/network` endpoint.
 - Power sounds alongside the alarm sounds, in the amp's own Morse: TEST
   when it powers up, R once it's ready (STB/OPR), and AR (.-.-.) when it
@@ -45,6 +46,11 @@ first, then get moved under a version heading below when tagged.
   for 20 WPM too.
 - Settings' Display section is now "Display & Sound", since it also
   holds the sound settings.
+- The SWR gauge uses the usual SWR-meter scale: 1:1 to infinity, spaced by
+  reflection coefficient so 3:1 sits in the middle and the high values
+  crowd toward the infinity end. Red from 3:1 (amber from 2:1), in every
+  theme. Modern's arc dials gained a thin red arc over their red range,
+  like ACOM's red segments and Classic's redline.
 
 ## [0.1.15] - 2026-10-29
 
