@@ -41,6 +41,12 @@ first, then get moved under a version heading below when tagged.
   dashboard played the fault sound on every switch (nine times after one
   SWR shutdown). It now sounds once per run of alarms, and again only if a
   more serious level shows up; the run ends once alarms stay clear for 5s.
+- Antenna names went blank in Antenna Setup after the amp was power
+  cycled, even though the amp's own screen still showed them: after a
+  power-up the amp answers the names request with blanks. The Pi now
+  remembers the names from your last save (or from any read-back that
+  has names) and shows those. Names already set before this update need
+  one more Save for the Pi to learn them.
 
 ### Changed
 - Settings re-reads everything from the amp each time it opens, so the
@@ -52,6 +58,8 @@ first, then get moved under a version heading below when tagged.
 - Download Amp Snapshot moved into Amplifier & Tuner, with a note that
   it's for debugging.
 - Pressing the gear icon while Settings is open closes it again.
+- Expanding Antenna Setup reads names and band assignments from the amp
+  again, with a small progress bar above the matrix while it reads.
 - Morse sounds (alarms and power) play at 20 WPM instead of 15, closer
   to the amp's own speed. Buzzer Test's "K7TDM TEST" on the amp is paced
   for 20 WPM too.

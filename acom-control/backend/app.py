@@ -113,6 +113,7 @@ app = FastAPI(title="ACOM Remote Control")
 
 config: AppConfig = load_config()
 amp_state = AmpState(profile=get_amp_profile(config.amp.model), tuner_model=config.tuner.model)
+amp_state.set_antenna_names(config.tuner.antenna_names)
 
 serial_link: Optional[SerialLink] = None
 modbus_server: Optional[ModbusServer] = None
@@ -203,6 +204,28 @@ def _maybe_restore_main_telemetry() -> None:
     _spawn(serial_link.enqueue(protocol.build_atu_activate_cyclic_display(protocol.ATU_ACTIVATE_CYCLIC_2F)))
 
 
+def _remember_antenna_names(names: list[str]) -> None:
+    if list(names) != list(config.tuner.antenna_names):
+        config.tuner.antenna_names = list(names)
+        config.save()
+
+
+def _on_antenna_names(names: list[str]) -> None:
+    """0x1B. The amp's display keeps the names through a power cycle, but
+    after a power-up the amp's 0x1B reply is all blank (2026-11-03: names
+    written at 21:07 read back fine until the amp restarted at 21:11, then
+    blank on every request, while the amp's own screen still showed them).
+    So an all-blank reply doesn't replace the names the Pi remembers; one
+    with any name in it is the amp's real list (e.g. renamed on the amp's
+    front panel) and is remembered. Clearing every name on purpose is done
+    from Antenna Setup's Save, which stores what it wrote."""
+    if any(name.strip() for name in names):
+        amp_state.update_antenna_names(names)
+        _remember_antenna_names(names)
+    else:
+        amp_state.mark_comms_ok()
+
+
 def _on_frame(frame: protocol.Frame) -> None:
     """Dispatches a decoded frame onto AmpState and schedules a WebSocket
     broadcast. Runs synchronously from SerialLink's asyncio read-loop task
@@ -225,7 +248,7 @@ def _on_frame(frame: protocol.Frame) -> None:
         elif frame.address == 0x18:
             amp_state.update_antenna_assignments(protocol.parse_antenna_assignments(frame))
         elif frame.address == 0x1B:
-            amp_state.update_antenna_names(protocol.parse_antenna_names(frame))
+            _on_antenna_names(protocol.parse_antenna_names(frame))
         elif frame.address == 0x27:
             amp_state.update_antenna_band_status(protocol.parse_antenna_band_status(frame))
         elif frame.address == 0x21:
@@ -1460,6 +1483,10 @@ async def set_antenna_config(req: AntennaConfigRequest) -> dict:
     names_result = await link.send_command(protocol.build_set_antenna_names(names), echo_address=0x1B)
     if not names_result.ok:
         raise HTTPException(502, f"amplifier did not confirm antenna names (param=0x{names_result.param:04X})")
+    # What was written, even all blank - _on_antenna_names() ignores a
+    # blank read-back.
+    amp_state.set_antenna_names(names)
+    _remember_antenna_names(names)
     assignments_result = await link.send_command(
         protocol.build_set_antenna_assignments(ordered), echo_address=0x18
     )

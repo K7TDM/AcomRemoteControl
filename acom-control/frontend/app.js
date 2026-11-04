@@ -1195,6 +1195,11 @@ function wireControls() {
   document.getElementById("btn-amp-settings-save")?.addEventListener("click", withErrorBanner(saveAmpSettings));
   document.getElementById("btn-antenna-setup-save")?.addEventListener("click", withErrorBanner(saveAntennaSetup));
   wireSetupEditTracking();
+  // Expanding Antenna Setup reads names and band assignments from the amp
+  // again (Settings already did on open, but the amp may have changed since).
+  document.getElementById("antenna-setup-section")?.addEventListener("toggle", (event) => {
+    if (event.target.id === "antenna-setup-section" && event.target.open) refreshFromAmp();
+  });
   document.getElementById("btn-cat-settings-save")?.addEventListener("click", withErrorBanner(saveCatSettings));
   document.getElementById("setup-tuner-select")?.addEventListener("change", updateAntennaSetupVisibility);
   document.getElementById("btn-download-logs")?.addEventListener("click", () => window.open("/api/logs", "_blank"));
@@ -1265,9 +1270,12 @@ async function refreshFromAmp() {
   // most), so the re-read right after it sees the results - see CLAUDE.md
   // open question 6 for why the startup handshake alone isn't enough.
   // Sections edited meanwhile keep their edits (see sectionEdited()).
-  if (setupResyncPending || !appState.lastStatus?.comms_ok) return;
-  const note = document.getElementById("setup-sync-note");
-  if (note) note.hidden = false;
+  // Also runs when Antenna Setup is expanded, with a progress bar above its
+  // matrix while it reads.
+  if (setupResyncPending) return setupResyncPending;
+  if (!appState.lastStatus?.comms_ok) return;
+  const busyEls = ["setup-sync-note", "antenna-sync-progress"].map((id) => document.getElementById(id));
+  busyEls.forEach((el) => { if (el) el.hidden = false; });
   setupResyncPending = (async () => {
     try {
       await apiFetch("/api/resync", { method: "POST" });
@@ -1275,7 +1283,7 @@ async function refreshFromAmp() {
     } catch {
       // Silent - the cached values stay on screen.
     } finally {
-      if (note) note.hidden = true;
+      busyEls.forEach((el) => { if (el) el.hidden = true; });
       setupResyncPending = null;
     }
   })();

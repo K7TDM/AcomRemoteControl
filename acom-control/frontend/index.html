@@ -327,6 +327,12 @@
 
     <details id="antenna-setup-section" class="setup-section collapsible" hidden>
       <summary><h2>Antenna Setup</h2></summary>
+      <!-- While names and band assignments are being read from the amp -
+           see app.js's refreshFromAmp(). -->
+      <div id="antenna-sync-progress" class="antenna-sync-progress" hidden>
+        <p>Reading antennas from the amplifier&hellip;</p>
+        <div class="progress-indeterminate" role="progressbar" aria-label="Reading antennas from the amplifier"><div></div></div>
+      </div>
       <table class="antenna-matrix">
         <thead>
           <tr>

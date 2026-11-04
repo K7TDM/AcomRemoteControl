@@ -40,6 +40,12 @@ class AmpConfig:
 @dataclass
 class TunerConfig:
     model: Optional[str] = None
+    # Last antenna names seen (from a save, or a 0x1B read-back that had
+    # names). The amp keeps its names for its own display through a power
+    # cycle, but after a power-up its 0x1B reply comes back blank
+    # (2026-11-03), so the Pi remembers them - see app.py's
+    # _on_antenna_names().
+    antenna_names: list = field(default_factory=lambda: [""] * 4)
 
 
 @dataclass

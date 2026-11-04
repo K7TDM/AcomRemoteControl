@@ -165,10 +165,15 @@ class AmpState:
         self.mark_comms_ok()
 
     def update_antenna_names(self, names: list[str]) -> None:
+        self.set_antenna_names(names)
+        self.mark_comms_ok()
+
+    def set_antenna_names(self, names: list[str]) -> None:
+        """Just the names, without counting as a frame from the amp - for
+        the Pi's remembered names (config tuner.antenna_names)."""
         ordered = sorted(self.antenna_config, key=lambda s: s.number)
         for slot, name in zip(ordered, names):
             slot.name = name
-        self.mark_comms_ok()
 
     def to_dict(self) -> dict:
         return {

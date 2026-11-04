@@ -475,6 +475,17 @@ html.idle-dimmed:not(.idle-dim-hardware) .idle-dim-overlay {
   }
 }
 
+/* Antenna Setup: above the matrix while it's being read from the amp. */
+.antenna-sync-progress {
+  margin-bottom: 0.75rem;
+}
+
+.antenna-sync-progress p {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
 #update-changes-body .changelog-version {
   font-size: 1rem;
   font-weight: bold;
