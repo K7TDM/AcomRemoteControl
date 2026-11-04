@@ -406,6 +406,38 @@ html.idle-dimmed:not(.idle-dim-hardware) .idle-dim-overlay {
   padding-left: 1.25rem;
 }
 
+/* Software Update: a bar with a block sliding across it while the check
+   runs (the backend doesn't report progress, so it's indeterminate). */
+.progress-indeterminate {
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  background: var(--bg-page);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+}
+
+.progress-indeterminate > div {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  background: var(--button-bg-active);
+  border-radius: 5px;
+  animation: progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  from { left: -35%; }
+  to { left: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-indeterminate > div {
+    animation-duration: 3s;
+  }
+}
+
 #update-changes-body .changelog-version {
   font-size: 1rem;
   font-weight: bold;

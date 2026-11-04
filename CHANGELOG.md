@@ -51,6 +51,10 @@ first, then get moved under a version heading below when tagged.
   crowd toward the infinity end. Red from 3:1 (amber from 2:1), in every
   theme. Modern's arc dials gained a thin red arc over their red range,
   like ACOM's red segments and Classic's redline.
+- Software Update shows a "Checking for updates..." progress bar while
+  the check runs, instead of half-filled info (no version yet, beta box
+  looking unticked). The version, beta switch and buttons appear once
+  the answer is in.
 
 ## [0.1.15] - 2026-10-29
 

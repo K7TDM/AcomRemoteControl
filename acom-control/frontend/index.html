@@ -391,26 +391,34 @@
   <section id="update-screen" hidden>
     <div class="setup-section">
       <h2>Software Update</h2>
-      <p id="update-headline">Checking for updates...</p>
-      <p>Current version: <span id="update-current-version"></span></p>
-      <!-- Only shown when there's actually something newer to install. -->
-      <p id="update-latest-row" hidden>New version: <span id="update-latest-version"></span></p>
-      <!-- Shown with beta updates off while running a beta build (ahead of
-           the latest release) - see POST /api/update/rollback. -->
-      <div id="update-rollback" hidden>
-        <p id="update-rollback-note" class="danger-warning"></p>
-        <button id="btn-update-rollback" class="acom-button" type="button"></button>
+      <!-- Shown instead of everything below while a check is running - see
+           app.js's runUpdateCheck(). -->
+      <div id="update-checking" class="update-checking" hidden>
+        <p>Checking for updates&hellip;</p>
+        <div class="progress-indeterminate" role="progressbar" aria-label="Checking for updates"><div></div></div>
       </div>
-      <p>
-        <label>
-          <input type="checkbox" id="update-beta-toggle" />
-          Beta updates (any new commit on main, not just tagged releases)
-        </label>
-      </p>
-      <button id="btn-update-check" class="acom-button" type="button">Check for Updates</button>
-      <button id="btn-update-now" class="acom-button" type="button" hidden>Update Now</button>
-      <p id="update-status" class="danger-warning" hidden></p>
-      <p><a id="changelog-link" href="/changelog" target="_blank" rel="noopener">View full changelog</a></p>
+      <div id="update-info">
+        <p id="update-headline"></p>
+        <p>Current version: <span id="update-current-version"></span></p>
+        <!-- Only shown when there's actually something newer to install. -->
+        <p id="update-latest-row" hidden>New version: <span id="update-latest-version"></span></p>
+        <!-- Shown with beta updates off while running a beta build (ahead of
+             the latest release) - see POST /api/update/rollback. -->
+        <div id="update-rollback" hidden>
+          <p id="update-rollback-note" class="danger-warning"></p>
+          <button id="btn-update-rollback" class="acom-button" type="button"></button>
+        </div>
+        <p>
+          <label>
+            <input type="checkbox" id="update-beta-toggle" />
+            Beta updates (any new commit on main, not just tagged releases)
+          </label>
+        </p>
+        <button id="btn-update-check" class="acom-button" type="button">Check for Updates</button>
+        <button id="btn-update-now" class="acom-button" type="button" hidden>Update Now</button>
+        <p id="update-status" class="danger-warning" hidden></p>
+        <p><a id="changelog-link" href="/changelog" target="_blank" rel="noopener">View full changelog</a></p>
+      </div>
     </div>
 
     <div id="update-changes-section" class="setup-section" hidden>

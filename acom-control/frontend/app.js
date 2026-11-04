@@ -1748,6 +1748,8 @@ function renderUpdateChanges() {
   }).join("");
 }
 
+const UPDATE_CHECK_MIN_SHOWN_MS = 600;
+
 async function checkForUpdateNow() {
   await runUpdateCheck(() => apiFetch("/api/update/check", { method: "POST" }));
 }
@@ -1770,7 +1772,16 @@ async function runUpdateCheck(request) {
   const latestEl = document.getElementById("update-latest-version");
   const updateNowButton = document.getElementById("btn-update-now");
   const statusEl = document.getElementById("update-status");
-  if (headline) headline.textContent = "Checking for updates...";
+  // While the check runs, only the progress bar shows: the half-filled
+  // info underneath (no version yet, beta box not yet ticked from the
+  // backend's answer) looked like the real state.
+  const checkingEl = document.getElementById("update-checking");
+  const infoEl = document.getElementById("update-info");
+  if (checkingEl) checkingEl.hidden = false;
+  if (infoEl) infoEl.hidden = true;
+  // Kept up at least this long, so a fast check doesn't just flicker.
+  const minShown = new Promise((resolve) => setTimeout(resolve, UPDATE_CHECK_MIN_SHOWN_MS));
+  if (headline) headline.textContent = "";
   if (currentEl) currentEl.textContent = "";
   if (latestEl) latestEl.textContent = "";
   if (statusEl) statusEl.hidden = true;
@@ -1791,6 +1802,7 @@ async function runUpdateCheck(request) {
   try {
     const resp = await request();
     updateStatus = await resp.json();
+    await minShown;
     if (betaToggle) betaToggle.checked = !!updateStatus.beta;
     if (currentEl) currentEl.textContent = updateStatus.current_version || "unknown";
     if (latestEl) latestEl.textContent = updateStatus.latest_version || "no tagged release yet";
@@ -1816,10 +1828,13 @@ async function runUpdateCheck(request) {
     renderUpdateChanges();
     renderUpdateButtonHighlight();
   } catch (err) {
+    await minShown;
     if (headline) headline.textContent = `Check failed: ${err.message}`;
   } finally {
     if (betaToggle) betaToggle.disabled = false;
     if (checkButton) checkButton.disabled = false;
+    if (checkingEl) checkingEl.hidden = true;
+    if (infoEl) infoEl.hidden = false;
   }
 }
 
