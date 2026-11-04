@@ -71,6 +71,36 @@ run the backend (development command or as a systemd service). The web
 dashboard, Setup wizard, and Antenna Setup screen are served from there
 once it's running.
 
+## Kiosk mode (dashboard on the Pi's own screen)
+
+Plug a screen into the Pi - the official touchscreen or an HDMI
+monitor - and install with `--kiosk` to show the dashboard on it full
+screen, every time the Pi starts:
+
+```bash
+bash install.sh --kiosk
+```
+
+Or turn it on later without the command line: in the dashboard (from any
+device), open **Settings -> Display & Sound -> Raspberry Pi display**.
+
+What kiosk mode does:
+- Starts a full-screen browser on the Pi's screen at every boot, once the
+  dashboard is up. Works on Raspberry Pi OS Lite - no desktop needed
+  (it installs `cage` and Chromium). Pi 4 or newer recommended.
+- Behaves like an instrument panel: no cursor unless a mouse is used, no
+  text selection, long-press menu or pinch zoom on the touchscreen.
+- Dims the screen after 10 minutes idle; a touch or key-up wakes it.
+  Brightness is set in Settings (kiosk only).
+- Reloads itself after the dashboard is updated, so nobody has to touch it.
+- Shows the Pi's own address at the bottom of the dashboard, so you can
+  find it from another device without a static IP.
+
+To get a console back, plug in a keyboard and press Ctrl+Alt+F2, or turn
+it off in Settings (or `sudo acom-update-apply kiosk-off`). Details,
+including Touch Display 2 setup, are in `acom-control/README.md`'s
+"Kiosk display" section.
+
 ## Documentation
 
 The `documentation/` folder has the manufacturer reference PDFs used for

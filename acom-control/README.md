@@ -96,7 +96,7 @@ fallback, e.g. over SSH: `sudo acom-update-apply`.
 ## Kiosk display (the Pi's own screen)
 
 To also show the dashboard full screen on a screen plugged into the Pi -
-the official touchscreen or an HDMI monitor - turn on **Setup -> Display
+the official touchscreen or an HDMI monitor - turn on **Settings -> Display & Sound
 -> Raspberry Pi display** in the dashboard (from any device). The first
 time, the Pi downloads the browser, which takes a few minutes; the
 switch shows progress and which displays are connected. Or from the
