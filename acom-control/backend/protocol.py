@@ -83,6 +83,9 @@ def try_parse_frame(buf: bytes) -> tuple[Optional[Frame], bytes]:
 class CommandAck:
     ok: bool
     param: int = 0  # 16-bit "Return Parameter" (Byte3 high / Byte4 low) - 0 for 0x01, which carries none
+    # True for a 0x01 "malformed" reply: the amp couldn't parse what it
+    # received, so send_command() resends instead of treating it as a NO.
+    malformed: bool = False
 
 
 def parse_ok(frame: Frame) -> CommandAck:
@@ -100,7 +103,7 @@ def parse_err(frame: Frame) -> CommandAck:
 def parse_malformed_reply(_frame: Frame) -> CommandAck:
     """Parses message 0x01 (doc section 3.1) - amp indicates our last
     message was malformed. Fixed 4-byte frame, carries no data/parameter."""
-    return CommandAck(ok=False, param=0)
+    return CommandAck(ok=False, param=0, malformed=True)
 
 
 # =============================================================================

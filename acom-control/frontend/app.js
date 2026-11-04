@@ -2085,6 +2085,16 @@ const ALARM_MAX_GAIN = 0.3;
 const ALARM_DEFAULT_VOLUME = 60;
 let alarmAudioCtx = null;
 let lastAlarmCode = null;
+// One sound per run of alarms. After a fault the amp cycles its latched
+// alarms on screen - 2026-11-03: two hard faults, 0xA9 and 0xA7,
+// alternating every ~2.5s for 20s after power-up - and each switch used to
+// sound again. Now a run only sounds again if a more serious level shows up
+// (a warning, then a hard fault). The run ends once the alarm area has
+// stayed clear for ALARM_CLEAR_RESET_MS.
+const ALARM_LEVEL_RANK = { warning: 1, soft_fault: 2, hard_fault: 3 };
+const ALARM_CLEAR_RESET_MS = 5000;
+let soundedAlarmRank = 0;
+let alarmClearSince = null;
 // When the last queued Morse finishes (AudioContext time), so back-to-back
 // sounds - TEST then R on power-up - play one after the other, not on top
 // of each other.
@@ -2222,14 +2232,24 @@ function checkPowerSounds(state) {
   if (sounds.length && loadAlarmSoundsEnabled()) sounds.forEach(playMorse);
 }
 
-// Called on every status update; sounds once per new alarm, not for as long
-// as it stays on the amp's screen. Any new alarm also wakes a dimmed screen.
+// Called on every status update; sounds once per run of alarms (see
+// soundedAlarmRank), not for as long as one stays on the amp's screen or
+// each time the amp cycles between them. Any new alarm also wakes a dimmed
+// screen.
 function checkAlarmSound(state) {
   const code = state.telemetry ? state.telemetry.alarm_code : null;
   const level = state.telemetry ? state.telemetry.alarm_level : null;
+  if (!level) {
+    alarmClearSince ??= Date.now();
+    if (Date.now() - alarmClearSince >= ALARM_CLEAR_RESET_MS) soundedAlarmRank = 0;
+  } else {
+    alarmClearSince = null;
+  }
   if (code !== lastAlarmCode && level) {
     noteActivity();
-    if (loadAlarmSoundsEnabled()) playMorse(ALARM_MORSE[level] || "");
+    const rank = ALARM_LEVEL_RANK[level] || 1;
+    if (rank > soundedAlarmRank && loadAlarmSoundsEnabled()) playMorse(ALARM_MORSE[level] || "");
+    soundedAlarmRank = Math.max(soundedAlarmRank, rank);
   }
   lastAlarmCode = code;
 }

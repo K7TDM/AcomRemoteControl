@@ -31,6 +31,17 @@ first, then get moved under a version heading below when tagged.
   powers off. The manual doesn't spell these out - they're as heard from
   the amp. Same on/off switch and volume as the alarm sounds.
 
+### Fixed
+- Antenna Setup's Save could fail with "amplifier did not confirm antenna
+  assignments" and need repeating: frames went out to the amp with too
+  little gap between them, and it rejected one as malformed. Every frame
+  now gets a real 10ms pause after it has finished sending, and a
+  "malformed" reply is resent instead of failing the save.
+- After a fault, the amp cycles its latched alarms on screen, and the
+  dashboard played the fault sound on every switch (nine times after one
+  SWR shutdown). It now sounds once per run of alarms, and again only if a
+  more serious level shows up; the run ends once alarms stay clear for 5s.
+
 ### Changed
 - Settings re-reads everything from the amp each time it opens, so the
   "Refresh from Amp" button is gone. Anything you've started editing

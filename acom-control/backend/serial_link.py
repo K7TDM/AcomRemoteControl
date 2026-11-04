@@ -20,6 +20,7 @@ import asyncio
 import logging
 import os
 import termios
+import time
 from typing import Callable, Optional
 
 import serial
@@ -30,6 +31,10 @@ from . import protocol
 logger = logging.getLogger("acom.backend.serial")
 
 INTER_MESSAGE_PACING_S = 0.010  # ~10ms pause required between messages
+# Bits on the wire per byte at 8N1 (start + 8 data + stop) - a frame takes
+# len * 10 / baud seconds to go out, and the 10ms pause only starts once
+# it has (see _write_paced()).
+BITS_PER_BYTE = 10
 MAX_REOPEN_RETRIES = 5
 READ_CHUNK_SIZE = 256
 READ_POLL_INTERVAL_S = 0.02
@@ -123,6 +128,9 @@ class SerialLink:
         # waiting on plus the event a frame at that address sets.
         self._config_pull_task: Optional[asyncio.Task] = None
         self._awaited_reply: Optional[tuple[int, asyncio.Event]] = None
+        # When the last frame written has finished going out on the wire
+        # plus the 10ms gap (time.monotonic()) - see _write_paced().
+        self._wire_free_at: float = 0.0
 
     async def start(self) -> None:
         self._open_port()
@@ -281,8 +289,7 @@ class SerialLink:
                 # frame = start, address, length, payload..., checksum
                 self._pending_echo = (echo_address, frame[3:-1]) if echo_address is not None else None
                 try:
-                    assert self._serial is not None
-                    self._serial.write(frame)
+                    await self._write_paced(frame)
                     logger.debug("TX (confirmed, attempt %d/%d) %s", attempt, max_attempts, frame.hex(" "))
                 except Exception:
                     logger.exception("Failed writing confirmed frame to serial port")
@@ -292,7 +299,14 @@ class SerialLink:
                     continue
                 try:
                     result = await asyncio.wait_for(fut, timeout_s)
-                    return result
+                    if not result.malformed:
+                        return result
+                    # The amp didn't receive it intact - resend, same as
+                    # no reply at all.
+                    logger.warning(
+                        "Amp reported a malformed message (attempt %d/%d): %s",
+                        attempt, max_attempts, frame.hex(" "),
+                    )
                 except asyncio.TimeoutError:
                     logger.warning(
                         "No OK/ERR reply within %.2fs (attempt %d/%d): %s",
@@ -400,16 +414,35 @@ class SerialLink:
         else:
             logger.info("Config pull: all replies received")
 
+    async def _write_paced(self, frame: bytes) -> None:
+        """Every write goes through here - the queued frames (_write_loop,
+        incl. ACKs) and send_command()'s direct writes alike - so there's
+        always a real ~10ms of silence on the wire between two frames.
+        write() only hands bytes to the driver, which then takes
+        len * 10 / baud to send them (54ms for a 52-byte antenna-names
+        frame at 9600), so pacing from the write() call itself left frames
+        back to back: a 2026-11-03 log had an ACK queued in the middle of a
+        0x85 frame and a 0xA0 starting ~4ms after the ACK finished, and the
+        amp answered the 0xA0 with 0x01 "malformed"."""
+        # Re-checked after every sleep: another writer may have taken the
+        # wire meanwhile. No await between the check and the write, so the
+        # two can't interleave.
+        while (wait := self._wire_free_at - time.monotonic()) > 0:
+            await asyncio.sleep(wait)
+        assert self._serial is not None
+        self._serial.write(frame)
+        self._wire_free_at = (
+            time.monotonic() + len(frame) * BITS_PER_BYTE / self.baudrate + INTER_MESSAGE_PACING_S
+        )
+
     async def _write_loop(self) -> None:
         while True:
             frame = await self._out_queue.get()
             try:
-                assert self._serial is not None
-                self._serial.write(frame)
+                await self._write_paced(frame)
                 logger.debug("TX %s", frame.hex(" "))
             except Exception:
                 logger.exception("Failed writing frame to serial port")
-            await asyncio.sleep(INTER_MESSAGE_PACING_S)
 
     async def _read_loop(self) -> None:
         reopen_attempts = 0
