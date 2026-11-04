@@ -147,6 +147,10 @@
       <button id="btn-antenna-next" class="acom-button" type="button">Next Antenna</button>
       <button id="btn-buzzer-test" class="acom-button" type="button">Buzzer Test</button>
     </div>
+
+    <!-- The Pi's own address, so it can be read off the kiosk screen when
+         the Pi has no static IP - see app.js's refreshNetworkFooter(). -->
+    <footer id="network-footer" class="network-footer" hidden></footer>
   </main>
 
   <section id="power-off-screen" hidden>
@@ -164,9 +168,14 @@
       <p id="setup-power-note" class="danger-warning" hidden>The amplifier isn't on.</p>
     </div>
 
+    <!-- Opening Settings re-reads everything from the amp - see app.js's
+         refreshFromAmp(). -->
+    <p id="setup-sync-note" class="danger-warning" hidden>Reading settings from the amplifier&hellip;</p>
+
     <!-- Each top-level section is a native <details>, collapsed by default -
-         the Setup screen is long, so only the section being worked on opens. -->
-    <details class="setup-section collapsible">
+         the Setup screen is long, so only the section being worked on opens.
+         Sections with settings to send have their own Save button. -->
+    <details id="setup-amp-section" class="setup-section collapsible">
       <summary><h2>Amplifier &amp; Tuner</h2></summary>
       <label>
         Amp model:
@@ -193,6 +202,22 @@
         <input type="checkbox" id="setup-show-cb-band" />
         Show CB band (26.965 - 27.405 MHz) on the band panel - this browser only
       </label>
+      <div class="section-actions">
+        <button id="btn-amp-settings-save" class="acom-button" type="button">Save</button>
+      </div>
+
+      <!-- Re-syncs, then downloads the full current AmpState plus the
+           complete per-antenna/per-band ATU tuning matrix and all four
+           Hard Fault records (neither of which the normal resync
+           requests) as one JSON file - for comparing real-hardware
+           setups over time, not a single-field lookup. Takes 10+
+           seconds (44 paced ATU tuning requests) - that's expected. -->
+      <h3>Amp snapshot</h3>
+      <p class="danger-warning">
+        Everything the amp and tuner report, in one file - useful for
+        debugging. Takes about 10 seconds.
+      </p>
+      <button id="btn-amp-snapshot" class="acom-button" type="button">Download Amp Snapshot</button>
     </details>
 
     <details class="setup-section collapsible">
@@ -259,14 +284,14 @@
       <button id="btn-display-reset" class="acom-button" type="button">Reset to Default</button>
     </details>
 
-    <details class="setup-section collapsible">
+    <details id="cat-settings-section" class="setup-section collapsible">
       <summary><h2>CAT / Rig Control</h2></summary>
       <p class="danger-warning">
         Settings for the amp's own rear-panel CAT port (separate from
         this Pi's RS-232 link) - same options as the amp's own front-
         panel CAT menu. "Current" values come from the amp's own
-        0x12 reply; this doesn't exist until comms + a resync have
-        happened at least once.
+        0x12 reply, re-read each time Settings opens while the amp is
+        connected.
       </p>
       <label>
         Interface type:
@@ -313,6 +338,9 @@
         </thead>
         <tbody id="antenna-matrix-body"></tbody>
       </table>
+      <div class="section-actions">
+        <button id="btn-antenna-setup-save" class="acom-button" type="button">Save Antennas</button>
+      </div>
 
       <div id="atu-status-panel" class="atu-status-panel"></div>
 
@@ -355,15 +383,6 @@
     </details>
 
     <div class="button-bar">
-      <button id="btn-setup-refresh" class="acom-button" type="button">Refresh from Amp</button>
-      <button id="btn-setup-save" class="acom-button" type="button">Save</button>
-      <!-- Re-syncs, then downloads the full current AmpState plus the
-           complete per-antenna/per-band ATU tuning matrix and all four
-           Hard Fault records (neither of which the normal resync
-           requests) as one JSON file - for comparing real-hardware
-           setups over time, not a single-field lookup. Takes 10+
-           seconds (44 paced ATU tuning requests) - that's expected. -->
-      <button id="btn-amp-snapshot" class="acom-button" type="button">Download Amp Snapshot (~10s)</button>
       <button id="btn-setup-close" class="acom-button" type="button">Close</button>
     </div>
   </section>

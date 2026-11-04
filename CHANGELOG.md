@@ -19,6 +19,24 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+### Added
+- A small line at the bottom of the dashboard shows the Pi's own address
+  (e.g. `http://10.10.50.254:8000`), so a Pi without a static IP can be
+  found from the kiosk screen. Lists every interface (Ethernet and
+  Wi-Fi) and refreshes every minute in case the DHCP lease changes.
+  New `GET /api/network` endpoint.
+
+### Changed
+- Settings re-reads everything from the amp each time it opens, so the
+  "Refresh from Amp" button is gone. Anything you've started editing
+  is left alone while the fresh values come in.
+- Save buttons now live in the sections that need them: Amplifier &
+  Tuner has its own Save, and Antenna Setup has Save Antennas. Only
+  Close stays at the bottom.
+- Download Amp Snapshot moved into Amplifier & Tuner, with a note that
+  it's for debugging.
+- Pressing the gear icon while Settings is open closes it again.
+
 ## [0.1.15] - 2026-10-29
 
 ### Added

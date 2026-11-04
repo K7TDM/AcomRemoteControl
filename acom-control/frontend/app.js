@@ -1180,10 +1180,11 @@ function wireControls() {
   document.getElementById("btn-antenna-next")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/antenna", postJson({ action: "next" }))));
   document.getElementById("btn-buzzer-test")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/buzzer/morse", postJson({ volume: 50 }))));
 
-  document.getElementById("btn-setup-open")?.addEventListener("click", withErrorBanner(openSetupScreen));
+  document.getElementById("btn-setup-open")?.addEventListener("click", withErrorBanner(toggleSetupScreen));
   document.getElementById("btn-setup-close")?.addEventListener("click", closeSetupScreen);
-  document.getElementById("btn-setup-save")?.addEventListener("click", withErrorBanner(saveSetup));
-  document.getElementById("btn-setup-refresh")?.addEventListener("click", withErrorBanner(refreshFromAmp));
+  document.getElementById("btn-amp-settings-save")?.addEventListener("click", withErrorBanner(saveAmpSettings));
+  document.getElementById("btn-antenna-setup-save")?.addEventListener("click", withErrorBanner(saveAntennaSetup));
+  wireSetupEditTracking();
   document.getElementById("btn-cat-settings-save")?.addEventListener("click", withErrorBanner(saveCatSettings));
   document.getElementById("setup-tuner-select")?.addEventListener("change", updateAntennaSetupVisibility);
   document.getElementById("btn-download-logs")?.addEventListener("click", () => window.open("/api/logs", "_blank"));
@@ -1223,11 +1224,20 @@ function postJson(body) {
 // Setup screen (amp/tuner model + Antenna Setup matrix)
 // =============================================================================
 
+// The gear icon toggles Settings: a second press goes back to the dashboard.
+function toggleSetupScreen() {
+  if (appState.setupOpen) closeSetupScreen();
+  else openSetupScreen();
+}
+
 function openSetupScreen() {
   appState.setupOpen = true;
   appState.updateScreenOpen = false;
+  // Fresh form on every open - nothing half-edited from last time is kept.
+  document.querySelectorAll("#setup-screen [data-edited]").forEach((el) => delete el.dataset.edited);
   updateScreenVisibility();
-  loadSetup();
+  // Show what the backend already has right away, then ask the amp again.
+  loadSetup().then(refreshFromAmp);
 }
 
 function closeSetupScreen() {
@@ -1235,27 +1245,57 @@ function closeSetupScreen() {
   updateScreenVisibility();
 }
 
+let setupResyncPending = null;
+
 async function refreshFromAmp() {
-  // "Refresh from Amp" previously just called loadSetup(), which only
-  // re-reads whatever the backend's AmpState already has cached - if the
-  // amp never answered the one-shot 0x18/0x1B/0x2A requests sent during
-  // the initial startup handshake (observed on real hardware - see
-  // CLAUDE.md open question 6), that cache stays empty forever and this
-  // button did nothing. POST /api/resync re-sends those requests now, so
-  // a later retry can succeed even if the first attempt (fired the
-  // instant the serial port opened) was too early for the amp/ATU to
-  // answer. /api/resync now asks for each message in turn and only
-  // returns once they've all been answered or given up on (a few
-  // seconds at most), so the re-read right after it sees the results.
-  const btn = document.getElementById("btn-setup-refresh");
-  const label = btn ? btn.textContent : "";
-  if (btn) { btn.disabled = true; btn.textContent = "Refreshing…"; }
-  try {
-    await apiFetch("/api/resync", { method: "POST" });
-    await loadSetup();
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = label; }
+  // Replaces the old "Refresh from Amp" button: every Settings open
+  // re-asks the amp for everything Setup shows. POST /api/resync re-sends
+  // the 0x11/0x12/0x16/0x18/0x1B/0x2A requests one at a time and only
+  // returns once they've been answered or given up on (a few seconds at
+  // most), so the re-read right after it sees the results - see CLAUDE.md
+  // open question 6 for why the startup handshake alone isn't enough.
+  // Sections edited meanwhile keep their edits (see sectionEdited()).
+  if (setupResyncPending || !appState.lastStatus?.comms_ok) return;
+  const note = document.getElementById("setup-sync-note");
+  if (note) note.hidden = false;
+  setupResyncPending = (async () => {
+    try {
+      await apiFetch("/api/resync", { method: "POST" });
+      if (appState.setupOpen) await loadSetup();
+    } catch {
+      // Silent - the cached values stay on screen.
+    } finally {
+      if (note) note.hidden = true;
+      setupResyncPending = null;
+    }
+  })();
+  return setupResyncPending;
+}
+
+// True once the user has changed anything in that Setup section since it
+// was last opened or saved - loadSetup() then leaves it alone, so the
+// automatic refresh (or saving another section) doesn't wipe their edits.
+function sectionEdited(id) {
+  return document.getElementById(id)?.dataset.edited === "true";
+}
+
+function wireSetupEditTracking() {
+  for (const id of ["setup-amp-section", "cat-settings-section", "antenna-setup-section"]) {
+    const section = document.getElementById(id);
+    // The CB band checkbox applies on its own and the Danger Zone has its
+    // own buttons - neither is part of a section's Save.
+    const mark = (event) => {
+      if (event.target.closest("#setup-show-cb-band, #antenna-danger-zone")) return;
+      section.dataset.edited = "true";
+    };
+    section?.addEventListener("input", mark);
+    section?.addEventListener("change", mark);
   }
+}
+
+function clearSectionEdited(id) {
+  const section = document.getElementById(id);
+  if (section) delete section.dataset.edited;
 }
 
 async function loadSetup() {
@@ -1264,7 +1304,7 @@ async function loadSetup() {
     apiFetch("/api/antenna/config").then((r) => r.json()),
     apiFetch("/api/serial-ports").then((r) => r.json()),
   ]);
-  populateConfigForm(configResp);
+  if (!sectionEdited("setup-amp-section")) populateConfigForm(configResp);
   // Not while a save is pending - that would snap the list back to the
   // previous layout mid-edit.
   if (Array.isArray(configResp.display) && !displaySaveTimer) {
@@ -1276,12 +1316,12 @@ async function loadSetup() {
   renderBrightnessSetting(configResp);
   // Reopening Setup while the Pi display is still switching: keep following it.
   if (configResp.kiosk?.busy) pollKioskUntilSettled();
-  populateSerialPortOptions(portsResp, configResp.serial_device);
-  populateAntennaMatrix(antennaResp.antennas);
+  if (!sectionEdited("setup-amp-section")) populateSerialPortOptions(portsResp, configResp.serial_device);
+  if (!sectionEdited("antenna-setup-section")) populateAntennaMatrix(antennaResp.antennas);
   populateSegmentDeleteBandOptions();
   renderAtuStatusPanel(appState.lastStatus);
   populateCatSettingsOptions();
-  renderCatSettingsForm(appState.lastStatus);
+  if (!sectionEdited("cat-settings-section")) renderCatSettingsForm(appState.lastStatus);
   updateAntennaSetupVisibility();
 }
 
@@ -1339,10 +1379,11 @@ async function saveCatSettings() {
     // here - the amp's fresh 0x12 echo (enqueued by the backend, not
     // awaited) hasn't necessarily arrived yet, so doing that would just
     // redisplay the stale pre-save values right under a "Saved."
-    // message. Click "Refresh from Amp" for the confirmed values, same
-    // as Antenna Setup's own save flow.
+    // message. The section stays marked edited for the same reason, so
+    // loadSetup() leaves it alone until Settings is reopened, which
+    // re-reads the amp's confirmed values.
     statusEl.hidden = false;
-    statusEl.textContent = "Saved. Click \"Refresh from Amp\" to confirm the amp's new reading.";
+    statusEl.textContent = "Saved. Reopen Settings to see the amp's confirmed reading.";
     setTimeout(() => { statusEl.hidden = true; }, 6000);
   }
 }
@@ -1505,7 +1546,9 @@ function readAntennaMatrix() {
   });
 }
 
-async function saveSetup() {
+// Each Setup section that needs one has its own Save, covering only that
+// section's fields.
+async function saveAmpSettings() {
   const ampModel = document.getElementById("setup-amp-select").value;
   const tunerModel = document.getElementById("setup-tuner-select").value || null;
   const debugLogging = document.getElementById("setup-debug-logging")?.checked;
@@ -1529,11 +1572,14 @@ async function saveSetup() {
     })
   );
 
-  if (tunerModel) {
-    const antennas = readAntennaMatrix();
-    await apiFetch("/api/antenna/config", postJson({ antennas }));
-  }
+  clearSectionEdited("setup-amp-section");
+  await loadSetup();
+}
 
+async function saveAntennaSetup() {
+  const antennas = readAntennaMatrix();
+  await apiFetch("/api/antenna/config", postJson({ antennas }));
+  clearSectionEdited("antenna-setup-section");
   await loadSetup();
 }
 
@@ -1618,6 +1664,27 @@ async function refreshUpdateStatus() {
     renderUpdateButtonHighlight();
   } catch {
     // Silent - this is a passive background poll, not a user action.
+  }
+}
+
+// Dashboard footer showing the Pi's LAN address(es). Re-polled because a
+// DHCP lease can change while the kiosk page stays open for days.
+const NETWORK_FOOTER_POLL_MS = 60 * 1000;
+
+async function refreshNetworkFooter() {
+  const footer = document.getElementById("network-footer");
+  if (!footer) return;
+  try {
+    const resp = await fetch("/api/network");
+    if (!resp.ok) return;
+    const { addresses, port } = await resp.json();
+    const suffix = port && port !== 80 ? `:${port}` : "";
+    footer.textContent = addresses.length
+      ? `Dashboard: ${addresses.map((a) => `http://${a}${suffix}`).join("  ·  ")}`
+      : "No network connection";
+    footer.hidden = false;
+  } catch {
+    // Silent - passive background poll; keep the last address shown.
   }
 }
 
@@ -2132,6 +2199,8 @@ async function boot() {
   connectWebSocket();
   refreshUpdateStatus();
   setInterval(refreshUpdateStatus, UPDATE_STATUS_POLL_MS);
+  refreshNetworkFooter();
+  setInterval(refreshNetworkFooter, NETWORK_FOOTER_POLL_MS);
 }
 
 boot();
