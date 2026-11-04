@@ -25,6 +25,10 @@ first, then get moved under a version heading below when tagged.
   found from the kiosk screen. Lists every interface (Ethernet and
   Wi-Fi) and refreshes every minute in case the DHCP lease changes.
   New `GET /api/network` endpoint.
+- Power sounds alongside the alarm sounds, in the amp's own Morse: TEST
+  when it powers up, R once it's ready (STB/OPR), and AR (.-.-.) when it
+  powers off. The manual doesn't spell these out - they're as heard from
+  the amp. Same on/off switch and volume as the alarm sounds.
 
 ### Changed
 - Settings re-reads everything from the amp each time it opens, so the

@@ -334,6 +334,7 @@ function render(state) {
   // Keying up counts as activity, so the screen never dims mid-over.
   if (appState.inTx) noteActivity();
   checkAlarmSound(state);
+  checkPowerSounds(state);
 
   renderStatusRow(state);
   renderGauges(state);
@@ -2026,7 +2027,13 @@ function initIdleDim() {
 const ALARM_SOUNDS_STORAGE_KEY = "acom.alarmSounds";
 const ALARM_VOLUME_STORAGE_KEY = "acom.alarmVolume";
 const ALARM_MORSE = { warning: "W", soft_fault: "S", hard_fault: "FFF" };
-const MORSE_CODE = { F: "..-.", S: "...", W: ".--" };
+// Power sounds, as heard from the amp itself (per Tyler) - neither the 1200S
+// manual nor the protocol doc spells them out (the doc only names
+// BUZZER_PWRON/BUZZER_PWROFF signals, no pattern). "TEST" while it boots
+// (CLAUDE.md's "startup TEST" note), "R" once it's ready, and the AR
+// prosign (.-.-., which is also Morse for "+") when it turns off.
+const POWER_MORSE = { on: "TEST", ready: "R", off: "+" };
+const MORSE_CODE = { E: ".", F: "..-.", R: ".-.", S: "...", T: "-", W: ".--", "+": ".-.-." };
 const ALARM_TONE_HZ = 1000;
 const ALARM_WPM = 15;
 // The volume slider's 100% - the level these first shipped at, which Tyler
@@ -2035,6 +2042,14 @@ const ALARM_MAX_GAIN = 0.3;
 const ALARM_DEFAULT_VOLUME = 60;
 let alarmAudioCtx = null;
 let lastAlarmCode = null;
+// When the last queued Morse finishes (AudioContext time), so back-to-back
+// sounds - TEST then R on power-up - play one after the other, not on top
+// of each other.
+let morseBusyUntil = 0;
+// null until the first status, so loading the page doesn't play anything.
+let lastPowerState = null;
+let awaitingReady = false;
+let offSoundPlayed = false;
 
 function loadAlarmSoundsEnabled() {
   try {
@@ -2101,7 +2116,8 @@ function playMorse(text) {
   osc.frequency.value = ALARM_TONE_HZ;
   gain.gain.value = 0;
   osc.connect(gain).connect(ctx.destination);
-  let t = ctx.currentTime + 0.05;
+  const start = Math.max(ctx.currentTime + 0.05, morseBusyUntil + dit * 7);
+  let t = start;
   for (const ch of text) {
     if (ch === " ") {
       t += dit * 4;
@@ -2118,8 +2134,39 @@ function playMorse(text) {
     }
     t += dit * 2;
   }
-  osc.start();
+  osc.start(start);
   osc.stop(t);
+  morseBusyUntil = t;
+}
+
+// Called on every status update, like checkAlarmSound(). Plays on the
+// transitions only: TEST when the amp comes on, R when it first reaches
+// STB/OPR after that, AR once when it starts turning off (or is concluded
+// off - see power_state in amp_state.py - if the Turn OFF mode was missed).
+function checkPowerSounds(state) {
+  const power = state.power_state;
+  const modeName = state.telemetry ? state.telemetry.mode_name : null;
+  const sounds = [];
+  if (lastPowerState !== null && power === "on" && lastPowerState !== "on") {
+    sounds.push(POWER_MORSE.on);
+    awaitingReady = true;
+    offSoundPlayed = false;
+  }
+  if (power === "on" && (modeName === "Init Mode" || modeName === "Amplifier Reset")) awaitingReady = true;
+  if (awaitingReady && [MODE_NAME_STB, MODE_NAME_OPR_RX, MODE_NAME_OPR_TX].includes(modeName)) {
+    sounds.push(POWER_MORSE.ready);
+    awaitingReady = false;
+  }
+  const turningOffMode = modeName === "Turn OFF Procedure" || modeName === "Extra Cooling State";
+  const turningOff = turningOffMode || (lastPowerState !== null && power === "off" && lastPowerState !== "off");
+  if (turningOff && !offSoundPlayed) {
+    sounds.push(POWER_MORSE.off);
+    offSoundPlayed = true;
+    awaitingReady = false;
+  }
+  if (power === "on" && !turningOffMode) offSoundPlayed = false;
+  lastPowerState = power ?? null;
+  if (sounds.length && loadAlarmSoundsEnabled()) sounds.forEach(playMorse);
 }
 
 // Called on every status update; sounds once per new alarm, not for as long
