@@ -304,6 +304,9 @@ def _maybe_apply_detected_amp_model(identity: protocol.AmplifierIdentity) -> Non
     config.save()
 
 
+# At startup, how long the amp gets to answer the first handshake before
+# it's concluded off. (Losing comms while "on" concludes off at once - see
+# _on_comms_change().)
 ASSUME_OFF_AFTER_S = 3.0
 # After a Power On pulse: how long to wait for the amp to boot and start
 # replying before concluding the pulse didn't wake it (unplugged, mains
@@ -320,15 +323,15 @@ def _on_comms_change(ok: bool) -> None:
         amp_state.mark_comms_lost()
         backend_logger.warning("Lost comms with amplifier (no frames received recently)")
         if was_on:
-            # Comms were just confirmed "on" and then went ambiguous
-            # (hung/cable/fault/actually off?) - mark_comms_lost() already
-            # degrades this to "unknown" rather than guessing, which is
-            # correct, but leaves no way to recover via the UI (both the
-            # Power On pulse and the mode-command branches are gated off
-            # "unknown"). _comms_watchdog() is already re-sending the
-            # handshake every ~5s - give it one more chance (per Tyler's
-            # direction) before concluding the amp is actually off.
-            _spawn(_assume_off_after_timeout())
+            # Comms were just confirmed "on" and then went quiet. Concluded
+            # off straight away, when the Comms light goes out (per Tyler,
+            # 2026-11-03): the extra ASSUME_OFF_AFTER_S wait made a
+            # power-down show up about twice as late as the amp's own.
+            # Trade-off (CLAUDE.md open question 5): an amp that's only hung
+            # or has a pulled cable also reads "off", and a Power On click
+            # then pulses it off instead.
+            backend_logger.info("Comms lost while on - assuming amplifier is off")
+            amp_state.mark_power_off_confirmed()
     _spawn(ws_manager.broadcast(amp_state.to_dict()))
 
 

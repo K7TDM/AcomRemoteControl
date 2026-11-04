@@ -49,6 +49,9 @@ first, then get moved under a version heading below when tagged.
   one more Save for the Pi to learn them.
 
 ### Changed
+- The amp now counts as off as soon as the Comms light goes out, without
+  the extra 3s wait, so a power-down shows on the dashboard about twice
+  as fast.
 - Settings re-reads everything from the amp each time it opens, so the
   "Refresh from Amp" button is gone. Anything you've started editing
   is left alone while the fresh values come in.
