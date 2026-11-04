@@ -250,59 +250,79 @@ function renderPlainGauge() {
 }
 
 // --- Arc dial (Modern: "glass cockpit") ---------------------------------------
-// A 240-degree arc like an avionics engine gauge, with the reading in a boxed
-// window at its center and a magenta peak bug on the arc. Colors are the
-// --arc-* variables in themes/modern.css. The filled part of the arc is one
-// path with pathLength=100, so the fill is just a stroke-dasharray; the peak
-// bug is drawn at 12 o'clock and rotated about the arc's center.
+// An avionics-style arc with the reading in a boxed window inside it and a
+// magenta peak bug on the arc. Colors are the --arc-* variables in
+// themes/modern.css. The filled part of the arc is one path with
+// pathLength=100, so the fill is just a stroke-dasharray; the peak bug is
+// drawn at 12 o'clock and rotated about the arc's center.
+//
+// Two shapes (opts.wide picks), like Classic's meters: a semicircle for
+// half/quarter-width panels, and a shallow crescent for full-width panels
+// whose center sits far below the window, so it spans the panel instead of
+// being a small round dial in the middle of it (per Tyler: the old
+// 240-degree dial was "very round" and left the boxes mostly empty).
+//
+// Geometry: W/H = viewBox; cx/cy = arc center; r = arc radius; sweep =
+// degrees each side of 12 o'clock; win/winW/winH = top, width and height
+// of the value window; unitY / endY = baselines of the unit word and the
+// min/max numbers; valueSize / textSize = font sizes in viewBox units (the
+// wide viewBox is scaled down more, so its text is drawn bigger).
+const ARC_GEOMETRY = {
+  standard: {
+    W: 220, H: 134, cx: 110, cy: 112, r: 92, sweep: 90,
+    win: 54, winW: 84, winH: 32, unitY: 106, endY: 129, valueSize: 20, textSize: 11,
+  },
+  wide: {
+    W: 600, H: 122, cx: 300, cy: 496, r: 480, sweep: 32,
+    win: 28, winW: 150, winH: 50, unitY: 102, endY: 117, valueSize: 36, textSize: 20,
+  },
+};
 
-const ARC_W = 200;
-const ARC_H = 150;
-const ARC_CX = 100;
-const ARC_CY = 86;
-const ARC_R = 64;
-const ARC_SWEEP = 120; // degrees each side of 12 o'clock
-
-function arcPoint(r, angleDeg) {
+function arcPoint(g, r, angleDeg) {
   const rad = (angleDeg * Math.PI) / 180;
   const round = (v) => Math.round(v * 10) / 10;
-  return [round(ARC_CX + r * Math.sin(rad)), round(ARC_CY - r * Math.cos(rad))];
+  return [round(g.cx + r * Math.sin(rad)), round(g.cy - r * Math.cos(rad))];
+}
+
+function arcPath(g, r, fromDeg, toDeg) {
+  const [x1, y1] = arcPoint(g, r, fromDeg);
+  const [x2, y2] = arcPoint(g, r, toDeg);
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${toDeg - fromDeg > 180 ? 1 : 0} 1 ${x2} ${y2}`;
 }
 
 function renderArcGauge(opts) {
   const { min = 0, max = 100 } = opts;
-  const [x1, y1] = arcPoint(ARC_R, -ARC_SWEEP);
-  const [x2, y2] = arcPoint(ARC_R, ARC_SWEEP);
-  const d = `M ${x1} ${y1} A ${ARC_R} ${ARC_R} 0 1 1 ${x2} ${y2}`;
+  const g = ARC_GEOMETRY[opts.wide ? "wide" : "standard"];
+  const d = arcPath(g, g.r, -g.sweep, g.sweep);
   // Red arc just outside the scale from the danger point to the top end -
   // an engine gauge's red range, matching ACOM's red segments and
   // Classic's redline.
-  const redR = ARC_R + 9;
-  const redFrom = -ARC_SWEEP + zoneFractions(opts).danger * 2 * ARC_SWEEP;
-  const [rx1, ry1] = arcPoint(redR, redFrom);
-  const [rx2, ry2] = arcPoint(redR, ARC_SWEEP);
-  const redD = `M ${rx1} ${ry1} A ${redR} ${redR} 0 ${ARC_SWEEP - redFrom > 180 ? 1 : 0} 1 ${rx2} ${ry2}`;
+  const redD = arcPath(g, g.r + 9, -g.sweep + zoneFractions(opts).danger * 2 * g.sweep, g.sweep);
+  const [x1] = arcPoint(g, g.r, -g.sweep);
+  const [x2] = arcPoint(g, g.r, g.sweep);
   const unit = METER_UNIT_WORDS[opts.unit] ?? opts.unit ?? "";
   const wrapper = document.createElement("div");
-  wrapper.className = "gauge-arc";
+  wrapper.className = "gauge-arc" + (opts.wide ? " wide" : "");
   wrapper.innerHTML = `
-    <svg viewBox="0 0 ${ARC_W} ${ARC_H}" role="img" aria-label="${opts.label || "Gauge"}" style="--meter-ratio: ${Math.round((ARC_W / ARC_H) * 1000) / 1000}">
+    <svg viewBox="0 0 ${g.W} ${g.H}" role="img" aria-label="${opts.label || "Gauge"}" data-sweep="${g.sweep}"
+         style="--meter-ratio: ${Math.round((g.W / g.H) * 1000) / 1000}">
       <path class="arc-track" d="${d}" />
       <path class="arc-redline" d="${redD}" />
       <path class="arc-fill" d="${d}" pathLength="100" data-arc-fill />
-      <line class="arc-peak" x1="${ARC_CX}" y1="${ARC_CY - ARC_R - 9}" x2="${ARC_CX}" y2="${ARC_CY - ARC_R + 9}"
-            style="transform-origin: ${ARC_CX}px ${ARC_CY}px" data-arc-peak />
-      <rect class="arc-window" x="${ARC_CX - 40}" y="${ARC_CY - 19}" width="80" height="32" rx="3" />
-      <text class="arc-value" x="${ARC_CX}" y="${ARC_CY + 5}" data-arc-value></text>
-      <text class="arc-unit" x="${ARC_CX}" y="${ARC_CY + 34}">${unit}</text>
-      <text class="arc-end" x="${x1 - 2}" y="${y1 + 20}">${formatScaleNumber(min)}</text>
-      <text class="arc-end" x="${x2 + 2}" y="${y2 + 20}">${formatScaleNumber(max)}</text>
+      <line class="arc-peak" x1="${g.cx}" y1="${g.cy - g.r - 9}" x2="${g.cx}" y2="${g.cy - g.r + 9}"
+            style="transform-origin: ${g.cx}px ${g.cy}px" data-arc-peak />
+      <rect class="arc-window" x="${g.cx - g.winW / 2}" y="${g.win}" width="${g.winW}" height="${g.winH}" rx="3" />
+      <text class="arc-value" x="${g.cx}" y="${g.win + g.winH * 0.75}" style="font-size:${g.valueSize}px" data-arc-value></text>
+      <text class="arc-unit" x="${g.cx}" y="${g.unitY}" style="font-size:${g.textSize}px">${unit}</text>
+      <text class="arc-end" x="${x1}" y="${g.endY}" style="font-size:${g.textSize}px">${formatScaleNumber(min)}</text>
+      <text class="arc-end" x="${x2}" y="${g.endY}" style="font-size:${g.textSize}px">${formatScaleNumber(max)}</text>
     </svg>`;
   updateArcGauge(wrapper, opts);
   return wrapper;
 }
 
 function updateArcGauge(bodyEl, opts) {
+  const sweep = Number(bodyEl.querySelector("svg")?.dataset.sweep) || ARC_GEOMETRY.standard.sweep;
   const frac = fraction(opts);
   const fill = bodyEl.querySelector("[data-arc-fill]");
   if (fill) {
@@ -313,7 +333,7 @@ function updateArcGauge(bodyEl, opts) {
   if (peak) {
     const show = opts.peak !== null && opts.peak !== undefined && !Number.isNaN(opts.peak);
     peak.style.visibility = show ? "visible" : "hidden";
-    if (show) peak.style.transform = `rotate(${-ARC_SWEEP + fraction({ ...opts, value: opts.peak }) * 2 * ARC_SWEEP}deg)`;
+    if (show) peak.style.transform = `rotate(${-sweep + fraction({ ...opts, value: opts.peak }) * 2 * sweep}deg)`;
   }
   const valueEl = bodyEl.querySelector("[data-arc-value]");
   if (valueEl) valueEl.textContent = formatValue(opts.value, "");

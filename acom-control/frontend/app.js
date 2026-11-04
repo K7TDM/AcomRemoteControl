@@ -595,7 +595,7 @@ const DEFAULT_DISPLAY_PANELS = [
 // "double" spans both halves of a wide screen (see base.css fit-wide);
 // on other screens it's the same as Full.
 const PANEL_WIDTH_OPTIONS = [["eighth", "⅛"], ["quarter", "¼"], ["half", "½"], ["full", "Full"], ["double", "2× Full"]];
-const WIDE_METER_WIDTHS = new Set(["full", "double"]); // Classic's wide edgewise meter shape
+const WIDE_METER_WIDTHS = new Set(["full", "double"]); // Classic's wide edgewise meter / Modern's wide crescent
 const DISPLAY_SAVE_DEBOUNCE_MS = 400;
 let displaySaveTimer = null;
 
@@ -654,6 +654,12 @@ function panelWeight(el, span, cols) {
   if (el.dataset.panelId === "band_panel") return 1;
   if (appState.theme.style === "classic") {
     const aspect = WIDE_METER_WIDTHS.has(el.dataset.width) ? 5.55 : 2.05;
+    return (span / cols / aspect) * 10 + 0.6;
+  }
+  // Modern's arc dials work the same way (gauges.js ARC_GEOMETRY: semicircle
+  // ~1.64:1, wide crescent ~5.2:1); its Forward Power stays a bar.
+  if (appState.theme.style === "modern" && el.dataset.panelId !== "forward_power_w") {
+    const aspect = WIDE_METER_WIDTHS.has(el.dataset.width) ? 5.17 : 1.64;
     return (span / cols / aspect) * 10 + 0.6;
   }
   // Bar panels scale their contents with their height (bargraph.css), so
@@ -956,12 +962,13 @@ function mountOrUpdateGauge(el, def, telemetry, theme, forceWidget) {
   const peak = updatePeak(def.id, value);
   const avg = updateTxAverage(def.id, value);
   // Full-width panels get the Classic meter's wide, short edgewise shape
-  // (see gauges.js METER_GEOMETRY); a width change in Display settings
-  // remounts the meter in the new shape.
+  // (see gauges.js METER_GEOMETRY), or Modern's wide crescent arc
+  // (ARC_GEOMETRY); a width change in Display settings remounts the meter
+  // in the new shape.
   const wide = WIDE_METER_WIDTHS.has(el.dataset.width);
   const opts = { label: def.label, unit: def.unit, value, min: def.min, max: typeof def.max === "function" ? def.max() : def.max, plain: !!def.plain, peak, avg, wide, scale: def.scale, warnFrom: def.warnFrom, dangerFrom: def.dangerFrom };
   const widget = resolveWidget(theme, opts, forceWidget);
-  const shape = widget === "needle" && wide ? "wide" : "standard";
+  const shape = (widget === "needle" || widget === "arc") && wide ? "wide" : "standard";
 
   if (el.dataset.mountedWidget !== widget || el.dataset.meterShape !== shape) {
     el.dataset.mountedWidget = widget;

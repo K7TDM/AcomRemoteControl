@@ -157,8 +157,14 @@
 .gauge-arc svg {
   display: block;
   width: 100%;
-  max-width: 220px;
+  max-width: 300px;
   height: auto;
+}
+
+/* Full-width panels: the wide crescent spans the panel (gauges.js
+   ARC_GEOMETRY.wide). */
+.gauge-arc.wide svg {
+  max-width: none;
 }
 
 .gauge-arc .arc-track,

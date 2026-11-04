@@ -55,6 +55,10 @@ first, then get moved under a version heading below when tagged.
   the check runs, instead of half-filled info (no version yet, beta box
   looking unticked). The version, beta switch and buttons appear once
   the answer is in.
+- Modern theme's round dials are flatter and fill their panels: a
+  semicircle in half/quarter-width panels, and a wide shallow crescent
+  across full-width panels (like Classic's wide meter). Panel heights
+  follow the dial's shape, as in Classic.
 
 ## [0.1.15] - 2026-10-29
 
