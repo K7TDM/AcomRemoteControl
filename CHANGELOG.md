@@ -19,6 +19,8 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.16] - 2026-11-03
+
 ### Added
 - A small line at the bottom of the dashboard shows the Pi's own address
   (e.g. `http://10.10.50.254:8000`), so a Pi without a static IP can be
