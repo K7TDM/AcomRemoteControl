@@ -366,6 +366,18 @@ html.fit-layout .panel-grid > [data-row-alone] {
   border: 1px solid var(--border-color);
 }
 
+/* One small line under the button bar with the Pi's address - see
+   app.js's refreshNetworkFooter(). */
+.network-footer {
+  flex: none;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 #setup-screen,
 #update-screen {
   max-width: 900px;
@@ -433,6 +445,11 @@ main#dashboard[hidden],
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   padding: 1rem;
+}
+
+/* A section's own Save, on its own line under that section's fields. */
+.setup-section .section-actions {
+  margin-top: 0.75rem;
 }
 
 .setup-section h2 {
