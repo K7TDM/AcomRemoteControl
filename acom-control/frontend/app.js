@@ -2048,8 +2048,16 @@ let lastAlarmCode = null;
 // sounds - TEST then R on power-up - play one after the other, not on top
 // of each other.
 let morseBusyUntil = 0;
+// The last definite power_state ("on"/"off"), skipping "unknown": a real
+// power-up logs off -> on (a frame right after the pulse) -> unknown (the
+// amp goes quiet ~10s while it boots) -> on, which must only sound once.
 // null until the first status, so loading the page doesn't play anything.
-let lastPowerState = null;
+let lastKnownPower = null;
+// system_clock_s of the telemetry on screen while the amp wasn't "on". The
+// backend keeps the last 0x2F after the amp goes off, so straight after a
+// power-up the dashboard still shows the old STB mode - telemetry only
+// counts as live once its clock differs from this.
+let staleTelemetryClock = null;
 let awaitingReady = false;
 let offSoundPlayed = false;
 
@@ -2142,32 +2150,34 @@ function playMorse(text) {
 }
 
 // Called on every status update, like checkAlarmSound(). Plays on the
-// transitions only: TEST when the amp comes on, R when it first reaches
-// STB/OPR after that, AR once when it starts turning off (or is concluded
+// transitions only: TEST when the amp comes on (off -> on), R when live
+// telemetry first shows STB/OPR after that, AR once when it starts turning off (or is concluded
 // off - see power_state in amp_state.py - if the Turn OFF mode was missed).
 function checkPowerSounds(state) {
   const power = state.power_state;
-  const modeName = state.telemetry ? state.telemetry.mode_name : null;
+  const clock = state.telemetry ? state.telemetry.system_clock_s : null;
+  if (power !== "on") staleTelemetryClock = clock;
+  const live = power === "on" && clock !== null && clock !== staleTelemetryClock;
+  const modeName = live ? state.telemetry.mode_name : null;
   const sounds = [];
-  if (lastPowerState !== null && power === "on" && lastPowerState !== "on") {
+  if (power === "on" && lastKnownPower === "off") {
     sounds.push(POWER_MORSE.on);
     awaitingReady = true;
-    offSoundPlayed = false;
   }
-  if (power === "on" && (modeName === "Init Mode" || modeName === "Amplifier Reset")) awaitingReady = true;
+  if (modeName === "Init Mode" || modeName === "Amplifier Reset") awaitingReady = true;
   if (awaitingReady && [MODE_NAME_STB, MODE_NAME_OPR_RX, MODE_NAME_OPR_TX].includes(modeName)) {
     sounds.push(POWER_MORSE.ready);
     awaitingReady = false;
   }
   const turningOffMode = modeName === "Turn OFF Procedure" || modeName === "Extra Cooling State";
-  const turningOff = turningOffMode || (lastPowerState !== null && power === "off" && lastPowerState !== "off");
+  const turningOff = turningOffMode || (power === "off" && lastKnownPower === "on");
   if (turningOff && !offSoundPlayed) {
     sounds.push(POWER_MORSE.off);
     offSoundPlayed = true;
     awaitingReady = false;
   }
-  if (power === "on" && !turningOffMode) offSoundPlayed = false;
-  lastPowerState = power ?? null;
+  if (modeName && !turningOffMode) offSoundPlayed = false;
+  if (power === "on" || power === "off") lastKnownPower = power;
   if (sounds.length && loadAlarmSoundsEnabled()) sounds.forEach(playMorse);
 }
 
