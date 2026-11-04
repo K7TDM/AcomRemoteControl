@@ -431,6 +431,19 @@
     </div>
   </section>
 
+  <!-- Covers everything while an update or rollback is being applied - see
+       app.js's launchUpdate(). -->
+  <div id="update-applying" class="update-applying" hidden>
+    <div class="update-applying-card">
+      <h2 id="update-applying-title">Updating&hellip;</h2>
+      <div class="progress-indeterminate" role="progressbar" aria-label="Applying update"><div></div></div>
+      <p id="update-applying-note">
+        The control software restarts as part of the update. This page will
+        reload by itself when it's back - usually within a minute.
+      </p>
+    </div>
+  </div>
+
   <!-- Inactivity dimming - see app.js's initIdleDim(). -->
   <div id="idle-dim-overlay" class="idle-dim-overlay" aria-hidden="true"></div>
 

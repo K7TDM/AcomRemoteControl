@@ -59,6 +59,11 @@ first, then get moved under a version heading below when tagged.
   semicircle in half/quarter-width panels, and a wide shallow crescent
   across full-width panels (like Classic's wide meter). Panel heights
   follow the dial's shape, as in Classic.
+- Applying an update (or rolling back) covers the screen with an
+  "Updating..." progress bar and a note that the control software
+  restarts and the page reloads by itself when it's back. If no restart
+  is seen within 45 seconds, it goes back to the update screen with the
+  usual message.
 
 ## [0.1.15] - 2026-10-29
 

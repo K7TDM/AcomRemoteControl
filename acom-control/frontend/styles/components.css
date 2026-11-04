@@ -305,6 +305,43 @@ html.idle-dimmed:not(.idle-dim-hardware) .idle-dim-overlay {
   opacity: 0.95;
 }
 
+/* Full-screen "Updating..." while an update or rollback is applied (app.js
+   launchUpdate()). Under the idle-dim overlay, so a dimmed screen still
+   wakes normally. */
+.update-applying {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg-page);
+}
+
+.update-applying[hidden] {
+  display: none;
+}
+
+.update-applying-card {
+  width: min(480px, 100%);
+  padding: 1.5rem;
+  text-align: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+}
+
+.update-applying-card h2 {
+  margin-top: 0;
+  font-size: 1.2rem;
+}
+
+.update-applying-card p {
+  margin-bottom: 0;
+  color: var(--text-secondary);
+}
+
 /* Setup -> Display: one row per dashboard panel - grab handle, name,
    Show toggle, width selector. */
 .display-panel-list {

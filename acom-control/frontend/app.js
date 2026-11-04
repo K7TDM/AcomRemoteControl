@@ -1850,7 +1850,7 @@ async function applyUpdateNow() {
     "Update now? The backend will restart - amp control will be briefly " +
     "unavailable (usually just a few seconds)."
   )) return;
-  await launchUpdate("/api/update/apply", document.getElementById("btn-update-now"), "Updating and restarting...");
+  await launchUpdate("/api/update/apply", document.getElementById("btn-update-now"), "Updating…");
 }
 
 async function rollbackToRelease() {
@@ -1859,7 +1859,7 @@ async function rollbackToRelease() {
     `Roll back to ${release}? The backend will restart - amp control will be ` +
     "briefly unavailable (usually just a few seconds)."
   )) return;
-  await launchUpdate("/api/update/rollback", document.getElementById("btn-update-rollback"), `Rolling back to ${release} and restarting...`);
+  await launchUpdate("/api/update/rollback", document.getElementById("btn-update-rollback"), `Rolling back to ${release}…`);
 }
 
 // Shared by Update Now and Roll Back: start the helper, then wait for the
@@ -1871,24 +1871,40 @@ async function launchUpdate(path, button, startingText) {
   // something that changes once the new process comes up.
   let beforeCommit = null;
   try {
-    beforeCommit = (await (await fetch("/api/config")).json()).git_commit;
+    beforeCommit = (await (await fetch("/api/config", { cache: "no-store" })).json()).git_commit;
   } catch {
     // If this fails, waitForUpdateRestart() below will just run out its
     // timeout without detecting a restart - acceptable degradation.
   }
   if (button) button.disabled = true;
-  if (statusEl) {
-    statusEl.hidden = false;
-    statusEl.textContent = startingText;
-  }
+  if (statusEl) statusEl.hidden = true;
+  showUpdateApplying(startingText);
   try {
     await apiFetch(path, { method: "POST" });
   } catch (err) {
-    if (statusEl) statusEl.textContent = `Failed to start update: ${err.message}`;
+    hideUpdateApplying();
+    if (statusEl) {
+      statusEl.hidden = false;
+      statusEl.textContent = `Failed to start update: ${err.message}`;
+    }
     if (button) button.disabled = false;
     return;
   }
   await waitForUpdateRestart(beforeCommit, statusEl, button);
+}
+
+// The full-screen "Updating..." cover (index.html #update-applying): stays
+// up from the click until the restarted backend is seen and the page
+// reloads, or until waitForUpdateRestart() gives up.
+function showUpdateApplying(title) {
+  setText("update-applying-title", title);
+  const el = document.getElementById("update-applying");
+  if (el) el.hidden = false;
+}
+
+function hideUpdateApplying() {
+  const el = document.getElementById("update-applying");
+  if (el) el.hidden = true;
 }
 
 /** Polls /api/config (cheap, already-existing endpoint) for its
@@ -1902,11 +1918,12 @@ async function waitForUpdateRestart(beforeCommit, statusEl, button) {
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     try {
-      const resp = await fetch("/api/config");
+      // no-store: a cached copy would still show the old commit.
+      const resp = await fetch("/api/config", { cache: "no-store" });
       if (resp.ok) {
         const cfg = await resp.json();
         if (cfg.git_commit && cfg.git_commit !== beforeCommit) {
-          if (statusEl) statusEl.textContent = `Updated to ${cfg.git_commit} - reloading...`;
+          setText("update-applying-title", "Update complete - reloading...");
           setTimeout(() => window.location.reload(), 1000);
           return;
         }
@@ -1915,7 +1932,9 @@ async function waitForUpdateRestart(beforeCommit, statusEl, button) {
       // Expected while the service is restarting - keep polling.
     }
   }
+  hideUpdateApplying();
   if (statusEl) {
+    statusEl.hidden = false;
     statusEl.textContent =
       "No restart detected yet - may already be up to date, or the update " +
       "may have failed. Check the logs if you expected a change.";
