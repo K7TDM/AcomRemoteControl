@@ -475,6 +475,12 @@ html.idle-dimmed:not(.idle-dim-hardware) .idle-dim-overlay {
   }
 }
 
+/* Software Update: "Check Again" sits at the bottom right of the box. */
+.update-check-again {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* Antenna Setup: above the matrix while it's being read from the amp. */
 .antenna-sync-progress {
   margin-bottom: 0.75rem;

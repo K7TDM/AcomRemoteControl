@@ -420,10 +420,14 @@
             Beta updates (any new commit on main, not just tagged releases)
           </label>
         </p>
-        <button id="btn-update-check" class="acom-button" type="button">Check for Updates</button>
         <button id="btn-update-now" class="acom-button" type="button" hidden>Update Now</button>
         <p id="update-status" class="danger-warning" hidden></p>
         <p><a id="changelog-link" href="/changelog" target="_blank" rel="noopener">View full changelog</a></p>
+        <!-- Opening this screen already checks, so this is only for a
+             second look - bottom right, out of the way. -->
+        <div class="update-check-again">
+          <button id="btn-update-check" class="acom-button" type="button">Check Again</button>
+        </div>
       </div>
     </div>
 
