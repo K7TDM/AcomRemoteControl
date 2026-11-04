@@ -40,6 +40,11 @@ first, then get moved under a version heading below when tagged.
 - Download Amp Snapshot moved into Amplifier & Tuner, with a note that
   it's for debugging.
 - Pressing the gear icon while Settings is open closes it again.
+- Morse sounds (alarms and power) play at 20 WPM instead of 15, closer
+  to the amp's own speed. Buzzer Test's "K7TDM TEST" on the amp is paced
+  for 20 WPM too.
+- Settings' Display section is now "Display & Sound", since it also
+  holds the sound settings.
 
 ## [0.1.15] - 2026-10-29
 

@@ -1551,10 +1551,11 @@ async def test_buzzer(req: BuzzerRequest) -> dict:
 
 
 BUZZER_MORSE_TEXT = "K7TDM TEST"
-# The amp's own startup "TEST" sounds like ~15 WPM. Timed a bit slower
-# than that here, so a character is never sent while the amp is still
-# playing the previous one (it drops it - see protocol.morse_schedule()).
-BUZZER_MORSE_WPM = 15
+# The amp's own startup "TEST" sounds like ~20 WPM (first guessed at 15,
+# which per Tyler sounded too slow). Timed a bit slower than that here, so
+# a character is never sent while the amp is still playing the previous
+# one (it drops it - see protocol.morse_schedule()).
+BUZZER_MORSE_WPM = 20
 BUZZER_MORSE_MARGIN = 1.15
 
 _morse_task: Optional[asyncio.Task] = None

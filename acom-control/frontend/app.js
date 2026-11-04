@@ -186,7 +186,7 @@ const appState = {
   inTx: false,
   justEnteredTx: false,
   lastTxEndMs: 0,
-  // Display layout (Setup -> Display), replaced by the Pi's saved layout
+  // Display layout (Setup -> Display & Sound), replaced by the Pi's saved layout
   // from /api/config at boot - see applyDisplayLayout().
   display: null,
   // Settings (the gear icon) can be opened from either the normal dashboard
@@ -830,7 +830,7 @@ function renderKioskSetting(kiosk) {
   setText("setup-kiosk-status", status);
 }
 
-// Setup -> Display's "Screen brightness" slider: the Pi touchscreen's
+// Setup -> Display & Sound's "Screen brightness" slider: the Pi touchscreen's
 // backlight, saved on the Pi (POST /api/display/brightness). Applies as it
 // moves, debounced like the gauge layout.
 const BRIGHTNESS_SAVE_DEBOUNCE_MS = 250;
@@ -1939,7 +1939,7 @@ function initKioskMode() {
 // touch/click/key/mouse movement and no key-up (render() calls
 // noteActivity() while in OPR/TX), the screen dims to 5%; any of those
 // brings it back. On the kiosk that's the Pi touchscreen's real backlight
-// (POST /api/display/backlight, back up to Setup -> Display's brightness);
+// (POST /api/display/backlight, back up to Setup -> Display & Sound's brightness);
 // where there's no backlight to drive - a remote browser, or an HDMI
 // monitor on the Pi - the overlay darkens the page instead. Either way the
 // overlay catches the waking touch, so it doesn't also press a button.
@@ -2023,7 +2023,7 @@ function initIdleDim() {
 // sent in CW"; a warning plays W (heard by Tyler on "ATU tuning outdated",
 // a warning). The manual doesn't say what a soft fault plays - S is a
 // stand-in. Synthesized with Web Audio, so no sound files; on/off per
-// browser in Setup -> Display.
+// browser in Setup -> Display & Sound.
 const ALARM_SOUNDS_STORAGE_KEY = "acom.alarmSounds";
 const ALARM_VOLUME_STORAGE_KEY = "acom.alarmVolume";
 const ALARM_MORSE = { warning: "W", soft_fault: "S", hard_fault: "FFF" };
@@ -2035,7 +2035,9 @@ const ALARM_MORSE = { warning: "W", soft_fault: "S", hard_fault: "FFF" };
 const POWER_MORSE = { on: "TEST", ready: "R", off: "+" };
 const MORSE_CODE = { E: ".", F: "..-.", R: ".-.", S: "...", T: "-", W: ".--", "+": ".-.-." };
 const ALARM_TONE_HZ = 1000;
-const ALARM_WPM = 15;
+// 15 at first (a guess at the amp's own speed) - per Tyler it sounded too
+// slow next to the amp, so 20.
+const ALARM_WPM = 20;
 // The volume slider's 100% - the level these first shipped at, which Tyler
 // found a bit loud, hence the slider (default 60%, per browser).
 const ALARM_MAX_GAIN = 0.3;
