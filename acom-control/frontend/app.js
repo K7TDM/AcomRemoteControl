@@ -365,10 +365,13 @@ function render(state) {
 function currentScreen() {
   if (appState.setupOpen) return "setup";
   if (appState.updateScreenOpen) return "update";
-  const power = appState.lastStatus?.power_state;
-  if (power === "off") return "power-off";
+  // isPoweringUp()/isPoweringDown() checked BEFORE the plain power_state
+  // read below - clicking Power On fires while power_state is still
+  // literally "off" (nothing's changed yet), so a check ordered the other
+  // way around never gave the optimistic flag a chance to be seen.
   if (isPoweringUp(appState.lastStatus)) return "powering-up";
   if (isPoweringDown(appState.lastStatus)) return "powering-down";
+  if (appState.lastStatus?.power_state === "off") return "power-off";
   return "dashboard";
 }
 
