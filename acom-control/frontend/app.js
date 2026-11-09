@@ -416,7 +416,8 @@ function isPoweringDown(state) {
   if (state.power_state === "off") return false;
   if (poweringDownRequested) return true;
   if (state.power_state === "unknown") return lastKnownPower === "on";
-  const modeName = state.telemetry?.mode_name;
+  if (!isTelemetryLive(state)) return false;
+  const modeName = state.telemetry.mode_name;
   return modeName === "Turn OFF Procedure" || modeName === "Extra Cooling State";
 }
 
@@ -2189,8 +2190,24 @@ let lastKnownPower = null;
 // system_clock_s of the telemetry on screen while the amp wasn't "on". The
 // backend keeps the last 0x2F after the amp goes off, so straight after a
 // power-up the dashboard still shows the old STB mode - telemetry only
-// counts as live once its clock differs from this.
+// counts as live once its clock differs from this. Updated by
+// checkPowerSounds() each render, before isTelemetryLive() below is read -
+// see render()'s call order.
 let staleTelemetryClock = null;
+
+// True once a genuinely fresh telemetry frame has arrived since the amp
+// was last not-"on" - i.e. state.telemetry.mode_name (and everything else
+// in it) can be trusted as current, not a carried-over snapshot from
+// right before the last power-off. Shared by checkPowerSounds() (the sound
+// effects) and isPoweringDown() (mode_name's turn-off check) - without
+// this, isPoweringDown() read the stale mode_name left over from the
+// moment the amp last went off (often literally "Turn OFF Procedure") and
+// mistook a fresh power-on for still powering down (seen live 2026-11-09).
+function isTelemetryLive(state) {
+  const clock = state.telemetry ? state.telemetry.system_clock_s : null;
+  return state.power_state === "on" && clock !== null && clock !== staleTelemetryClock;
+}
+
 let awaitingReady = false;
 let offSoundPlayed = false;
 // Set the moment our own Power Off/Power On button is clicked, so the
@@ -2297,8 +2314,7 @@ function checkPowerSounds(state) {
   const power = state.power_state;
   const clock = state.telemetry ? state.telemetry.system_clock_s : null;
   if (power !== "on") staleTelemetryClock = clock;
-  const live = power === "on" && clock !== null && clock !== staleTelemetryClock;
-  const modeName = live ? state.telemetry.mode_name : null;
+  const modeName = isTelemetryLive(state) ? state.telemetry.mode_name : null;
   const sounds = [];
   if (power === "on" && lastKnownPower === "off") {
     sounds.push(POWER_MORSE.on);
