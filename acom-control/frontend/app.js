@@ -382,40 +382,52 @@ function updateScreenVisibility() {
   document.getElementById("power-off-screen").hidden = screen !== "power-off";
 }
 
-// True from the moment a power-on pulse starts until power_state is
-// confirmed "on": either we just clicked a Power On button
-// (poweringUpRequested, set synchronously on click so the screen appears
-// right away rather than waiting out the ~1.5s DTR/RTS pulse), or
-// power_state has gone ambiguous ("unknown") right after previously being
-// "off" - the backend's own set_power() puts it in "unknown" the moment the
-// pulse fires, pending telemetry confirming the amp actually woke up.
+// True from the moment a Power On click fires until power_state is
+// confirmed "on". Checks poweringUpRequested FIRST, before even looking at
+// power_state - a click sets the flag while power_state is still "off"
+// (the whole point: show this screen immediately, not wait on the ~1.5s
+// DTR/RTS pulse or on power_state ever visibly passing through "unknown",
+// which real hardware has shown it doesn't always do - see
+// updatePowerTransitionState() for how the flag clears). Only once the
+// flag isn't set does this fall back to detecting an amp-initiated wake
+// (power_state "unknown" coming from a previously "off" state).
 function isPoweringUp(state) {
   if (!state) return false;
-  if (state.power_state !== "unknown") return false;
-  return poweringUpRequested || lastKnownPower === "off";
+  if (state.power_state === "on") return false;
+  if (poweringUpRequested) return true;
+  return state.power_state === "unknown" && lastKnownPower === "off";
 }
 
-// True from the moment a shutdown starts until power_state is confirmed
-// "off": either we just clicked our own Power Off button (poweringDownRequested,
-// set synchronously on click so the screen appears right away rather than
-// waiting out the ~1.5s DTR/RTS pulse), the amp's own telemetry shows it
-// winding down (same mode names checkPowerSounds() plays the "off" Morse
-// for), or - the front-panel case, where neither of those fires - comms
-// have gone ambiguous (power_state "unknown") after previously being "on".
-// Checked only after isPoweringUp() rules out the opposite direction, so a
-// power-on pulse (which also passes through "unknown") doesn't land here -
-// see lastKnownPower, the last definite "on"/"off" seen before "unknown".
+// True from the moment a Power Off click fires (or the amp starts winding
+// down on its own - front panel, or its telemetry showing a turn-off mode)
+// until power_state is confirmed "off". Same "check the click flag before
+// power_state" shape as isPoweringUp() above, and for the same reason: a
+// click sets poweringDownRequested while power_state is still "on", and it
+// must keep reporting true for as long as that flag is set even if
+// power_state bounces through "unknown" in between (seen live on real
+// hardware: a race between the backend's own pulse handler and incoming
+// telemetry can bounce power_state on->unknown->on right after a Power On
+// click, which used to get misread as powering down - see app.py's
+// set_power()). isPoweringUp() is checked first by currentScreen(), so a
+// genuine power-on's "unknown" window never reaches the lastKnownPower
+// check below.
 function isPoweringDown(state) {
   if (!state) return false;
-  if (state.power_state === "unknown") return lastKnownPower === "on";
-  if (state.power_state !== "on") return false;
+  if (state.power_state === "off") return false;
   if (poweringDownRequested) return true;
+  if (state.power_state === "unknown") return lastKnownPower === "on";
   const modeName = state.telemetry?.mode_name;
   return modeName === "Turn OFF Procedure" || modeName === "Extra Cooling State";
 }
 
 function updatePowerTransitionState(state) {
-  if (state.power_state === "off") poweringDownRequested = false;
+  // "off" also clears poweringUpRequested - a power-on pulse that never
+  // got a reply resolves back to "off" via the assume-off timeout, and
+  // that failed attempt shouldn't leave the flag stuck for next time.
+  if (state.power_state === "off") {
+    poweringDownRequested = false;
+    poweringUpRequested = false;
+  }
   if (state.power_state === "on") poweringUpRequested = false;
 }
 

@@ -634,13 +634,22 @@ async def set_power(req: PowerRequest) -> dict:
             # will set power_state="on" then). Back to "unknown" rather
             # than leaving it at "off", so a second rapid click during the
             # recovery window doesn't rely on a now-stale "off" belief
-            # and double-pulse.
-            amp_state.power_state = "unknown"
-            # Comms were never up, so _on_comms_change() won't fire its own
-            # assume-off timer if the pulse didn't wake the amp - without
-            # this, "unknown" stuck forever and Power On returned 409 until
-            # a service restart (seen live 2026-10-29 with the amp unplugged).
-            _spawn(_assume_off_after_timeout(POWER_ON_ASSUME_OFF_AFTER_S, "a Power On pulse"))
+            # and double-pulse. Guarded on still being "off" here - the
+            # amp can (and on real hardware, has) start replying before
+            # pulse_power_toggle()'s own 1.5s hold even finishes, and
+            # mark_comms_ok() already moved power_state to "on" by the
+            # time this line runs; blindly overwriting that back to
+            # "unknown" produced a spurious on->unknown->on blip (seen
+            # live 2026-11-09) that the dashboard misread as powering
+            # down rather than up.
+            if amp_state.power_state == "off":
+                amp_state.power_state = "unknown"
+                # Comms were never up, so _on_comms_change() won't fire its
+                # own assume-off timer if the pulse didn't wake the amp -
+                # without this, "unknown" stuck forever and Power On
+                # returned 409 until a service restart (seen live
+                # 2026-10-29 with the amp unplugged).
+                _spawn(_assume_off_after_timeout(POWER_ON_ASSUME_OFF_AFTER_S, "a Power On pulse"))
             return {"ok": True, "pulsed": True}
         if amp_state.power_state == "unknown":
             raise HTTPException(
