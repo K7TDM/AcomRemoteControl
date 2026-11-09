@@ -19,6 +19,29 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.18] - 2026-11-09
+
+### Added
+- Powering Up and Powering Down screens (ACOM logo + progress bar),
+  shown from the moment a power pulse starts until `power_state`
+  confirms the result, then handing off to the dashboard or the
+  existing power-off screen. Covers both our own Power On/Off buttons
+  and the amp changing state on its own (front panel, or winding down).
+  Pressing Power Off also now closes Settings right away, so there's
+  no doubt the click registered.
+
+### Fixed
+- Power On could show no transition screen at all, or briefly show
+  "Powering Down" instead - three separate bugs found from real-hardware
+  logs: a backend race where a late-arriving telemetry frame's "on"
+  confirmation got stomped back to "unknown" by `set_power()`'s own
+  pulse handler; the dashboard reading the amp's last telemetry
+  snapshot (kept on purpose after a power-off) as if it were live,
+  misreading a carried-over "Turn OFF Procedure" mode name; and
+  `currentScreen()` checking `power_state === "off"` before ever
+  consulting the Power On click flag, so the flag could never be seen
+  when clicking from the off screen.
+
 ## [0.1.17] - 2026-11-09
 
 ### Changed
