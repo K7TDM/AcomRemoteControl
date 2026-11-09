@@ -5,3 +5,5 @@ __pycache__/
 acom-control-venv/
 Logs/
 .DS_Store
+CLAUDE.md
+documentation/
