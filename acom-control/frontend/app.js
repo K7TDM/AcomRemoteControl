@@ -1199,7 +1199,11 @@ function wireControls() {
   document.getElementById("btn-power-on-standalone")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: true }))));
   document.getElementById("btn-power-off")?.addEventListener("click", withErrorBanner(() => {
     poweringDownRequested = true;
-    updateScreenVisibility();
+    // Jump straight out of Settings so the Powering Down screen is visible
+    // right away - otherwise there's no feedback that the click registered,
+    // and it's tempting to press it again.
+    if (appState.setupOpen) closeSetupScreen();
+    else updateScreenVisibility();
     return apiFetch("/api/power", postJson({ on: false }));
   }));
   document.getElementById("btn-opr-toggle")?.addEventListener("click", withErrorBanner(() => {
