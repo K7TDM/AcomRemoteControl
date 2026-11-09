@@ -19,6 +19,21 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.17] - 2026-11-09
+
+### Changed
+- **The repo moved from private to public on GitHub.** README's clone
+  instructions switched from the private SSH form (needing a deploy key
+  or account SSH key) to a plain HTTPS URL that works for anyone.
+- `install.sh` now sets up kiosk mode by default; pass `--no-kiosk` for a
+  headless install instead (previously the reverse: headless by default,
+  `--kiosk` to opt in).
+- `documentation/` (ACOM's copyrighted manuals) and `CLAUDE.md` (internal
+  dev notes) are no longer tracked in git, including purged from past
+  history, since neither belonged in a public repo. README's
+  Documentation section now explains this instead of pointing at the
+  removed folder.
+
 ## [0.1.16] - 2026-11-03
 
 ### Added
