@@ -9,17 +9,18 @@
 # acom-control/README.md for hardware setup and how to actually run it
 # after this script finishes.
 #
-# Usage: bash install.sh            (headless - dashboard over the network)
-#        bash install.sh --kiosk    (also show the dashboard full screen on
-#                                    the Pi's own touchscreen/monitor)
+# Usage: bash install.sh             (also shows the dashboard full screen
+#                                     on the Pi's own touchscreen/monitor)
+#        bash install.sh --no-kiosk  (headless - dashboard over the network
+#                                     only, nothing shown on an attached screen)
 
 set -euo pipefail
 
-KIOSK=0
+KIOSK=1
 for arg in "$@"; do
   case "$arg" in
-    --kiosk) KIOSK=1 ;;
-    *) echo "Unknown option: $arg (the only option is --kiosk)" >&2; exit 2 ;;
+    --no-kiosk) KIOSK=0 ;;
+    *) echo "Unknown option: $arg (the only option is --no-kiosk)" >&2; exit 2 ;;
   esac
 done
 

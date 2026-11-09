@@ -37,17 +37,14 @@ On a fresh Raspberry Pi OS Lite install, clone this repo and run the
 installer:
 
 ```bash
-git clone git@github.com:K7TDM/AcomRemoteControl.git
+git clone https://github.com/K7TDM/AcomRemoteControl.git
 cd AcomRemoteControl
 bash install.sh
 ```
 
-This repo is currently private, so whichever machine runs this clone
-needs its own SSH key added to the repo's deploy keys (or your GitHub
-account) first. A `github.com-k7tdm` SSH host alias is sometimes used
-to pick a specific key for this repo on a given machine, but that alias
-is only ever defined locally in `~/.ssh/config` - it won't resolve on a
-machine that doesn't have the same config entry, including a fresh Pi.
+By default this also sets up kiosk mode (the dashboard full screen on a
+screen attached to the Pi) - see "Kiosk mode" below. For a headless
+install with no kiosk display, run `bash install.sh --no-kiosk` instead.
 
 This installs:
 - **System packages** (via apt): `python3`, `python3-venv`, `python3-pip`,
@@ -74,15 +71,19 @@ once it's running.
 ## Kiosk mode (dashboard on the Pi's own screen)
 
 Plug a screen into the Pi - the official touchscreen or an HDMI
-monitor - and install with `--kiosk` to show the dashboard on it full
-screen, every time the Pi starts:
+monitor - and `bash install.sh` (no flags) sets it up to show the
+dashboard on it full screen, every time the Pi starts.
+
+Don't want that - headless, dashboard over the network only? Install
+with `--no-kiosk` instead:
 
 ```bash
-bash install.sh --kiosk
+bash install.sh --no-kiosk
 ```
 
-Or turn it on later without the command line: in the dashboard (from any
-device), open **Settings -> Display & Sound -> Raspberry Pi display**.
+Kiosk mode can also be turned on or off later without reinstalling: in
+the dashboard (from any device), open **Settings -> Display & Sound ->
+Raspberry Pi display**.
 
 What kiosk mode does:
 - Starts a full-screen browser on the Pi's screen at every boot, once the
@@ -103,8 +104,8 @@ including Touch Display 2 setup, are in `acom-control/README.md`'s
 
 ## Documentation
 
-The `documentation/` folder has the manufacturer reference PDFs used for
-protocol research:
-- `ACOM A600S A1200S Serial Protocol V1.3.pdf` - the serial protocol spec
-- `ACOM 1200S User Manual GB 08_2024.pdf`
-- `ACOM 06AT_20AT User Manual GB 09_2025.pdf`
+The serial protocol was reverse-engineered from ACOM's own manufacturer
+reference PDFs (the A600S/A1200S serial protocol spec, and the 1200S and
+06AT/20AT user manuals) - those PDFs are copyrighted by ACOM and aren't
+included in this repo. See `PI_CONTROL_PLAN.md` for the protocol details
+and build plan derived from them.

@@ -102,7 +102,7 @@ time, the Pi downloads the browser, which takes a few minutes; the
 switch shows progress and which displays are connected. Or from the
 command line:
 
-    bash install.sh --kiosk
+    bash install.sh
 
 This works on Raspberry Pi OS Lite (no desktop needed): it installs
 `cage`, a single-app display server, and Chromium, and a service
