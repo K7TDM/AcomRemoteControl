@@ -337,7 +337,7 @@ function render(state) {
   if (appState.inTx) noteActivity();
   checkAlarmSound(state);
   checkPowerSounds(state);
-  updatePoweringDownState(state);
+  updatePowerTransitionState(state);
 
   renderStatusRow(state);
   renderGauges(state);
@@ -351,19 +351,23 @@ function render(state) {
   if (appState.setupOpen) updateAntennaSetupVisibility();
 }
 
-// Four mutually-exclusive top-level screens: the normal dashboard, Setup
-// (opened via the header's gear icon), a "Powering Down" screen shown while
-// a shutdown is in progress (see isPoweringDown()), and a reduced power-off
-// screen (just the logo + Power On) shown whenever the amp is confirmed
-// off. Setup takes priority over both power states so Settings stays
-// reachable either way - per Tyler: close all the normal dashboard windows
-// while off/powering down, but keep Setup accessible from the header
-// regardless of power state.
+// Five mutually-exclusive top-level screens: the normal dashboard, Setup
+// (opened via the header's gear icon), a "Powering Up" screen while a
+// power-on pulse is pending (see isPoweringUp()), a "Powering Down" screen
+// while a shutdown is in progress (see isPoweringDown()), and a reduced
+// power-off screen (just the logo + Power On) shown whenever the amp is
+// confirmed off. Setup takes priority over every power state so Settings
+// stays reachable either way - per Tyler: close all the normal dashboard
+// windows while off/transitioning, but keep Setup accessible from the
+// header regardless of power state. isPoweringUp() is checked before
+// isPoweringDown() since both key off power_state === "unknown" and are
+// meant to be mutually exclusive - see lastKnownPower's role in each.
 function currentScreen() {
   if (appState.setupOpen) return "setup";
   if (appState.updateScreenOpen) return "update";
   const power = appState.lastStatus?.power_state;
   if (power === "off") return "power-off";
+  if (isPoweringUp(appState.lastStatus)) return "powering-up";
   if (isPoweringDown(appState.lastStatus)) return "powering-down";
   return "dashboard";
 }
@@ -373,8 +377,22 @@ function updateScreenVisibility() {
   document.getElementById("dashboard").hidden = screen !== "dashboard";
   document.getElementById("setup-screen").hidden = screen !== "setup";
   document.getElementById("update-screen").hidden = screen !== "update";
+  document.getElementById("powering-up-screen").hidden = screen !== "powering-up";
   document.getElementById("powering-down-screen").hidden = screen !== "powering-down";
   document.getElementById("power-off-screen").hidden = screen !== "power-off";
+}
+
+// True from the moment a power-on pulse starts until power_state is
+// confirmed "on": either we just clicked a Power On button
+// (poweringUpRequested, set synchronously on click so the screen appears
+// right away rather than waiting out the ~1.5s DTR/RTS pulse), or
+// power_state has gone ambiguous ("unknown") right after previously being
+// "off" - the backend's own set_power() puts it in "unknown" the moment the
+// pulse fires, pending telemetry confirming the amp actually woke up.
+function isPoweringUp(state) {
+  if (!state) return false;
+  if (state.power_state !== "unknown") return false;
+  return poweringUpRequested || lastKnownPower === "off";
 }
 
 // True from the moment a shutdown starts until power_state is confirmed
@@ -383,22 +401,22 @@ function updateScreenVisibility() {
 // waiting out the ~1.5s DTR/RTS pulse), the amp's own telemetry shows it
 // winding down (same mode names checkPowerSounds() plays the "off" Morse
 // for), or - the front-panel case, where neither of those fires - comms
-// have gone ambiguous (power_state "unknown") after previously being on.
-// "unknown" always means "not yet sure if this is off, hung, or just
-// restarting" (see amp_state.py), so this screen can flash briefly on a
-// backend restart too - acceptable, since it resolves to "on" within a
-// telemetry frame or two, or to "off" per the bounded timeout either way.
+// have gone ambiguous (power_state "unknown") after previously being "on".
+// Checked only after isPoweringUp() rules out the opposite direction, so a
+// power-on pulse (which also passes through "unknown") doesn't land here -
+// see lastKnownPower, the last definite "on"/"off" seen before "unknown".
 function isPoweringDown(state) {
   if (!state) return false;
-  if (state.power_state === "unknown") return true;
+  if (state.power_state === "unknown") return lastKnownPower === "on";
   if (state.power_state !== "on") return false;
   if (poweringDownRequested) return true;
   const modeName = state.telemetry?.mode_name;
   return modeName === "Turn OFF Procedure" || modeName === "Extra Cooling State";
 }
 
-function updatePoweringDownState(state) {
+function updatePowerTransitionState(state) {
   if (state.power_state === "off") poweringDownRequested = false;
+  if (state.power_state === "on") poweringUpRequested = false;
 }
 
 // Single shared "did a transmission just start" computation, used by both
@@ -1195,8 +1213,13 @@ function renderWarningBanner(state) {
 // =============================================================================
 
 function wireControls() {
-  document.getElementById("btn-power-on")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: true }))));
-  document.getElementById("btn-power-on-standalone")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: true }))));
+  const requestPowerOn = () => {
+    poweringUpRequested = true;
+    updateScreenVisibility();
+    return apiFetch("/api/power", postJson({ on: true }));
+  };
+  document.getElementById("btn-power-on")?.addEventListener("click", withErrorBanner(requestPowerOn));
+  document.getElementById("btn-power-on-standalone")?.addEventListener("click", withErrorBanner(requestPowerOn));
   document.getElementById("btn-power-off")?.addEventListener("click", withErrorBanner(() => {
     poweringDownRequested = true;
     // Jump straight out of Settings so the Powering Down screen is visible
@@ -2158,11 +2181,13 @@ let lastKnownPower = null;
 let staleTelemetryClock = null;
 let awaitingReady = false;
 let offSoundPlayed = false;
-// Set the moment our own Power Off button is clicked, so the powering-down
-// screen (see isPoweringDown() below) shows immediately rather than waiting
-// on the ~1.5s DTR/RTS pulse to finish. Cleared once power_state actually
-// reaches "off" - see updatePoweringDownState().
+// Set the moment our own Power Off/Power On button is clicked, so the
+// powering-down/powering-up screen (see isPoweringDown()/isPoweringUp()
+// below) shows immediately rather than waiting on the ~1.5s DTR/RTS pulse
+// to finish. Cleared once power_state actually reaches "off"/"on" - see
+// updatePowerTransitionState().
 let poweringDownRequested = false;
+let poweringUpRequested = false;
 
 function loadAlarmSoundsEnabled() {
   try {

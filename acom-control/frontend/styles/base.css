@@ -391,12 +391,14 @@ html.fit-layout .panel-grid > [data-row-alone] {
 #setup-screen[hidden],
 #update-screen[hidden],
 main#dashboard[hidden],
+#powering-up-screen[hidden],
 #powering-down-screen[hidden],
 #power-off-screen[hidden] {
   display: none;
 }
 
 #power-off-screen,
+#powering-up-screen,
 #powering-down-screen {
   min-height: 60vh;
   display: flex;
@@ -420,11 +422,13 @@ main#dashboard[hidden],
   padding: 0.8rem 2.5rem;
 }
 
+#powering-up-screen p,
 #powering-down-screen p {
   font-size: 1.1rem;
   color: var(--text-secondary, var(--text-primary));
 }
 
+#powering-up-screen .progress-indeterminate,
 #powering-down-screen .progress-indeterminate {
   width: min(320px, 80vw);
 }

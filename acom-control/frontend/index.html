@@ -153,6 +153,15 @@
     <footer id="network-footer" class="network-footer" hidden></footer>
   </main>
 
+  <!-- Shown from the moment a power-on pulse starts (either Power On
+       button) until power_state is confirmed "on" - see isPoweringUp() in
+       app.js. -->
+  <section id="powering-up-screen" hidden>
+    <div class="power-off-logo">ACOM</div>
+    <p>Powering up&hellip;</p>
+    <div class="progress-indeterminate" role="progressbar" aria-label="Powering up"><div></div></div>
+  </section>
+
   <!-- Shown from the moment a shutdown starts (our own Power Off button,
        or the amp going quiet/ambiguous on its own - e.g. powered off from
        its front panel) until power_state is confirmed "off" - see
