@@ -153,6 +153,16 @@
     <footer id="network-footer" class="network-footer" hidden></footer>
   </main>
 
+  <!-- Shown from the moment a shutdown starts (our own Power Off button,
+       or the amp going quiet/ambiguous on its own - e.g. powered off from
+       its front panel) until power_state is confirmed "off" - see
+       isPoweringDown() in app.js. -->
+  <section id="powering-down-screen" hidden>
+    <div class="power-off-logo">ACOM</div>
+    <p>Powering down&hellip;</p>
+    <div class="progress-indeterminate" role="progressbar" aria-label="Powering down"><div></div></div>
+  </section>
+
   <section id="power-off-screen" hidden>
     <div class="power-off-logo">ACOM</div>
     <button id="btn-power-on-standalone" class="acom-button" type="button">Power On</button>

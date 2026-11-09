@@ -337,6 +337,7 @@ function render(state) {
   if (appState.inTx) noteActivity();
   checkAlarmSound(state);
   checkPowerSounds(state);
+  updatePoweringDownState(state);
 
   renderStatusRow(state);
   renderGauges(state);
@@ -350,16 +351,21 @@ function render(state) {
   if (appState.setupOpen) updateAntennaSetupVisibility();
 }
 
-// Three mutually-exclusive top-level screens: the normal dashboard, Setup
-// (opened via the header's gear icon), and a reduced power-off screen (just
-// the logo + Power On) shown whenever the amp is confirmed off. Setup takes
-// priority over power-off so Settings stays reachable either way - per
-// Tyler: close all the normal dashboard windows while off, but keep Setup
-// accessible from the header regardless of power state.
+// Four mutually-exclusive top-level screens: the normal dashboard, Setup
+// (opened via the header's gear icon), a "Powering Down" screen shown while
+// a shutdown is in progress (see isPoweringDown()), and a reduced power-off
+// screen (just the logo + Power On) shown whenever the amp is confirmed
+// off. Setup takes priority over both power states so Settings stays
+// reachable either way - per Tyler: close all the normal dashboard windows
+// while off/powering down, but keep Setup accessible from the header
+// regardless of power state.
 function currentScreen() {
   if (appState.setupOpen) return "setup";
   if (appState.updateScreenOpen) return "update";
-  return appState.lastStatus?.power_state === "off" ? "power-off" : "dashboard";
+  const power = appState.lastStatus?.power_state;
+  if (power === "off") return "power-off";
+  if (isPoweringDown(appState.lastStatus)) return "powering-down";
+  return "dashboard";
 }
 
 function updateScreenVisibility() {
@@ -367,7 +373,32 @@ function updateScreenVisibility() {
   document.getElementById("dashboard").hidden = screen !== "dashboard";
   document.getElementById("setup-screen").hidden = screen !== "setup";
   document.getElementById("update-screen").hidden = screen !== "update";
+  document.getElementById("powering-down-screen").hidden = screen !== "powering-down";
   document.getElementById("power-off-screen").hidden = screen !== "power-off";
+}
+
+// True from the moment a shutdown starts until power_state is confirmed
+// "off": either we just clicked our own Power Off button (poweringDownRequested,
+// set synchronously on click so the screen appears right away rather than
+// waiting out the ~1.5s DTR/RTS pulse), the amp's own telemetry shows it
+// winding down (same mode names checkPowerSounds() plays the "off" Morse
+// for), or - the front-panel case, where neither of those fires - comms
+// have gone ambiguous (power_state "unknown") after previously being on.
+// "unknown" always means "not yet sure if this is off, hung, or just
+// restarting" (see amp_state.py), so this screen can flash briefly on a
+// backend restart too - acceptable, since it resolves to "on" within a
+// telemetry frame or two, or to "off" per the bounded timeout either way.
+function isPoweringDown(state) {
+  if (!state) return false;
+  if (state.power_state === "unknown") return true;
+  if (state.power_state !== "on") return false;
+  if (poweringDownRequested) return true;
+  const modeName = state.telemetry?.mode_name;
+  return modeName === "Turn OFF Procedure" || modeName === "Extra Cooling State";
+}
+
+function updatePoweringDownState(state) {
+  if (state.power_state === "off") poweringDownRequested = false;
 }
 
 // Single shared "did a transmission just start" computation, used by both
@@ -1166,7 +1197,11 @@ function renderWarningBanner(state) {
 function wireControls() {
   document.getElementById("btn-power-on")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: true }))));
   document.getElementById("btn-power-on-standalone")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: true }))));
-  document.getElementById("btn-power-off")?.addEventListener("click", withErrorBanner(() => apiFetch("/api/power", postJson({ on: false }))));
+  document.getElementById("btn-power-off")?.addEventListener("click", withErrorBanner(() => {
+    poweringDownRequested = true;
+    updateScreenVisibility();
+    return apiFetch("/api/power", postJson({ on: false }));
+  }));
   document.getElementById("btn-opr-toggle")?.addEventListener("click", withErrorBanner(() => {
     // Mirrors the real amp's own physical OPR/STB button: toggles between
     // the two states using the amp's own last-reported mode, not a
@@ -2119,6 +2154,11 @@ let lastKnownPower = null;
 let staleTelemetryClock = null;
 let awaitingReady = false;
 let offSoundPlayed = false;
+// Set the moment our own Power Off button is clicked, so the powering-down
+// screen (see isPoweringDown() below) shows immediately rather than waiting
+// on the ~1.5s DTR/RTS pulse to finish. Cleared once power_state actually
+// reaches "off" - see updatePoweringDownState().
+let poweringDownRequested = false;
 
 function loadAlarmSoundsEnabled() {
   try {

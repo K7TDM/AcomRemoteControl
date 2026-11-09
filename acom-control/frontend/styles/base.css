@@ -391,11 +391,13 @@ html.fit-layout .panel-grid > [data-row-alone] {
 #setup-screen[hidden],
 #update-screen[hidden],
 main#dashboard[hidden],
+#powering-down-screen[hidden],
 #power-off-screen[hidden] {
   display: none;
 }
 
-#power-off-screen {
+#power-off-screen,
+#powering-down-screen {
   min-height: 60vh;
   display: flex;
   flex-direction: column;
@@ -416,6 +418,15 @@ main#dashboard[hidden],
 #power-off-screen .acom-button {
   font-size: 1.1rem;
   padding: 0.8rem 2.5rem;
+}
+
+#powering-down-screen p {
+  font-size: 1.1rem;
+  color: var(--text-secondary, var(--text-primary));
+}
+
+#powering-down-screen .progress-indeterminate {
+  width: min(320px, 80vw);
 }
 
 /* Setup's Power Off: first on the screen, full width, finger-sized. */
