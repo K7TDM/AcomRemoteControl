@@ -19,6 +19,14 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.19] - 2026-11-09
+
+### Added
+- A "Support this project" link in README.md, and a matching collapsed
+  Setup-screen section (same closed-by-default style as every other
+  section) with a PayPal.me link plus a QR code for scanning right off
+  the kiosk screen.
+
 ## [0.1.18] - 2026-11-09
 
 ### Added
