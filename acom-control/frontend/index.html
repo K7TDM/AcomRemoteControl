@@ -412,15 +412,19 @@
       <button id="btn-setup-close" class="acom-button" type="button">Close</button>
     </div>
 
-    <!-- Scan with a phone right off the kiosk screen, or just click/tap
-         the link on any device. -->
-    <div class="support-block">
-      <h3>Support this project</h3>
-      <a href="https://paypal.me/MaggertT" target="_blank" rel="noopener" class="support-qr-link">
-        <img src="support-qr.svg" alt="QR code for paypal.me/MaggertT" width="160" height="160" />
-      </a>
-      <p><a href="https://paypal.me/MaggertT" target="_blank" rel="noopener">paypal.me/MaggertT</a></p>
-    </div>
+    <!-- Same collapsed-by-default pattern as the sections above - closed
+         so it doesn't compete with the controls someone actually opened
+         Setup for. Scan with a phone right off the kiosk screen, or just
+         click/tap the link on any device. -->
+    <details class="setup-section collapsible">
+      <summary><h2>Support this project</h2></summary>
+      <div class="support-block">
+        <a href="https://paypal.me/MaggertT" target="_blank" rel="noopener" class="support-qr-link">
+          <img src="support-qr.svg" alt="QR code for paypal.me/MaggertT" width="160" height="160" />
+        </a>
+        <p><a href="https://paypal.me/MaggertT" target="_blank" rel="noopener">paypal.me/MaggertT</a></p>
+      </div>
+    </details>
   </section>
 
   <section id="update-screen" hidden>
