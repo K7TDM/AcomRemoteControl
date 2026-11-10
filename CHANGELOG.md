@@ -19,6 +19,17 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.21] - 2026-11-09
+
+### Fixed
+- Kiosk display stuck in a restart loop after a hostname change (e.g.
+  `install.sh`'s hostname prompt, or a reflash): Chromium's profile
+  lock file remembers the hostname that created it, and refuses to
+  start once that no longer matches, misreported as "Error: Can't open
+  display:". The kiosk script now clears the stale lock before every
+  launch - this profile is always exactly one Chromium on one Pi, so
+  it's never actually in use elsewhere.
+
 ## [0.1.20] - 2026-11-09
 
 ### Added
