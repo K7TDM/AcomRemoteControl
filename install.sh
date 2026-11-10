@@ -45,21 +45,17 @@ sudo apt-get install -y \
   avahi-daemon \
   usbutils
 
-echo "==> Setting the Pi's hostname (so the dashboard is reachable at <name>.local)"
+echo "==> Hostname (so the dashboard is reachable at <name>.local)"
 CURRENT_HOSTNAME="$(hostname)"
-DEFAULT_HOSTNAME="acomcontrol"
-if [[ -n "$CURRENT_HOSTNAME" && "$CURRENT_HOSTNAME" != "localhost" ]]; then
-  # Already customized (e.g. a re-run of this script) - default to keeping it,
-  # rather than nagging back toward "acomcontrol" every time.
-  DEFAULT_HOSTNAME="$CURRENT_HOSTNAME"
-fi
+echo "  Current hostname: $CURRENT_HOSTNAME"
 if [[ -t 0 ]]; then
+  echo "  Press Enter to keep it, or type a new one (e.g. acomcontrol)."
   echo "  Running more than one of these on the same network? Each Pi needs"
   echo "  its own unique name here, or they'll collide on .local lookups."
   NEW_HOSTNAME=""
   while [[ -z "$NEW_HOSTNAME" ]]; do
-    read -r -p "Enter a hostname for this Pi [$DEFAULT_HOSTNAME]: " INPUT_HOSTNAME
-    INPUT_HOSTNAME="${INPUT_HOSTNAME:-$DEFAULT_HOSTNAME}"
+    read -r -p "Hostname [$CURRENT_HOSTNAME]: " INPUT_HOSTNAME
+    INPUT_HOSTNAME="${INPUT_HOSTNAME:-$CURRENT_HOSTNAME}"
     INPUT_HOSTNAME="${INPUT_HOSTNAME,,}"
     if [[ "$INPUT_HOSTNAME" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
       NEW_HOSTNAME="$INPUT_HOSTNAME"
