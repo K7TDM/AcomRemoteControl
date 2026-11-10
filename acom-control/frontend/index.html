@@ -147,10 +147,6 @@
       <button id="btn-antenna-next" class="acom-button" type="button">Next Antenna</button>
       <button id="btn-buzzer-test" class="acom-button" type="button">Buzzer Test</button>
     </div>
-
-    <!-- The Pi's own address, so it can be read off the kiosk screen when
-         the Pi has no static IP - see app.js's refreshNetworkFooter(). -->
-    <footer id="network-footer" class="network-footer" hidden></footer>
   </main>
 
   <!-- Shown from the moment a power-on pulse starts (either Power On
@@ -473,6 +469,13 @@
       <button id="btn-update-close" class="acom-button" type="button">Close</button>
     </div>
   </section>
+
+  <!-- A top-level sibling of every screen above (not nested inside any one
+       of them), so it stays visible no matter which screen is showing -
+       including power-off/powering-up/down, not just the normal dashboard.
+       The Pi's own address, so it can be read off the kiosk screen when the
+       Pi has no static IP - see app.js's refreshNetworkFooter(). -->
+  <footer id="network-footer" class="network-footer" hidden></footer>
 
   <!-- Covers everything while an update or rollback is being applied - see
        app.js's launchUpdate(). -->

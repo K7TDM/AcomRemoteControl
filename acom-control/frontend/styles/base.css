@@ -366,10 +366,15 @@ html.fit-layout .panel-grid > [data-row-alone] {
   border: 1px solid var(--border-color);
 }
 
-/* One small line under the button bar with the Pi's address - see
-   app.js's refreshNetworkFooter(). */
+/* One small line with the Pi's address - see app.js's
+   refreshNetworkFooter(). A top-level sibling of every screen (not nested
+   inside #dashboard), so it's visible regardless of which one is showing -
+   max-width/margin here match main#dashboard's own centering so it lines
+   up the same way it did back when it was #dashboard's last child. */
 .network-footer {
-  flex: none;
+  max-width: 900px;
+  margin: 0.5rem auto 1rem;
+  padding: 0 1rem;
   text-align: center;
   font-size: 0.75rem;
   color: var(--text-secondary);
