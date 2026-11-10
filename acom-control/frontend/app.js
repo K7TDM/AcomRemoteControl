@@ -1773,9 +1773,15 @@ async function refreshNetworkFooter() {
   try {
     const resp = await fetch("/api/network");
     if (!resp.ok) return;
-    const { address, port } = await resp.json();
+    const { address, port, hostname } = await resp.json();
     const suffix = port && port !== 80 ? `:${port}` : "";
-    footer.textContent = address ? `Dashboard: http://${address}${suffix}` : "No network connection";
+    // Both shown together - mDNS (.local) is the nicer one to type/scan,
+    // but not every device/network resolves it, so the plain IP stays as
+    // a fallback right next to it rather than replacing it.
+    const urls = [];
+    if (hostname) urls.push(`http://${hostname}.local${suffix}`);
+    if (address) urls.push(`http://${address}${suffix}`);
+    footer.textContent = urls.length ? `Dashboard: ${urls.join(" or ")}` : "No network connection";
     footer.hidden = false;
   } catch {
     // Silent - passive background poll; keep the last address shown.

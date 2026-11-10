@@ -604,9 +604,16 @@ and matches the project's scale (a personal local-network control panel).
   is the natural place to add either a simple SQLite ring buffer (for
   SWR/temp trend charts) or a decoder for the Hard Fault event records
   (`0x31`-`0x34`) once the live dashboard is working.
-- **mDNS hostname** (e.g. `acom.local` via `avahi-daemon`) so the
+- ~~**mDNS hostname** (e.g. `acom.local` via `avahi-daemon`) so the
   dashboard is reachable from a phone/tablet in the shack without
-  memorizing an IP.
+  memorizing an IP.~~ **Done:** `install.sh` prompts for a hostname
+  (default `acomcontrol`, settable once at install time - re-run
+  `install.sh` to change it later), sets it via `hostnamectl` + the
+  `127.0.1.1` line in `/etc/hosts`, and restarts `avahi-daemon` so
+  `<name>.local` resolves immediately. The dashboard's footer shows
+  both the `.local` name and the plain IP side by side (`/api/network`,
+  `refreshNetworkFooter()` in `app.js`), since not every device/network
+  resolves `.local` names.
 - **Mobile-responsive layout** for the frontend, since it'll likely get
   used from a phone as often as a desktop browser.
 - **Log rotation**: not actually an app concern - `_configure_logging()`

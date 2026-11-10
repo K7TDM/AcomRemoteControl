@@ -45,6 +45,47 @@ sudo apt-get install -y \
   avahi-daemon \
   usbutils
 
+echo "==> Setting the Pi's hostname (so the dashboard is reachable at <name>.local)"
+CURRENT_HOSTNAME="$(hostname)"
+DEFAULT_HOSTNAME="acomcontrol"
+if [[ -n "$CURRENT_HOSTNAME" && "$CURRENT_HOSTNAME" != "localhost" ]]; then
+  # Already customized (e.g. a re-run of this script) - default to keeping it,
+  # rather than nagging back toward "acomcontrol" every time.
+  DEFAULT_HOSTNAME="$CURRENT_HOSTNAME"
+fi
+if [[ -t 0 ]]; then
+  echo "  Running more than one of these on the same network? Each Pi needs"
+  echo "  its own unique name here, or they'll collide on .local lookups."
+  NEW_HOSTNAME=""
+  while [[ -z "$NEW_HOSTNAME" ]]; do
+    read -r -p "Enter a hostname for this Pi [$DEFAULT_HOSTNAME]: " INPUT_HOSTNAME
+    INPUT_HOSTNAME="${INPUT_HOSTNAME:-$DEFAULT_HOSTNAME}"
+    INPUT_HOSTNAME="${INPUT_HOSTNAME,,}"
+    if [[ "$INPUT_HOSTNAME" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+      NEW_HOSTNAME="$INPUT_HOSTNAME"
+    else
+      echo "  Invalid hostname - lowercase letters, digits, and hyphens only (not at the start/end)." >&2
+    fi
+  done
+  if [[ "$NEW_HOSTNAME" != "$CURRENT_HOSTNAME" ]]; then
+    sudo hostnamectl set-hostname "$NEW_HOSTNAME"
+    # 127.0.1.1 is the Debian/Pi OS convention for the machine's own name,
+    # separate from 127.0.0.1 - update it so the new name resolves locally
+    # too, not just via mDNS from other machines on the LAN.
+    if grep -q "^127\.0\.1\.1" /etc/hosts; then
+      sudo sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$NEW_HOSTNAME/" /etc/hosts
+    else
+      printf '127.0.1.1\t%s\n' "$NEW_HOSTNAME" | sudo tee -a /etc/hosts >/dev/null
+    fi
+    # Restart (not just rely on a later reboot) so avahi advertises the new
+    # name immediately - it was only just installed above in this same run.
+    sudo systemctl restart avahi-daemon
+  fi
+  CURRENT_HOSTNAME="$NEW_HOSTNAME"
+else
+  echo "  No interactive terminal - keeping the current hostname ($CURRENT_HOSTNAME)."
+fi
+
 echo "==> Adding $(whoami) to the 'dialout' group (required for serial port access)"
 sudo usermod -aG dialout "$(whoami)"
 
@@ -176,6 +217,10 @@ cat <<EOF
 ==> Done.
 
 Notes:
+- Reachable on your local network at http://$CURRENT_HOSTNAME.local:8000
+  (via mDNS/avahi - takes a moment after boot, and some networks/devices
+  don't support .local names; the dashboard's own footer also shows a
+  plain IP address as a fallback).
 - You were added to the 'dialout' group for serial port access.
   Log out and back in (or reboot) for that to take effect.
 - Python virtual environment: $VENV_DIR

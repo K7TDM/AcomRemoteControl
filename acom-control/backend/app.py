@@ -423,7 +423,11 @@ def _local_ipv4_address() -> Optional[str]:
 async def get_network(request: Request) -> dict:
     # The port the dashboard was actually reached on (8000 from the kiosk's
     # localhost URL), so the footer shows an address that works as-is.
-    return {"address": _local_ipv4_address(), "port": request.url.port}
+    # hostname is the system hostname (install.sh prompts for this, default
+    # "acomcontrol") - the footer appends ".local" for the mDNS/avahi name,
+    # shown alongside the plain IP since not every device/network resolves
+    # .local names.
+    return {"address": _local_ipv4_address(), "port": request.url.port, "hostname": socket.gethostname()}
 
 
 @app.post("/api/resync")
