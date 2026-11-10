@@ -109,3 +109,7 @@ reference PDFs (the A600S/A1200S serial protocol spec, and the 1200S and
 06AT/20AT user manuals) - those PDFs are copyrighted by ACOM and aren't
 included in this repo. See `PI_CONTROL_PLAN.md` for the protocol details
 and build plan derived from them.
+
+## Support
+
+If this saved you from buying ACOM's eBox, [buy me a coffee](https://paypal.me/MaggertT) - totally optional, appreciated either way.

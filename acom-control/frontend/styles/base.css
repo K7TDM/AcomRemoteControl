@@ -455,6 +455,36 @@ main#dashboard[hidden],
   margin: 0;
 }
 
+.support-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.support-block h3 {
+  margin: 0;
+}
+
+/* QR modules are plain black with a transparent background (see
+   support-qr.svg) - a white card keeps them scannable regardless of
+   theme/mode, since a dark background would otherwise kill the contrast
+   a QR scanner needs. */
+.support-qr-link {
+  display: inline-block;
+  background: #ffffff;
+  padding: 10px;
+  border-radius: var(--radius);
+  line-height: 0;
+}
+
+.support-block p {
+  margin: 0;
+}
+
 .setup-section {
   background: var(--bg-panel);
   border: 1px solid var(--border-color);
