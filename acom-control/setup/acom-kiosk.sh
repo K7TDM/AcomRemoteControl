@@ -37,6 +37,20 @@ if [[ -f "$PREFS" ]]; then
          -e 's/"exit_type":"Crashed"/"exit_type":"Normal"/' "$PREFS"
 fi
 
+# Chromium's SingletonLock records the hostname + PID that owns this
+# profile, to stop two machines sharing a network-mounted profile from
+# corrupting it. This profile is never shared - only ever this one Pi,
+# one Chromium at a time (systemd's Restart=always serializes that) - but
+# the hostname half of that check breaks the moment the Pi's own hostname
+# changes (e.g. install.sh's hostname prompt, or a hostname set differently
+# on a reflash): a lock file still naming the *old* hostname makes Chromium
+# think "another computer" has it locked and refuse to start at all
+# (confirmed live 2026-11-09 - every launch failed with "Error: Can't open
+# display:", which turned out to be this, not an actual display problem).
+# Always safe to clear before every launch, for the single-instance reason
+# above.
+rm -f "$PROFILE_DIR/SingletonLock" "$PROFILE_DIR/SingletonCookie" "$PROFILE_DIR/SingletonSocket"
+
 # --autoplay-policy: the dashboard's alarm sounds play without the screen
 # having been touched first (see app.js's unlockAlarmAudio()).
 exec "$BROWSER" \
