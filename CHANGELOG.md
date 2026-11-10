@@ -19,6 +19,20 @@ git push --tags
 Changes committed to `main` but not yet tagged as a release land here
 first, then get moved under a version heading below when tagged.
 
+## [0.1.20] - 2026-11-09
+
+### Added
+- `install.sh` reports the Pi's current hostname and prompts to keep or
+  change it (so the dashboard is reachable at `<name>.local` via mDNS),
+  warning that multiple installs on the same network each need a
+  unique name. The dashboard footer shows both the `.local` URL and
+  the plain IP side by side.
+
+### Fixed
+- The network footer is now a top-level element visible on every
+  screen, not just the normal dashboard - it used to disappear on the
+  power-off and powering-up/down screens along with everything else.
+
 ## [0.1.19] - 2026-11-09
 
 ### Added
